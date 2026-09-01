@@ -1,27 +1,18 @@
 function streamdemo(datasetRid)
-%STREAMDEMO  End-to-end streaming demo: both write paths, then teardown.
+%STREAMDEMO  End-to-end streaming demo: open, write, tear down.
 %
 %   streamdemo("ri.catalog....")     % explicit dataset
 %   streamdemo                       % reads NOMINAL_DATASET_RID
 %
-%   Needs NOMINAL_TOKEN in the environment. Writes about 220 points across
+%   Needs NOMINAL_TOKEN in the environment. Writes about 200 points across
 %   four channels into the dataset you name, so point it at something
 %   disposable.
 %
-%   Covers both ways of writing:
+%   Writing is one pattern: preallocate an N-by-C matrix, fill it, push it.
+%   MATLAB stores matrices column-major, so each channel's samples are already
+%   contiguous and reach the library with no copy or transpose.
 %
-%     Matrix push   — the MATLAB path. Preallocate an N-by-C matrix, fill it,
-%                     push it. MATLAB stores matrices column-major, so each
-%                     channel's samples are already contiguous and reach the
-%                     library with no copy or transpose.
-%
-%     Buffer        — the parity path. Row at a time, commit when full. This
-%                     exists so procedures written against the C or LabVIEW
-%                     APIs translate line for line; it has no advantage in
-%                     MATLAB and is slower, since every row crosses the MEX
-%                     boundary separately.
-%
-%   See also NOMINAL.STREAM, NOMINAL.BUFFER
+%   See also NOMINAL.STREAM
 
     arguments
         datasetRid (1,1) string = string(getenv("NOMINAL_DATASET_RID"))
@@ -65,8 +56,7 @@ function streamdemo(datasetRid)
 
     % 5 ------------------------------------------------- three channels
     %
-    % An array of nominal.Channel. They share one stream, which is required
-    % for the buffer below: a buffer commits as a single batch.
+    % An array of nominal.Channel, all on the one stream.
     triple = [stream.channel("demo.rpm"), ...
               stream.channel("demo.egt"), ...
               stream.channel("demo.psi")];
@@ -76,10 +66,9 @@ function streamdemo(datasetRid)
     % on. Tags belong to points, not to the channel.
     triple(1).tag("bank", "1");
 
-    % --- the MATLAB way, for comparison with the buffer below ------------
+    % 6 ------------------------------------------- a block of three series
     %
-    % Preallocate, fill, push once. This is what production MATLAB code
-    % should do; the buffer section that follows is the parity path.
+    % Preallocate, fill, push once.
     rows = 100;
     t = t0 + int64(0:rows-1)' * 1000000;
     block = zeros(rows, 3);
@@ -89,43 +78,15 @@ function streamdemo(datasetRid)
     stream.push(triple, t, block);
     fprintf('Pushed %d x %d block via matrix push\n', rows, numel(triple));
 
-    % 6 ----------------------------------------------------- buffer path
-    %
-    % Capacity is deliberately smaller than the number of rows stored, so the
-    % fill boundary gets exercised more than once.
-    capacity = 50;
-    buffer = stream.buffer(triple, capacity);
-    fprintf('Buffer: capacity %d across %d channels\n', ...
-            buffer.Capacity, numel(triple));
-
-    % 7 & 8 ------------------------------- store rows, commit when full
-    tBuf = t0 + int64(200:319)' * 1000000;         % 120 rows
-    commits = 0;
-    for i = 1:numel(tBuf)
-        row = [1600 + i; 750 + i; 35 + 0.05*i];
-        isFull = buffer.store(tBuf(i), row);
-        if isFull
-            buffer.commit();
-            commits = commits + 1;
-        end
-    end
-
-    % The tail: 120 rows against a capacity of 50 leaves 20 uncommitted.
-    % Committing an empty buffer is a no-op, so this is always safe to call.
-    fprintf('  %d full commits, %d rows left over\n', commits, buffer.Rows);
-    buffer.commit();
-    fprintf('Committed the tail\n');
-
-    % 9 ------------------------------------------------------- teardown
+    % 7 ------------------------------------------------------- teardown
     %
     % Order matters. Everything here is released automatically when it goes
     % out of scope, but MATLAB does not promise when — and releasing the
     % stream is what flushes buffered points. Doing it explicitly means the
     % data has landed before this function returns.
     %
-    % Innermost first: buffer, then channels, then the stream that owns them,
-    % then the dataset and client.
-    delete(buffer);
+    % Innermost first: channels, then the stream that owns them, then the
+    % dataset and client.
     delete(triple);
     delete(single);
     delete(stream);      % flushes; blocks until it completes

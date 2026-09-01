@@ -17,8 +17,7 @@ classdef Stream < nominal.Resource
     %   MATLAB stores v column-major, so each channel's samples are already
     %   contiguous in memory and go to the library with no copy or transpose.
     %   Filling a preallocated matrix and pushing it is therefore both the
-    %   idiomatic MATLAB pattern and the efficient one — there is no need for
-    %   the row-by-row buffer the C and LabVIEW paths use.
+    %   idiomatic MATLAB pattern and the efficient one.
     %
     %   Releasing the stream flushes whatever is still buffered, and blocks
     %   until that completes. That happens automatically, but MATLAB does not
@@ -28,7 +27,7 @@ classdef Stream < nominal.Resource
     %   Writing blocks when the stream saturates: if points arrive faster than
     %   the network drains them, push waits rather than queueing without bound.
     %
-    %   See also NOMINAL.CHANNEL, NOMINAL.DATASET, NOMINAL.BUFFER
+    %   See also NOMINAL.CHANNEL, NOMINAL.DATASET
 
     methods
         function obj = Stream(handle)
@@ -85,20 +84,6 @@ classdef Stream < nominal.Resource
                        nominal.toNanosVector(timestamps), values);
         end
 
-        function b = buffer(obj, channels, capacity)
-            %BUFFER  A row-at-a-time accumulator, for parity with C and LabVIEW.
-            %
-            %   Most MATLAB code should preallocate a matrix and use push
-            %   instead — see the class help. This exists so that a procedure
-            %   written against the C or LabVIEW API translates line for line.
-            arguments
-                obj (1,1) nominal.Stream
-                channels (1,:) nominal.Channel
-                capacity (1,1) double {mustBePositive, mustBeInteger}
-            end
-            obj.assertLive();
-            b = nominal.Buffer(channels, capacity);
-        end
     end
 
     methods (Access = protected)

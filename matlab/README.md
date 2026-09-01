@@ -27,9 +27,13 @@ From the repository root:
 just mex-win64
 ```
 
-That builds the shared library first, then compiles `src/nominalmex.c` into
-`+nominal/private/` and copies the DLL beside it. Requires a configured C
+That builds the Rust static library first, then compiles `src/nominalmex.c`
+into `+nominal/private/`, linking the library in. Requires a configured C
 compiler (`mex -setup C`).
+
+The result is a single binary: `+nominal/private/nominalmex.mexw64` carries the
+Rust code inside it, so there is no accompanying DLL for Windows to locate and
+nothing to set up before first use.
 
 If MATLAB is not on PATH, point the recipe at it — recipes run through bash, so
 use forward slashes:
@@ -97,9 +101,7 @@ timestamp column. MATLAB stores matrices column-major, so each channel's samples
 are already contiguous and go to the library with no copy or transpose.
 
 That means MATLAB's natural pattern — preallocate a matrix, fill it in a loop,
-push it — is already the efficient one. The row-at-a-time `nominal.Buffer` also
-exists, but only so that procedures written against the C or LabVIEW APIs
-translate line for line; it has no advantage here.
+push it — is already the efficient one.
 
 Pushing blocks when the stream saturates. If points arrive faster than the
 network drains them, `push` waits rather than queueing without bound. Produce on
@@ -110,13 +112,12 @@ a separate thread if your acquisition loop cannot stall.
 `clear mex`, `clear all`, and quitting MATLAB all unload the gateway. The
 library owns worker threads that would outlive an unloaded module and take
 MATLAB down with them, so the gateway registers a `mexAtExit` hook that shuts it
-down first. This is the same hazard as closing a VI in LabVIEW, handled the same
-way.
+down first.
 
 You therefore do not need to call `nominal.shutdown()`. Do so when you want the
-teardown at a known point — before reloading the library during development, or
-at the end of a long script. It invalidates every outstanding handle but is not
-a one-way door: the next call builds a fresh runtime.
+teardown at a known point — before a `clear mex` during development, or at the
+end of a long script. It invalidates every outstanding handle but is not a
+one-way door: the next call builds a fresh runtime.
 
 ## Layout
 
@@ -127,17 +128,16 @@ matlab/
 └── +nominal/
     ├── Resource.m              handle ownership and destructors
     ├── Client.m  Asset.m  Dataset.m  Run.m
-    ├── Stream.m  Channel.m  Buffer.m
+    ├── Stream.m  Channel.m
     ├── now.m  toNanos.m  toNanosVector.m  fromNanos.m
-    ├── setup.m  shutdown.m
+    ├── shutdown.m
     └── private/
-        ├── nominalmex.mexw64   built here — not callable from user code
-        └── nominal_ffi.dll     copied here by build.m
+        └── nominalmex.mexw64   gateway + Rust library, in one binary
 ```
 
 One gateway rather than one MEX per function: `mexAtExit` must be registered
-exactly once, and 71 separate binaries would each carry a copy of the shutdown
-plumbing.
+exactly once, and a binary per command would mean dozens of files each carrying
+a copy of the shutdown plumbing.
 
 `nominalmex` lives in `private/` deliberately. It does no argument checking of
 its own and calling it directly bypasses every guarantee the classes make.

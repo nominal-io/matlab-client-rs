@@ -3,11 +3,13 @@ name = "nominal-ffi"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "C ABI bindings for Nominal API — DLL/SO for LabVIEW, MATLAB, and other C-compatible languages"
+description = "C ABI bindings for the Nominal API, linked into the MATLAB MEX gateway"
 
 [lib]
-# cdylib is what ships; rlib additionally lets the test harness link the crate.
-crate-type = ["cdylib", "rlib"]
+# staticlib is what ships: the MEX gateway links it in directly, so MATLAB loads
+# one binary rather than a .mexw64 that in turn has to find a .dll beside it.
+# rlib additionally lets the test harness link the crate.
+crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 nominal = "0.7"

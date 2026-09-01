@@ -2,8 +2,11 @@
  * nominalmex — the single MEX gateway to the Nominal C ABI.
  *
  * One binary rather than one per function, for two reasons: `mexAtExit` has to
- * be registered exactly once, and 71 separate .mexw64 files would each carry
- * their own copy of the shutdown plumbing.
+ * be registered exactly once, and a .mexw64 per command would mean dozens of
+ * files each carrying their own copy of the shutdown plumbing.
+ *
+ * The Rust library is linked in statically, so this file *is* the client as far
+ * as MATLAB is concerned — there is no accompanying DLL to locate at load time.
  *
  * Called as nominalmex('command', args...). Nothing here is meant to be used
  * directly from MATLAB code — the +nominal classes wrap it. In particular this
@@ -46,9 +49,8 @@ static int g_registered = 0;
 
 /*
  * Runs before MATLAB unloads this MEX file — on `clear mex`, `clear all`, or
- * exit. This is the MATLAB analogue of LabVIEW's Unreserve callback, and it is
- * not optional: the library's Tokio worker threads would otherwise outlive the
- * unmapped module and take the process down.
+ * exit. It is not optional: the library's Tokio worker threads would otherwise
+ * outlive the unmapped module and take the process down.
  */
 static void on_exit_cleanup(void)
 {
@@ -60,6 +62,15 @@ static void on_exit_cleanup(void)
     g_registered = 0;
 }
 
+/*
+ * Called once per MATLAB call, at the top of mexFunction and nowhere else.
+ * Every handler below therefore runs with `g_scratch` already allocated and the
+ * exit hook already installed, and none of them need to ask again.
+ *
+ * Re-entrant across calls rather than once-ever: `shutdown` releases the scratch
+ * handle mid-session, so the next call has to allocate a fresh one. That is why
+ * this tests `g_scratch` rather than relying on `g_registered` alone.
+ */
 static void ensure_registered(void)
 {
     if (!g_registered) {
@@ -111,7 +122,6 @@ static void throw_if_failed(int32_t status, ErrorHandle err)
 
     message[0] = '\0';
     if (err != 0) {
-        ensure_registered();
         if (nominal_error_message(err, g_scratch) == NOMINAL_SUCCESS) {
             copied = nominal_copy_string_from_reference(
                 g_scratch, message, (uint32_t)sizeof(message));
@@ -261,7 +271,6 @@ static void do_getter_string(getter_string_fn fn, int nlhs, mxArray *plhs[],
 
     require_args(nrhs, 1, command);
     handle = arg_i32(prhs[1], "handle");
-    ensure_registered();
     throw_if_failed(fn(handle, g_scratch, &err), err);
     plhs[0] = scratch_to_mx();
 }
@@ -505,7 +514,6 @@ static void cmd_property(int32_t (*fn)(int32_t, const char *, StringHandle, Erro
 
     require_args(nrhs, 2, command);
     key = arg_string(prhs[2], "key");
-    ensure_registered();
     status = fn(arg_i32(prhs[1], "handle"), key, g_scratch, &err);
     mxFree(key);
     throw_if_failed(status, err);
@@ -518,7 +526,6 @@ static void cmd_label_at(int32_t (*fn)(int32_t, uint32_t, StringHandle, ErrorHan
 {
     ErrorHandle err = 0;
     require_args(nrhs, 2, command);
-    ensure_registered();
     throw_if_failed(fn(arg_i32(prhs[1], "handle"),
                        (uint32_t)arg_i32(prhs[2], "index"),
                        g_scratch, &err), err);
@@ -709,60 +716,6 @@ static void cmd_update_clear(int32_t (*fn)(UpdateHandle, ErrorHandle *),
     throw_if_failed(fn(arg_i32(prhs[1], "update"), &err), err);
 }
 
-static void cmd_buffer_alloc(mxArray *plhs[], int nrhs, const mxArray *prhs[])
-{
-    ErrorHandle err = 0;
-    BufferHandle out = 0;
-    const int32_t *channels;
-    size_t count;
-
-    require_args(nrhs, 2, "buffer_alloc");
-    if (!mxIsInt32(prhs[1])) {
-        mexErrMsgIdAndTxt("nominal:invalidParameter", "channels must be an int32 vector");
-    }
-    channels = (const int32_t *)mxGetInt32s(prhs[1]);
-    count = mxGetNumberOfElements(prhs[1]);
-
-    throw_if_failed(nominal_buffer_alloc(channels, (uint32_t)count,
-                                         (uint32_t)arg_i32(prhs[2], "capacity"),
-                                         &out, &err), err);
-    plhs[0] = mx_i32(out);
-}
-
-static void cmd_buffer_store(mxArray *plhs[], int nrhs, const mxArray *prhs[])
-{
-    ErrorHandle err = 0;
-    bool is_full = false;
-    size_t count = 0;
-    const double *values;
-
-    require_args(nrhs, 3, "buffer_store");
-    values = arg_double_vector(prhs[3], &count, "values");
-    throw_if_failed(nominal_buffer_store(arg_i32(prhs[1], "buffer"),
-                                         arg_i64(prhs[2], "timestamp"),
-                                         values, (uint32_t)count,
-                                         &is_full, &err), err);
-    plhs[0] = mxCreateLogicalScalar(is_full);
-}
-
-static void cmd_buffer_commit(int nrhs, const mxArray *prhs[])
-{
-    ErrorHandle err = 0;
-    require_args(nrhs, 1, "buffer_commit");
-    throw_if_failed(nominal_buffer_commit(arg_i32(prhs[1], "buffer"), &err), err);
-}
-
-static void cmd_buffer_status(mxArray *plhs[], int nrhs, const mxArray *prhs[])
-{
-    ErrorHandle err = 0;
-    uint32_t rows = 0, capacity = 0;
-    require_args(nrhs, 1, "buffer_status");
-    throw_if_failed(nominal_buffer_status(arg_i32(prhs[1], "buffer"),
-                                          &rows, &capacity, &err), err);
-    plhs[0] = mx_u32(rows);
-    plhs[1] = mx_u32(capacity);
-}
-
 /* ------------------------------------------------------------------ */
 /* Enumerations                                                        */
 /*                                                                     */
@@ -855,7 +808,6 @@ static void cmd_asset_datasources(mxArray *plhs[], int nrhs, const mxArray *prhs
 
     require_args(nrhs, 1, "asset_datasources");
     asset = arg_i32(prhs[1], "asset");
-    ensure_registered();
 
     throw_if_failed(nominal_asset_datasource_count(asset, &count, &err), err);
 
@@ -968,8 +920,6 @@ static void cmd_asset_list(mxArray *plhs[], int nrhs, const mxArray *prhs[],
     mxArray *out;
     char *text = NULL;
 
-    ensure_registered();
-
     if (strcmp(command, "asset_search") == 0) {
         require_args(nrhs, 2, command);
         text = arg_string(prhs[2], "text");
@@ -1013,7 +963,6 @@ static void cmd_dataset_list(mxArray *plhs[], int nrhs, const mxArray *prhs[],
     mxArray *out;
     char *text = NULL;
 
-    ensure_registered();
     client = arg_i32(prhs[1], "client");
 
     if (strcmp(command, "dataset_search") == 0) {
@@ -1117,7 +1066,6 @@ static void cmd_meta_list(mxArray *plhs[], int nrhs, const mxArray *prhs[])
     mxArray *out;
 
     require_args(nrhs, 2, "meta_list");
-    ensure_registered();
     throw_if_failed(nominal_channelmetadata_list(arg_i32(prhs[1], "client"),
                                                  arg_i32(prhs[2], "dataset"),
                                                  &list, &count, &err), err);
@@ -1235,7 +1183,6 @@ static void cmd_event_assets(mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
     require_args(nrhs, 1, "event_assets");
     event = arg_i32(prhs[1], "event");
-    ensure_registered();
 
     throw_if_failed(nominal_event_asset_count(event, &count, &err), err);
     out = mxCreateCellMatrix((mwSize)count, 1);
@@ -1363,13 +1310,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("event_timestamp")) { cmd_event_i64(nominal_event_timestamp, plhs, nrhs, prhs, command); return; }
     if (IS("event_duration"))  { cmd_event_i64(nominal_event_duration, plhs, nrhs, prhs, command); return; }
     if (IS("event_assets"))    { cmd_event_assets(plhs, nrhs, prhs); return; }
-
-    /* --- buffers --- */
-    if (IS("buffer_alloc"))   { cmd_buffer_alloc(plhs, nrhs, prhs); return; }
-    if (IS("buffer_store"))   { cmd_buffer_store(plhs, nrhs, prhs); return; }
-    if (IS("buffer_commit"))  { cmd_buffer_commit(nrhs, prhs); return; }
-    if (IS("buffer_status"))  { cmd_buffer_status(plhs, nrhs, prhs); return; }
-    if (IS("buffer_free"))    { do_free(nominal_buffer_free, nlhs, plhs, nrhs, prhs, command); return; }
 
     mexErrMsgIdAndTxt("nominal:invalidParameter", "unknown command '%s'", command);
 }

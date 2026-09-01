@@ -50,7 +50,6 @@ pub mod update;
 mod handles;
 
 pub mod asset;
-pub mod buffer;
 pub mod channelmetadata;
 pub mod client;
 pub mod compute;
@@ -70,9 +69,8 @@ pub mod write;
 /// adding one line in the one place that enumerates them, instead of a
 /// silently-missed registry that leaks across a shutdown.
 pub(crate) fn clear_all_registries() {
-    // Buffers then streams: uncommitted rows are dropped, then dropping a
-    // stream flushes what it holds, which needs the runtime still standing.
-    buffer::clear_buffers();
+    // Streams first: dropping one flushes what it holds, which needs the
+    // runtime still standing.
     stream::clear_streams();
     streamchannel::clear_streamchannels();
     client::clear_clients();

@@ -8,8 +8,8 @@ function shutdown()
 %   unloaded module and take MATLAB down with them.
 %
 %   Call it explicitly when you want the teardown to happen at a known point:
-%   before reloading the shared library during development, say, or at the end
-%   of a long-running script that should not hold a connection open.
+%   before a `clear mex` during development, say, or at the end of a
+%   long-running script that should not hold a connection open.
 %
 %   All outstanding handles become invalid. Existing nominal objects will
 %   report errors if used afterwards, though releasing them stays safe —

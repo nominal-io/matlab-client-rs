@@ -18,10 +18,6 @@ typedef int32_t AssetHandle;
  */
 typedef int32_t AssetListHandle;
 
-typedef int32_t StreamChannelHandle;
-
-typedef int32_t BufferHandle;
-
 typedef int32_t ChannelMetadataHandle;
 
 /**
@@ -50,6 +46,8 @@ typedef int32_t RunHandle;
 typedef int32_t QueryResultHandle;
 
 typedef int32_t StreamHandle;
+
+typedef int32_t StreamChannelHandle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -376,76 +374,6 @@ int32_t nominal_asset_property(AssetHandle handle,
                                const char *key,
                                StringHandle out_string,
                                ErrorHandle *error_out);
-
-/**
- * Allocate a buffer holding up to `capacity` rows across `channel_count`
- * channels.
- *
- * `channels` is an array of `channel_count` stream channel handles, which must
- * all belong to the same stream — a buffer commits as one batch, so a mixture
- * would have nowhere single to go. Their descriptors are copied now, so the
- * buffer keeps working if a channel handle is later freed.
- *
- * Every row must supply one value per channel, in this order.
- *
- * Memory is reserved up front — `capacity * channel_count` doubles plus the
- * timestamps — so no allocation happens on the acquisition path.
- */
-int32_t nominal_buffer_alloc(const StreamChannelHandle *channels,
-                             uint32_t channel_count,
-                             uint32_t capacity,
-                             BufferHandle *out_buffer,
-                             ErrorHandle *error_out);
-
-/**
- * Append one row: a timestamp and one value per channel.
- *
- * `values` must hold exactly `value_count` elements, matching the channel
- * count the buffer was allocated with — a mismatch is an error rather than a
- * silent partial row, since a wrong-length row would misalign every channel.
- *
- * `out_is_full` receives true when the buffer has no room for another row.
- * Commit then, or keep storing and lose rows — a store into a full buffer
- * fails rather than overwriting.
- *
- * Timestamps are literal, including zero.
- */
-int32_t nominal_buffer_store(BufferHandle handle,
-                             int64_t timestamp_nanos,
-                             const double *values,
-                             uint32_t value_count,
-                             bool *out_is_full,
-                             ErrorHandle *error_out);
-
-/**
- * Send everything the buffer holds to its stream, then empty it for reuse.
- *
- * The stream comes from the channels the buffer was allocated with, so there
- * is nothing to pass and nothing to get wrong.
- *
- * Committing an empty buffer succeeds and does nothing, so this can be called
- * unconditionally at the end of acquisition to flush a partial tail.
- *
- * **Blocks** while the stream is saturated — see the module docs. The buffer
- * is emptied only once the data has been handed over, so a failed commit
- * leaves the rows intact to retry.
- */
-int32_t nominal_buffer_commit(BufferHandle buffer_handle, ErrorHandle *error_out);
-
-/**
- * Rows currently held, and the capacity they are held against.
- */
-int32_t nominal_buffer_status(BufferHandle handle,
-                              uint32_t *out_rows,
-                              uint32_t *out_capacity,
-                              ErrorHandle *error_out);
-
-/**
- * Release a buffer, discarding any uncommitted rows.
- *
- * Commit first if the tail matters. Freeing an unknown handle is a no-op.
- */
-int32_t nominal_buffer_free(BufferHandle handle);
 
 /**
  * Fetch a channel's metadata from a dataset by channel name.

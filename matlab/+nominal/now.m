@@ -10,6 +10,5 @@ function nanos = now()
 %
 %   See also NOMINAL.TONANOS, NOMINAL.FROMNANOS
 
-    nominal.setup();
     nanos = nominalmex('timestamp_now');
 end

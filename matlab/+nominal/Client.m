@@ -33,9 +33,6 @@ classdef Client < nominal.Resource
                 options.Workspace (1,1) string = ""
                 options.BaseUrl (1,1) string = ""
             end
-            % Every path into the library starts here or at nominal.now, so
-            % this is where the DLL search path gets established.
-            nominal.setup();
             obj.Handle = nominalmex('client_new', char(token), ...
                                     char(options.Workspace), char(options.BaseUrl));
         end

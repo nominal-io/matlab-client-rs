@@ -316,3 +316,160 @@ fn slices<'a, V>(
         )
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    //! The push path, which is what MATLAB's `Stream.push` reaches through
+    //! `channel_push_matrix`.
+    //!
+    //! Unit tests rather than integration ones because they need a stream, and
+    //! the only stream reachable without a network is the file-backed one.
+
+    use super::*;
+    use crate::stream::{alloc_file_stream, nominal_stream_free};
+    use std::ffi::CString;
+
+    fn channel(stream: StreamHandle, name: &str) -> StreamChannelHandle {
+        let name = CString::new(name).unwrap();
+        let mut handle = 0;
+        let mut err = 0;
+        assert_eq!(
+            nominal_streamchannel_create(stream, name.as_ptr(), &mut handle, &mut err),
+            0
+        );
+        handle
+    }
+
+    fn push(handle: StreamChannelHandle, times: &[i64], values: &[f64]) -> (i32, ErrorHandle) {
+        let mut err = 0;
+        let status = nominal_streamchannel_push_doubles(
+            handle,
+            times.as_ptr(),
+            values.as_ptr(),
+            times.len() as u32,
+            &mut err,
+        );
+        (status, err)
+    }
+
+    #[test]
+    fn pushes_a_batch_of_doubles() {
+        let stream = alloc_file_stream();
+        let ch = channel(stream, "rpm");
+
+        let (status, _) = push(ch, &[0, 1_000_000, 2_000_000], &[1600.0, 1610.0, 1620.0]);
+        assert_eq!(status, 0);
+
+        nominal_streamchannel_free(ch);
+        nominal_stream_free(stream);
+    }
+
+    #[test]
+    fn an_empty_push_is_a_no_op_rather_than_an_error() {
+        let stream = alloc_file_stream();
+        let ch = channel(stream, "rpm");
+
+        // An acquisition loop with nothing to send this tick should not have to
+        // guard the call.
+        let mut err = 0;
+        assert_eq!(
+            nominal_streamchannel_push_doubles(
+                ch,
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                &mut err
+            ),
+            0
+        );
+
+        nominal_streamchannel_free(ch);
+        nominal_stream_free(stream);
+    }
+
+    #[test]
+    fn null_arrays_are_refused_when_there_are_points_to_send() {
+        let stream = alloc_file_stream();
+        let ch = channel(stream, "rpm");
+
+        let mut err = 0;
+        assert_eq!(
+            nominal_streamchannel_push_doubles(ch, std::ptr::null(), std::ptr::null(), 3, &mut err),
+            ErrorCode::InvalidParameter as i32
+        );
+        crate::error::nominal_error_free(err);
+
+        nominal_streamchannel_free(ch);
+        nominal_stream_free(stream);
+    }
+
+    #[test]
+    fn pushing_through_a_freed_stream_fails_rather_than_writing_nowhere() {
+        let stream = alloc_file_stream();
+        let ch = channel(stream, "rpm");
+
+        // The channel handle stays live, but its stream is gone. MATLAB's
+        // teardown order relies on this failing loudly rather than silently
+        // feeding a stream nothing else can reach.
+        nominal_stream_free(stream);
+
+        let (status, err) = push(ch, &[0], &[1.0]);
+        assert_eq!(status, ErrorCode::InvalidHandle as i32);
+        crate::error::nominal_error_free(err);
+
+        nominal_streamchannel_free(ch);
+    }
+
+    #[test]
+    fn an_unknown_channel_handle_fails_cleanly() {
+        let (status, err) = push(999_999, &[0], &[1.0]);
+        assert_eq!(status, ErrorCode::InvalidHandle as i32);
+        crate::error::nominal_error_free(err);
+    }
+
+    #[test]
+    fn a_channel_created_against_a_missing_stream_is_caught_at_create() {
+        // Not at the first push, thousands of samples later.
+        let name = CString::new("rpm").unwrap();
+        let mut handle = 0;
+        let mut err = 0;
+        assert_eq!(
+            nominal_streamchannel_create(999_999, name.as_ptr(), &mut handle, &mut err),
+            ErrorCode::InvalidHandle as i32
+        );
+        crate::error::nominal_error_free(err);
+    }
+
+    #[test]
+    fn tags_are_read_at_push_time_so_a_multiplexed_channel_can_retag() {
+        let stream = alloc_file_stream();
+        let ch = channel(stream, "temperature");
+        let key = CString::new("engine").unwrap();
+        let left = CString::new("left").unwrap();
+        let right = CString::new("right").unwrap();
+        let mut err = 0;
+
+        assert_eq!(
+            nominal_streamchannel_set_tag(ch, key.as_ptr(), left.as_ptr(), &mut err),
+            0
+        );
+        assert_eq!(push(ch, &[0], &[20.0]).0, 0);
+
+        // Retagging partway through is legal: earlier points keep the tags they
+        // were sent with, and both sets land in the same channel.
+        assert_eq!(
+            nominal_streamchannel_set_tag(ch, key.as_ptr(), right.as_ptr(), &mut err),
+            0
+        );
+        assert_eq!(push(ch, &[1], &[21.0]).0, 0);
+
+        let channel = streamchannel_or_fail(ch, &mut err).unwrap();
+        assert_eq!(
+            channel.descriptor.tags.as_ref().unwrap().get("engine"),
+            Some(&"right".to_string())
+        );
+
+        nominal_streamchannel_free(ch);
+        nominal_stream_free(stream);
+    }
+}
