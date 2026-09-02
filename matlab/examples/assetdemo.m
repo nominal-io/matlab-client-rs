@@ -24,7 +24,7 @@ function assetdemo(assetName)
     % Name is not unique in Nominal, so this returns the first exact match and
     % only creates when there is none.
     fprintf('Asset "%s"\n', assetName);
-    asset = client.asset(assetName);
+    asset = client.getOrCreateAsset(assetName);
     fprintf('  rid  %s\n', asset.Rid);
     fprintf('  url  %s\n', asset.Url);
 
@@ -60,9 +60,9 @@ function assetdemo(assetName)
     % Type matters: only a dataset RID can open a stream, so the kind tells
     % you what an endpoint will accept.
     sources = updated.datasources();
-    fprintf('  %d data source(s) attached\n', numel(sources));
+    fprintf('  %d data source(s) attached\n', height(sources));
     if ~isempty(sources)
-        disp(struct2table(sources, AsArray=true));
+        disp(sources);
     end
 
     % --- teardown -----------------------------------------------------

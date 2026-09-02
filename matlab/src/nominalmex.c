@@ -787,6 +787,119 @@ static int32_t event_type_code(const char *name)
     return -1;
 }
 
+static int32_t export_format_code(const char *name)
+{
+    if (strcmp(name, "matfile") == 0) return 0;
+    if (strcmp(name, "csv") == 0)     return 1;
+    if (strcmp(name, "arrow") == 0)   return 2;
+    mexErrMsgIdAndTxt("nominal:invalidParameter",
+                      "unknown export format '%s'; expected matfile, csv, or arrow",
+                      name);
+    return -1;
+}
+
+/* "full" sends every sample; the other two pair with a resolution value. */
+static int32_t export_resolution_code(const char *name)
+{
+    if (strcmp(name, "full") == 0)     return 0;
+    if (strcmp(name, "buckets") == 0)  return 1;
+    if (strcmp(name, "interval") == 0) return 2;
+    mexErrMsgIdAndTxt("nominal:invalidParameter",
+                      "unknown resolution '%s'; expected full, buckets, or interval",
+                      name);
+    return -1;
+}
+
+static int32_t timestamp_kind_code(const char *name)
+{
+    if (strcmp(name, "iso8601") == 0)  return 0;
+    if (strcmp(name, "epoch") == 0)    return 1;
+    if (strcmp(name, "relative") == 0) return 2;
+    mexErrMsgIdAndTxt("nominal:invalidParameter",
+                      "unknown timestamp kind '%s'; expected iso8601, epoch, "
+                      "or relative", name);
+    return -1;
+}
+
+static int32_t time_unit_code(const char *name)
+{
+    static const char *names[] = {
+        "nanoseconds", "microseconds", "milliseconds", "seconds", "minutes", "hours"
+    };
+    int32_t i;
+    for (i = 0; i < (int32_t)(sizeof(names) / sizeof(names[0])); ++i) {
+        if (strcmp(name, names[i]) == 0) {
+            return i;
+        }
+    }
+    mexErrMsgIdAndTxt("nominal:invalidParameter",
+                      "unknown time unit '%s'; expected nanoseconds, microseconds, "
+                      "milliseconds, seconds, minutes, or hours", name);
+    return -1;
+}
+
+static const char *job_status_name(int32_t code)
+{
+    static const char *names[] = {
+        "submitted", "queued", "inProgress", "completed", "failed", "cancelled", "unknown"
+    };
+    if (code >= 0 && code < (int32_t)(sizeof(names) / sizeof(names[0]))) {
+        return names[code];
+    }
+    return "unknown";
+}
+
+/* ------------------------------------------------------------------ */
+/* Cell array of strings -> char**                                     */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Borrow a MATLAB cell array of char vectors as the `const char *const *` the
+ * C ABI takes.
+ *
+ * Three commands need this — write, export, and event creation — so it lives
+ * here rather than being spelled out at each. Everything comes from mxCalloc
+ * and mxArrayToUTF8String, which MATLAB reclaims on error unwind as well as on
+ * return, so `release` is tidiness rather than the only thing standing between
+ * this and a leak.
+ */
+typedef struct {
+    char **owned;
+    const char **ptrs;
+    mwSize count;
+} StringArray;
+
+static StringArray borrow_string_array(const mxArray *cell, const char *what)
+{
+    StringArray array;
+    mwSize i;
+
+    if (!mxIsCell(cell)) {
+        mexErrMsgIdAndTxt("nominal:invalidParameter",
+                          "%s must be a cell array of character vectors", what);
+    }
+    array.count = mxGetNumberOfElements(cell);
+    /* mxCalloc(0, ...) is not useful; ask for one slot so the pointers are
+     * always valid even when the caller passed an empty cell. */
+    array.owned = (char **)mxCalloc(array.count ? array.count : 1, sizeof(char *));
+    array.ptrs = (const char **)mxCalloc(array.count ? array.count : 1, sizeof(char *));
+    for (i = 0; i < array.count; ++i) {
+        array.owned[i] = arg_string(mxGetCell(cell, i), what);
+        array.ptrs[i] = array.owned[i];
+    }
+    return array;
+}
+
+static void release_string_array(StringArray *array)
+{
+    mwSize i;
+    for (i = 0; i < array->count; ++i) {
+        mxFree(array->owned[i]);
+    }
+    mxFree(array->owned);
+    mxFree((void *)array->ptrs);
+}
+
 /* ------------------------------------------------------------------ */
 /* Data sources                                                        */
 /* ------------------------------------------------------------------ */
@@ -842,10 +955,8 @@ static void cmd_asset_datasources(mxArray *plhs[], int nrhs, const mxArray *prhs
 static void cmd_dataset_write(int nrhs, const mxArray *prhs[])
 {
     ErrorHandle err = 0;
-    const mxArray *channels_arg;
-    char **names;
-    const char **name_ptrs;
-    mwSize cols, i;
+    StringArray channels;
+    mwSize cols;
     size_t n_times = 0, rows;
     const int64_t *times;
     const double *values;
@@ -853,12 +964,8 @@ static void cmd_dataset_write(int nrhs, const mxArray *prhs[])
 
     require_args(nrhs, 4, "dataset_write");
 
-    channels_arg = prhs[3];
-    if (!mxIsCell(channels_arg)) {
-        mexErrMsgIdAndTxt("nominal:invalidParameter",
-                          "channels must be a cell array of character vectors");
-    }
-    cols = mxGetNumberOfElements(channels_arg);
+    channels = borrow_string_array(prhs[3], "channels");
+    cols = channels.count;
 
     times = arg_i64_vector(prhs[4], &n_times, "timestamps");
 
@@ -880,24 +987,12 @@ static void cmd_dataset_write(int nrhs, const mxArray *prhs[])
                           (unsigned long long)rows, (unsigned long long)n_times);
     }
 
-    names = (char **)mxCalloc(cols, sizeof(char *));
-    name_ptrs = (const char **)mxCalloc(cols, sizeof(char *));
-    for (i = 0; i < cols; ++i) {
-        names[i] = arg_string(mxGetCell(channels_arg, i), "channel name");
-        name_ptrs[i] = names[i];
-    }
-
     status = nominal_write_doubles(arg_i32(prhs[1], "client"),
                                    arg_i32(prhs[2], "dataset"),
-                                   name_ptrs, (uint32_t)cols,
+                                   channels.ptrs, (uint32_t)cols,
                                    times, values, (uint32_t)rows, &err);
 
-    for (i = 0; i < cols; ++i) {
-        mxFree(names[i]);
-    }
-    mxFree(names);
-    mxFree((void *)name_ptrs);
-
+    release_string_array(&channels);
     throw_if_failed(status, err);
 }
 
@@ -1104,48 +1199,29 @@ static void cmd_event_create(mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
     ErrorHandle err = 0;
     EventHandle out = 0;
-    const mxArray *rids_arg;
-    char **rids;
-    const char **rid_ptrs;
-    mwSize count, i;
+    StringArray rids;
     char *name, *type_name;
     int32_t status;
 
     require_args(nrhs, 6, "event_create");
 
-    rids_arg = prhs[2];
-    if (!mxIsCell(rids_arg)) {
-        mexErrMsgIdAndTxt("nominal:invalidParameter",
-                          "assetRids must be a cell array of character vectors");
-    }
-    count = mxGetNumberOfElements(rids_arg);
-    if (count == 0) {
+    rids = borrow_string_array(prhs[2], "assetRids");
+    if (rids.count == 0) {
         mexErrMsgIdAndTxt("nominal:invalidParameter",
                           "at least one asset RID is required");
-    }
-
-    rids = (char **)mxCalloc(count, sizeof(char *));
-    rid_ptrs = (const char **)mxCalloc(count, sizeof(char *));
-    for (i = 0; i < count; ++i) {
-        rids[i] = arg_string(mxGetCell(rids_arg, i), "assetRids element");
-        rid_ptrs[i] = rids[i];
     }
 
     name = arg_string(prhs[3], "name");
     type_name = arg_string(prhs[4], "type");
 
     status = nominal_event_create(arg_i32(prhs[1], "client"),
-                                  rid_ptrs, (uint32_t)count,
+                                  rids.ptrs, (uint32_t)rids.count,
                                   name, event_type_code(type_name),
                                   arg_i64(prhs[5], "timestamp"),
                                   arg_i64(prhs[6], "duration"),
                                   &out, &err);
 
-    for (i = 0; i < count; ++i) {
-        mxFree(rids[i]);
-    }
-    mxFree(rids);
-    mxFree((void *)rid_ptrs);
+    release_string_array(&rids);
     mxFree(name);
     mxFree(type_name);
 
@@ -1191,6 +1267,303 @@ static void cmd_event_assets(mxArray *plhs[], int nrhs, const mxArray *prhs[])
         mxSetCell(out, i, scratch_to_mx());
     }
     plhs[0] = out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Fetch                                                               */
+/*                                                                     */
+/* The C ABI hands back a series behind a handle, then copies out of it */
+/* on demand. MATLAB wants the whole channel as two vectors, so the     */
+/* handle is created and released entirely within this call and never   */
+/* reaches MATLAB — one less thing for a caller to forget to free.      */
+/* ------------------------------------------------------------------ */
+
+static void cmd_dataset_fetch(mxArray *plhs[], int nrhs, const mxArray *prhs[],
+                              const char *command)
+{
+    ErrorHandle err = 0;
+    SeriesHandle series = 0;
+    char *channel;
+    int32_t status;
+    uint32_t length = 0, written = 0;
+    mxArray *times = NULL, *values = NULL;
+    int decimated = (strcmp(command, "dataset_fetch_decimated") == 0);
+
+    require_args(nrhs, decimated ? 6 : 5, command);
+    channel = arg_string(prhs[3], "channel");
+
+    if (decimated) {
+        status = nominal_compute_fetch_decimated(
+            arg_i32(prhs[1], "client"), arg_i32(prhs[2], "dataset"), channel,
+            arg_i64(prhs[4], "startNanos"), arg_i64(prhs[5], "endNanos"),
+            (uint32_t)arg_i32(prhs[6], "buckets"), &series, &err);
+    } else {
+        status = nominal_compute_fetch(
+            arg_i32(prhs[1], "client"), arg_i32(prhs[2], "dataset"), channel,
+            arg_i64(prhs[4], "startNanos"), arg_i64(prhs[5], "endNanos"),
+            &series, &err);
+    }
+    mxFree(channel);
+    /* No series exists on failure, so there is nothing to release yet. */
+    throw_if_failed(status, err);
+
+    /* From here the series must be released before anything can throw. */
+    status = nominal_series_length(series, &length, &err);
+    if (status == NOMINAL_SUCCESS) {
+        times = mxCreateNumericMatrix((mwSize)length, 1, mxINT64_CLASS, mxREAL);
+        values = mxCreateDoubleMatrix((mwSize)length, 1, mxREAL);
+        if (length > 0) {
+            status = nominal_series_timestamps(series, mxGetInt64s(times),
+                                               length, &written, &err);
+            if (status == NOMINAL_SUCCESS) {
+                status = nominal_series_values(series, mxGetDoubles(values),
+                                               length, &written, &err);
+            }
+        }
+    }
+    nominal_series_free(series);
+    throw_if_failed(status, err);
+
+    plhs[0] = times;
+    plhs[1] = values;
+}
+
+/* ------------------------------------------------------------------ */
+/* Export                                                              */
+/* ------------------------------------------------------------------ */
+
+static void cmd_dataset_export(mxArray *plhs[], int nrhs, const mxArray *prhs[],
+                               const char *command)
+{
+    ErrorHandle err = 0;
+    StringArray channels;
+    char *resolution, *format, *path = NULL;
+    int32_t status, resolution_code, format_code;
+    int to_file = (strcmp(command, "dataset_export") == 0);
+
+    require_args(nrhs, to_file ? 9 : 8, command);
+
+    channels = borrow_string_array(prhs[3], "channels");
+    resolution = arg_string(prhs[6], "resolution");
+    format = arg_string(prhs[8], "format");
+
+    /* Decode before the call so a bad name is rejected by us, with a message
+     * naming the alternatives, rather than by the server. */
+    resolution_code = export_resolution_code(resolution);
+    format_code = export_format_code(format);
+
+    if (to_file) {
+        path = arg_string(prhs[9], "path");
+        status = nominal_export_to_file(
+            arg_i32(prhs[1], "client"), arg_i32(prhs[2], "dataset"),
+            channels.ptrs, (uint32_t)channels.count,
+            arg_i64(prhs[4], "startNanos"), arg_i64(prhs[5], "endNanos"),
+            resolution_code, arg_i64(prhs[7], "resolutionValue"),
+            format_code, path, &err);
+    } else {
+        status = nominal_export_presigned_url(
+            arg_i32(prhs[1], "client"), arg_i32(prhs[2], "dataset"),
+            channels.ptrs, (uint32_t)channels.count,
+            arg_i64(prhs[4], "startNanos"), arg_i64(prhs[5], "endNanos"),
+            resolution_code, arg_i64(prhs[7], "resolutionValue"),
+            format_code, g_scratch, &err);
+    }
+
+    release_string_array(&channels);
+    mxFree(resolution);
+    mxFree(format);
+    if (path != NULL) {
+        mxFree(path);
+    }
+    throw_if_failed(status, err);
+
+    if (!to_file) {
+        plhs[0] = scratch_to_mx();
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Ingest                                                              */
+/* ------------------------------------------------------------------ */
+
+static void cmd_ingest_file(mxArray *plhs[], int nrhs, const mxArray *prhs[],
+                            const char *command)
+{
+    ErrorHandle err = 0;
+    IngestJobHandle job = 0;
+    char *path, *new_name, *column, *kind, *unit;
+    int32_t status, kind_code, unit_code;
+    int parquet = (strcmp(command, "ingest_parquet") == 0);
+
+    require_args(nrhs, 7, command);
+
+    path = arg_string(prhs[2], "path");
+    new_name = arg_string(prhs[4], "newDatasetName");
+    column = arg_string(prhs[5], "timestampColumn");
+    kind = arg_string(prhs[6], "timestampKind");
+    unit = arg_string(prhs[7], "timestampUnit");
+
+    kind_code = timestamp_kind_code(kind);
+    unit_code = time_unit_code(unit);
+
+    /* The RID lands in the scratch handle: it is how a caller finds a dataset
+     * that this call just created. */
+    status = (parquet ? nominal_ingest_parquet : nominal_ingest_csv)(
+        arg_i32(prhs[1], "client"), path, arg_i32(prhs[3], "dataset"),
+        new_name, column, kind_code, unit_code, &job, g_scratch, &err);
+
+    mxFree(path);
+    mxFree(new_name);
+    mxFree(column);
+    mxFree(kind);
+    mxFree(unit);
+    throw_if_failed(status, err);
+
+    plhs[0] = mx_i32(job);
+    plhs[1] = scratch_to_mx();
+}
+
+/* Both status and wait report through the same JobStatus code. */
+static void cmd_ingest_status(mxArray *plhs[], int nrhs, const mxArray *prhs[],
+                              const char *command)
+{
+    ErrorHandle err = 0;
+    int32_t code = 0;
+    int wait = (strcmp(command, "ingest_wait") == 0);
+
+    require_args(nrhs, 2, command);
+    throw_if_failed((wait ? nominal_ingest_wait : nominal_ingest_job_status)(
+        arg_i32(prhs[1], "client"), arg_i32(prhs[2], "job"), &code, &err), err);
+    plhs[0] = mxCreateString(job_status_name(code));
+}
+
+/* ------------------------------------------------------------------ */
+/* SQL                                                                 */
+/*                                                                     */
+/* One call returns the whole result: column names and a cell of column */
+/* vectors, which MATLAB assembles into a table. The result handle is    */
+/* created and released here, so no cursor escapes into MATLAB.          */
+/* ------------------------------------------------------------------ */
+
+static void cmd_sql_query(mxArray *plhs[], int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    QueryResultHandle result = 0;
+    char *query, *workspace;
+    int32_t status;
+    uint32_t rows = 0, cols = 0, i, r, written = 0;
+    /* Only assigned once the row and column counts are known, and only read
+     * after throw_if_failed has confirmed that happened. */
+    mxArray *names = NULL, *columns = NULL;
+
+    require_args(nrhs, 3, "sql_query");
+    query = arg_string(prhs[2], "query");
+    workspace = arg_string(prhs[3], "workspaceRid");
+    status = nominal_sql_query(arg_i32(prhs[1], "client"), query, workspace,
+                               &result, &err);
+    mxFree(query);
+    mxFree(workspace);
+    throw_if_failed(status, err);
+
+    /*
+     * Nothing between here and the free may throw. A query result is capped at
+     * a gigabyte and lives in a registry until shutdown, so abandoning one is a
+     * real leak rather than a rounding error — unlike the small metadata lists
+     * elsewhere in this file, which is why this path collects failures and
+     * raises them after releasing the handle instead of throwing where it
+     * fails.
+     */
+    status = nominal_sql_row_count(result, &rows, &err);
+    if (status == NOMINAL_SUCCESS) {
+        status = nominal_sql_column_count(result, &cols, &err);
+    }
+
+    if (status == NOMINAL_SUCCESS) {
+        names = mxCreateCellMatrix(1, (mwSize)cols);
+        columns = mxCreateCellMatrix(1, (mwSize)cols);
+
+        for (i = 0; i < cols; ++i) {
+            int32_t type = 0;
+            mxArray *column = NULL;
+
+            status = nominal_sql_column_name(result, i, g_scratch, &err);
+            if (status != NOMINAL_SUCCESS) {
+                break;
+            }
+            mxSetCell(names, i, scratch_to_mx());
+
+            status = nominal_sql_column_type(result, i, &type, &err);
+            if (status != NOMINAL_SUCCESS) {
+                break;
+            }
+
+            switch (type) {
+                case 0:  /* Double */
+                    column = mxCreateDoubleMatrix((mwSize)rows, 1, mxREAL);
+                    if (rows > 0) {
+                        status = nominal_sql_column_doubles(
+                            result, i, mxGetDoubles(column), rows, &written, &err);
+                    }
+                    break;
+
+                case 1:  /* Int64 */
+                case 3:  /* Timestamp, already normalised to epoch nanoseconds */
+                    column = mxCreateNumericMatrix((mwSize)rows, 1, mxINT64_CLASS, mxREAL);
+                    if (rows > 0) {
+                        status = nominal_sql_column_int64(
+                            result, i, mxGetInt64s(column), rows, &written, &err);
+                    }
+                    break;
+
+                case 2:  /* String */
+                    column = mxCreateCellMatrix((mwSize)rows, 1);
+                    for (r = 0; r < rows; ++r) {
+                        status = nominal_sql_column_string_at(result, i, r, g_scratch, &err);
+                        if (status != NOMINAL_SUCCESS) {
+                            break;
+                        }
+                        mxSetCell(column, r, scratch_to_mx());
+                    }
+                    break;
+
+                default: /* Unsupported: present in the result, not readable here. */
+                    column = mxCreateCellMatrix((mwSize)rows, 1);
+                    for (r = 0; r < rows; ++r) {
+                        mxSetCell(column, r, mxCreateString(""));
+                    }
+                    break;
+            }
+
+            if (status != NOMINAL_SUCCESS) {
+                break;
+            }
+            mxSetCell(columns, i, column);
+        }
+    }
+
+    nominal_sql_free(result);
+    throw_if_failed(status, err);
+
+    nominal_sql_free(result);
+    plhs[0] = names;
+    plhs[1] = columns;
+}
+
+static void cmd_sql_export_url(mxArray *plhs[], int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    char *query, *workspace;
+    int32_t status;
+
+    require_args(nrhs, 3, "sql_export_url");
+    query = arg_string(prhs[2], "query");
+    workspace = arg_string(prhs[3], "workspaceRid");
+    status = nominal_sql_export_url(arg_i32(prhs[1], "client"), query, workspace,
+                                    g_scratch, &err);
+    mxFree(query);
+    mxFree(workspace);
+    throw_if_failed(status, err);
+    plhs[0] = scratch_to_mx();
 }
 
 /* ------------------------------------------------------------------ */
@@ -1310,6 +1683,20 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("event_timestamp")) { cmd_event_i64(nominal_event_timestamp, plhs, nrhs, prhs, command); return; }
     if (IS("event_duration"))  { cmd_event_i64(nominal_event_duration, plhs, nrhs, prhs, command); return; }
     if (IS("event_assets"))    { cmd_event_assets(plhs, nrhs, prhs); return; }
+
+    /* --- reading data back --- */
+    if (IS("dataset_fetch") || IS("dataset_fetch_decimated")) { cmd_dataset_fetch(plhs, nrhs, prhs, command); return; }
+    if (IS("dataset_export") || IS("dataset_export_url"))     { cmd_dataset_export(plhs, nrhs, prhs, command); return; }
+
+    /* --- ingest --- */
+    if (IS("ingest_csv") || IS("ingest_parquet"))  { cmd_ingest_file(plhs, nrhs, prhs, command); return; }
+    if (IS("ingest_status") || IS("ingest_wait"))  { cmd_ingest_status(plhs, nrhs, prhs, command); return; }
+    if (IS("ingest_job_rid")) { do_getter_string(nominal_ingest_job_rid, nlhs, plhs, nrhs, prhs, command); return; }
+    if (IS("ingest_job_free")) { do_free(nominal_ingest_job_free, nlhs, plhs, nrhs, prhs, command); return; }
+
+    /* --- sql --- */
+    if (IS("sql_query"))      { cmd_sql_query(plhs, nrhs, prhs); return; }
+    if (IS("sql_export_url")) { cmd_sql_export_url(plhs, nrhs, prhs); return; }
 
     mexErrMsgIdAndTxt("nominal:invalidParameter", "unknown command '%s'", command);
 }

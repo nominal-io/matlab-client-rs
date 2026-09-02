@@ -3,7 +3,7 @@ classdef Dataset < nominal.Resource
     %
     %   Obtained from an asset or a client:
     %
-    %       ds = a.dataset("telemetry", "tlm");
+    %       ds = a.getOrCreateDataset("telemetry", "tlm");
     %       ds = c.datasetByRid(rid);
     %
     %   Streaming into it:
@@ -99,14 +99,149 @@ classdef Dataset < nominal.Resource
                 nominalmex('meta_get', obj.Client.Handle, obj.Handle, char(name)));
         end
 
-        function channels = channels(obj)
-            %CHANNELS  Every channel in this dataset, as a struct array.
+        function t = channels(obj)
+            %CHANNELS  Every channel in this dataset, as a table.
             %
-            %   Fields: Name, Unit, Description, DataType. Ordered by name.
+            %   Variables: Name, Unit, Description, DataType. Ordered by name.
             %
-            %       struct2table(ds.channels())
+            %       ds.channels()
+            %       ds.channels().Name                    % just the names
+            %       c = ds.channels();
+            %       c(c.Unit == "Cel", :)                 % only the temperatures
             obj.assertLive();
-            channels = nominalmex('meta_list', obj.Client.Handle, obj.Handle);
+            t = structsToTable(nominalmex('meta_list', obj.Client.Handle, obj.Handle), ...
+                               ["Name" "Unit" "Description" "DataType"]);
+        end
+
+        function tt = fetch(obj, channel, startTime, endTime, options)
+            %FETCH  Read one channel back into MATLAB as a timetable.
+            %
+            %   tt = ds.fetch("rpm", t0, t1)
+            %   tt = ds.fetch("rpm", t0, t1, Buckets=2000)
+            %
+            %   startTime and endTime are zoned datetimes or int64 nanoseconds;
+            %   the window is inclusive at both ends. The result is a timetable
+            %   with one variable named after the channel, so it plots and
+            %   resamples directly:
+            %
+            %       plot(tt.Time, tt.("rpm"))
+            %       retime(tt, "regular", "linear", TimeStep=seconds(1))
+            %
+            %   Buckets asks the server to decimate to roughly that many
+            %   points, capped at 10,000. Use it for plotting, where full
+            %   resolution is wasted — a few thousand points is usually
+            %   indistinguishable on screen and vastly cheaper. Without it the
+            %   whole window is fetched, which pages internally and can be many
+            %   round trips over a wide window; export is the better tool when
+            %   the destination is a file.
+            %
+            %   Note that timetable row times are datetimes, whose resolution
+            %   does not reach nanoseconds. Use export if you need the exact
+            %   instants.
+            %
+            %   See also NOMINAL.DATASET/EXPORT, RETIME, SYNCHRONIZE
+            arguments
+                obj (1,1) nominal.Dataset
+                channel (1,1) string
+                startTime
+                endTime
+                options.Buckets (1,1) double {mustBePositive, mustBeInteger} = 0
+            end
+            obj.assertLive();
+
+            if options.Buckets > 0
+                [nanos, values] = nominalmex('dataset_fetch_decimated', ...
+                    obj.Client.Handle, obj.Handle, char(channel), ...
+                    nominal.toNanos(startTime), nominal.toNanos(endTime), ...
+                    int32(options.Buckets));
+            else
+                [nanos, values] = nominalmex('dataset_fetch', ...
+                    obj.Client.Handle, obj.Handle, char(channel), ...
+                    nominal.toNanos(startTime), nominal.toNanos(endTime));
+            end
+
+            tt = timetable(nominal.fromNanos(nanos), values);
+
+            % A channel really can be called "Time", and a timetable cannot
+            % have a variable sharing the row-times dimension name. Move the
+            % dimension rather than the channel, so the variable still answers
+            % to the name the data actually has.
+            if strcmp(char(channel), tt.Properties.DimensionNames{1})
+                tt.Properties.DimensionNames{1} = 'RowTimes';
+            end
+
+            % Assigned rather than passed to the constructor: channel names
+            % routinely contain dots ("engine.left.rpm"), and the constructor
+            % would quietly rewrite those into valid identifiers.
+            tt.Properties.VariableNames = {char(channel)};
+        end
+
+        function export(obj, path, channels, startTime, endTime, options)
+            %EXPORT  Write channels to a file on disk.
+            %
+            %   ds.export("run12.mat", ["rpm" "egt"], t0, t1)
+            %   ds.export("run12.csv", ch, t0, t1, Format="csv")
+            %
+            %   Format is matfile (the default), csv, or arrow. The file is
+            %   replaced if it exists, and the call blocks until the whole
+            %   export has been received.
+            %
+            %   This moves the same data as fetch but in one request rather
+            %   than many, so it is the right tool for a wide window. Use fetch
+            %   when you want the samples in the workspace; use this when you
+            %   want them on disk.
+            %
+            %   Resolution is full (every sample, the default), buckets, or
+            %   interval. The latter two read ResolutionValue as a point count
+            %   or a nanosecond spacing respectively.
+            %
+            %   See also NOMINAL.DATASET/FETCH, NOMINAL.DATASET/EXPORTURL
+            arguments
+                obj (1,1) nominal.Dataset
+                path (1,1) string
+                channels (1,:) string
+                startTime
+                endTime
+                options.Format (1,1) string {mustBeMember(options.Format, ...
+                    ["matfile" "csv" "arrow"])} = "matfile"
+                options.Resolution (1,1) string {mustBeMember(options.Resolution, ...
+                    ["full" "buckets" "interval"])} = "full"
+                options.ResolutionValue (1,1) double = 0
+            end
+            obj.assertLive();
+            nominalmex('dataset_export', obj.Client.Handle, obj.Handle, ...
+                       cellstr(channels), nominal.toNanos(startTime), ...
+                       nominal.toNanos(endTime), char(options.Resolution), ...
+                       int64(options.ResolutionValue), char(options.Format), ...
+                       char(path));
+        end
+
+        function url = exportUrl(obj, channels, startTime, endTime, options)
+            %EXPORTURL  A time-limited download link instead of the bytes.
+            %
+            %   The server renders the file to object storage and returns a
+            %   presigned URL. Useful when the link is more use than the data —
+            %   handing it to a browser, or to something that is not MATLAB.
+            %
+            %   Arguments match export, minus the path.
+            %
+            %   See also NOMINAL.DATASET/EXPORT
+            arguments
+                obj (1,1) nominal.Dataset
+                channels (1,:) string
+                startTime
+                endTime
+                options.Format (1,1) string {mustBeMember(options.Format, ...
+                    ["matfile" "csv" "arrow"])} = "matfile"
+                options.Resolution (1,1) string {mustBeMember(options.Resolution, ...
+                    ["full" "buckets" "interval"])} = "full"
+                options.ResolutionValue (1,1) double = 0
+            end
+            obj.assertLive();
+            url = string(nominalmex('dataset_export_url', obj.Client.Handle, ...
+                obj.Handle, cellstr(channels), nominal.toNanos(startTime), ...
+                nominal.toNanos(endTime), char(options.Resolution), ...
+                int64(options.ResolutionValue), char(options.Format)));
         end
 
         function m = setChannelMetadata(obj, name, dataType, options)

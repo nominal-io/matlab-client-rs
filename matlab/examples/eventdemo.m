@@ -18,7 +18,7 @@ function eventdemo(assetName)
     end
 
     client = connect();
-    asset = client.asset(assetName);
+    asset = client.getOrCreateAsset(assetName);
     fprintf('Asset %s\n  %s\n', asset.Name, asset.Rid);
 
     now = datetime("now", TimeZone="UTC");

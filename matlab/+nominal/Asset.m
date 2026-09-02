@@ -3,11 +3,11 @@ classdef Asset < nominal.Resource
     %
     %   Obtained from a client rather than constructed directly:
     %
-    %       a = c.asset("engine-3");        % get or create by name
-    %       a = c.assetByRid(rid);          % by RID
+    %       a = c.getOrCreateAsset("engine-3");   % by name, creating if absent
+    %       a = c.assetByRid(rid);                % by RID
     %
     %   Example:
-    %       ds = a.dataset("telemetry", "tlm");
+    %       ds = a.getOrCreateDataset("telemetry", "tlm");
     %       r  = a.run("burn-12");
     %       a.update(Labels=["production" "orbit"]);
     %
@@ -60,10 +60,10 @@ classdef Asset < nominal.Resource
             value = string(nominalmex('asset_property', obj.Handle, char(key)));
         end
 
-        function sources = datasources(obj)
-            %DATASOURCES  Everything attached to this asset, as a struct array.
+        function t = datasources(obj)
+            %DATASOURCES  Everything attached to this asset, as a table.
             %
-            %   Fields: RefName, Rid, Type. Type is "dataset", "video", or
+            %   Variables: RefName, Rid, Type. Type is "dataset", "video", or
             %   "connection" — which matters because the RID alone does not
             %   tell you what an endpoint will accept. Only a dataset RID can
             %   open a stream, for instance.
@@ -71,18 +71,24 @@ classdef Asset < nominal.Resource
             %   Ordered by reference name, so the result is reproducible.
             %
             %       s = a.datasources();
-            %       struct2table(s)
-            %       tlm = s(strcmp({s.Type}, 'dataset'));
+            %       tlm = s(s.Type == "dataset", :);
             obj.assertLive();
-            sources = nominalmex('asset_datasources', obj.Handle);
+            t = structsToTable(nominalmex('asset_datasources', obj.Handle), ...
+                               ["RefName" "Rid" "Type"]);
         end
 
-        function d = dataset(obj, name, refName)
-            %DATASET  Fetch a dataset by name, creating and attaching it if absent.
+        function d = getOrCreateDataset(obj, name, refName)
+            %GETORCREATEDATASET  Fetch a dataset by name, creating it if absent.
+            %
+            %   Creates and attaches the dataset to this asset when no dataset
+            %   of that name exists. Named for what it does, since a typo
+            %   produces a new empty dataset rather than an error.
             %
             %   refName is how the dataset is addressed within this asset and
             %   must be unique among its data sources. An existing dataset is
             %   returned as-is and is not re-attached.
+            %
+            %   See also NOMINAL.ASSET/DATASOURCES, NOMINAL.CLIENT/DATASETBYRID
             arguments
                 obj (1,1) nominal.Asset
                 name (1,1) string

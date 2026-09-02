@@ -11,9 +11,11 @@ classdef (Abstract) Resource < handle
     %   copying a Nominal object must alias the same underlying resource, not
     %   duplicate a handle that would then be freed twice.
 
-    properties (SetAccess = protected, GetAccess = public)
-        % The library handle. Exposed read-only mainly for diagnostics; zero
-        % once released.
+    properties (SetAccess = protected, GetAccess = public, Hidden)
+        % The library handle. Hidden because it is an implementation detail —
+        % it stays readable for diagnostics and for the tests, but it should
+        % not appear in tab-completion or in the default display alongside the
+        % properties a user actually works with.
         Handle (1,1) int32 = 0
     end
 
@@ -38,6 +40,60 @@ classdef (Abstract) Resource < handle
                 catch
                 end
                 obj.Handle = 0;
+            end
+        end
+    end
+
+    methods
+        function disp(obj)
+            %DISP  Show the resource's own fields rather than a handle address.
+            %
+            %   MATLAB's default display for a handle class is the class name
+            %   and a link, which tells a user nothing about which asset or run
+            %   they are holding. Every property here reads from a struct the
+            %   library already fetched, so showing them all costs no network.
+            if ~isscalar(obj)
+                fprintf('  %s array (%s)\n\n', class(obj), ...
+                        join(string(size(obj)), char(215)));
+                return
+            end
+            if ~isvalid(obj) || obj.Handle == 0
+                fprintf('  %s (released)\n\n', class(obj));
+                return
+            end
+
+            names = properties(obj);
+            fprintf('  %s\n\n', class(obj));
+            for i = 1:numel(names)
+                try
+                    value = obj.(names{i});
+                catch
+                    % A getter can fail on its own — a shut-down library, a
+                    % property the server did not return. One unreadable field
+                    % should not take the whole display down with it.
+                    value = "<unavailable>";
+                end
+                fprintf('    %-14s %s\n', names{i}, nominal.Resource.brief(value));
+            end
+            fprintf('\n');
+        end
+    end
+
+    methods (Static, Access = private)
+        function text = brief(value)
+            % One line per property, whatever the type underneath.
+            if isstring(value) || ischar(value)
+                text = strjoin(cellstr(string(value)), ', ');
+                if strlength(text) > 60
+                    text = extractBefore(text, 58) + "...";
+                end
+            elseif isdatetime(value) || isnumeric(value) || islogical(value)
+                text = strjoin(cellstr(string(value(:)')), ', ');
+            else
+                text = sprintf('[%s]', class(value));
+            end
+            if isempty(char(text))
+                text = '""';
             end
         end
     end

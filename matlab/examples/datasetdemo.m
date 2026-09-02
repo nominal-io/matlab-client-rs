@@ -17,7 +17,7 @@ function datasetdemo(assetName)
     end
 
     client = connect();
-    asset = client.asset(assetName);
+    asset = client.getOrCreateAsset(assetName);
     fprintf('Asset: %s\n', asset.Name);
 
     % --- get or create a dataset under the asset ----------------------
@@ -25,7 +25,7 @@ function datasetdemo(assetName)
     % refName is how this dataset is addressed within the asset, and must be
     % unique among its data sources. An existing dataset is returned as-is
     % rather than re-attached.
-    dataset = asset.dataset("telemetry", "tlm");
+    dataset = asset.getOrCreateDataset("telemetry", "tlm");
     fprintf('Dataset "%s"\n  rid %s\n', dataset.Name, dataset.Rid);
 
     % --- fetch the same dataset by RID --------------------------------
@@ -78,9 +78,9 @@ function datasetdemo(assetName)
 
     % --- list every channel -------------------------------------------
     channels = updated.channels();
-    fprintf('%d channel(s) in the dataset:\n', numel(channels));
+    fprintf('%d channel(s) in the dataset:\n', height(channels));
     if ~isempty(channels)
-        disp(struct2table(channels, AsArray=true));
+        disp(channels);
     end
 
     % --- teardown -----------------------------------------------------

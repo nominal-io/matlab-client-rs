@@ -11,8 +11,8 @@ classdef Client < nominal.Resource
     %
     %   Example:
     %       c  = nominal.Client(getenv("NOMINAL_TOKEN"));
-    %       a  = c.asset("engine-3");
-    %       ds = a.dataset("telemetry", "tlm");
+    %       a  = c.getOrCreateAsset("engine-3");
+    %       ds = a.getOrCreateDataset("telemetry", "tlm");
     %       s  = ds.stream();
     %
     %   The connection is released automatically when c goes out of scope.
@@ -56,10 +56,10 @@ classdef Client < nominal.Resource
             name = string(nominalmex('client_user', obj.Handle));
         end
 
-        function list = assets(obj, filter)
-            %ASSETS  Every asset you can see, as a struct array.
+        function t = assets(obj, filter)
+            %ASSETS  Every asset you can see, as a table.
             %
-            %   Fields: Name, Rid, Description. Ordered by name.
+            %   Variables: Name, Rid, Description. Ordered by name.
             %
             %   With no argument, lists everything. With one, keeps only assets
             %   whose name contains it — a case-insensitive substring match, not
@@ -67,8 +67,9 @@ classdef Client < nominal.Resource
             %
             %   This is where you start when you have no RID:
             %
-            %       struct2table(c.assets())
-            %       struct2table(c.assets("engine"))
+            %       c.assets()
+            %       c.assets("engine")
+            %       a = c.assetByRid(c.assets("engine").Rid(1));
             %
             %   See also NOMINAL.CLIENT/DATASETS
             arguments
@@ -77,24 +78,25 @@ classdef Client < nominal.Resource
             end
             obj.assertLive();
             if filter == ""
-                list = nominalmex('asset_list', obj.Handle);
+                s = nominalmex('asset_list', obj.Handle);
             else
-                list = nominalmex('asset_search', obj.Handle, char(filter));
+                s = nominalmex('asset_search', obj.Handle, char(filter));
             end
+            t = structsToTable(s, ["Name" "Rid" "Description"]);
         end
 
-        function list = datasets(obj, filter)
-            %DATASETS  Every dataset you can see, as a struct array.
+        function t = datasets(obj, filter)
+            %DATASETS  Every dataset you can see, as a table.
             %
-            %   Fields: Name, Rid. Ordered by name. With one argument, keeps
+            %   Variables: Name, Rid. Ordered by name. With one argument, keeps
             %   only datasets whose name contains it.
             %
-            %       struct2table(c.datasets())
-            %       ds = c.datasetByRid(c.datasets("telemetry")(1).Rid);
+            %       c.datasets()
+            %       ds = c.datasetByRid(c.datasets("telemetry").Rid(1));
             %
             %   To see what is inside one, use its channels:
             %
-            %       struct2table(ds.channels())
+            %       ds.channels()
             %
             %   See also NOMINAL.CLIENT/ASSETS, NOMINAL.DATASET/CHANNELS
             arguments
@@ -103,17 +105,26 @@ classdef Client < nominal.Resource
             end
             obj.assertLive();
             if filter == ""
-                list = nominalmex('dataset_list', obj.Handle);
+                s = nominalmex('dataset_list', obj.Handle);
             else
-                list = nominalmex('dataset_search', obj.Handle, char(filter));
+                s = nominalmex('dataset_search', obj.Handle, char(filter));
             end
+            t = structsToTable(s, ["Name" "Rid"]);
         end
 
-        function a = asset(obj, name)
-            %ASSET  Fetch an asset by name, creating it if none has that name.
+        function a = getOrCreateAsset(obj, name)
+            %GETORCREATEASSET  Fetch an asset by name, creating it if absent.
+            %
+            %   Named for what it does. A lookup that silently creates on a
+            %   typo is worth spelling out at the call site, because the
+            %   evidence of the mistake is a new empty asset rather than an
+            %   error.
             %
             %   Name is not unique in Nominal; if several match, the first is
-            %   returned. Prefer assetByRid when you already know the RID.
+            %   returned. Prefer assetByRid when you already know the RID, and
+            %   assets(name) when you want to look without creating.
+            %
+            %   See also NOMINAL.CLIENT/ASSETBYRID, NOMINAL.CLIENT/ASSETS
             arguments
                 obj (1,1) nominal.Client
                 name (1,1) string
@@ -190,6 +201,144 @@ classdef Client < nominal.Resource
             end
             obj.assertLive();
             r = nominal.Run(obj, nominalmex('run_get_by_rid', obj.Handle, char(rid)));
+        end
+
+        function job = ingest(obj, path, options)
+            %INGEST  Upload a CSV or Parquet file and start ingesting it.
+            %
+            %   job = c.ingest("flight12.csv", TimestampColumn="time", ...
+            %                  NewDataset="Flight 12");
+            %   job = c.ingest("run.parquet", TimestampColumn="t", ...
+            %                  Dataset=ds, Kind="epoch", Unit="milliseconds");
+            %
+            %   The format is taken from the file extension: .parquet is
+            %   Parquet, anything else is CSV.
+            %
+            %   Give either Dataset (add to an existing one) or NewDataset (a
+            %   name to create). The returned job carries DatasetRid either
+            %   way, which is how you find a dataset this call just made.
+            %
+            %   Kind says how to read the timestamp column: iso8601 (the
+            %   default), epoch, or relative. Unit applies to the latter two
+            %   and is ignored for ISO 8601.
+            %
+            %   Blocks while the file uploads, which for a large file is a long
+            %   time. The ingest itself continues afterwards — call job.wait()
+            %   if you need it finished before moving on.
+            %
+            %   See also NOMINAL.INGESTJOB, NOMINAL.DATASET/WRITE
+            arguments
+                obj (1,1) nominal.Client
+                path (1,1) string {mustBeFile}
+                % Defaulted rather than left bare: a name-value with no default
+                % is simply absent from options when the caller omits it, so
+                % reading it would fail on a missing field rather than saying
+                % what was wrong.
+                options.TimestampColumn (1,1) string = ""
+                options.Dataset nominal.Dataset = nominal.Dataset.empty
+                options.NewDataset (1,1) string = ""
+                options.Kind (1,1) string {mustBeMember(options.Kind, ...
+                    ["iso8601" "epoch" "relative"])} = "iso8601"
+                options.Unit (1,1) string {mustBeMember(options.Unit, ...
+                    ["nanoseconds" "microseconds" "milliseconds" ...
+                     "seconds" "minutes" "hours"])} = "seconds"
+            end
+            obj.assertLive();
+
+            if options.TimestampColumn == ""
+                error('nominal:invalidParameter', ...
+                      'TimestampColumn= is required: name the column holding time');
+            end
+
+            % Zero means "no existing dataset" on the C side, which is what
+            % pairs with a NewDataset name.
+            datasetHandle = int32(0);
+            if ~isempty(options.Dataset)
+                datasetHandle = options.Dataset.Handle;
+            end
+            if datasetHandle == 0 && options.NewDataset == ""
+                error('nominal:invalidParameter', ...
+                      'give either Dataset= to add to an existing dataset, or NewDataset= to create one');
+            end
+
+            if endsWith(lower(path), ".parquet")
+                command = 'ingest_parquet';
+            else
+                command = 'ingest_csv';
+            end
+
+            [handle, datasetRid] = nominalmex(command, obj.Handle, char(path), ...
+                datasetHandle, char(options.NewDataset), ...
+                char(options.TimestampColumn), char(options.Kind), char(options.Unit));
+
+            job = nominal.IngestJob(obj, handle, string(datasetRid));
+        end
+
+        function t = query(obj, sql, options)
+            %QUERY  Run a SQL query and return the result as a table.
+            %
+            %   t = c.query("SELECT * FROM runs LIMIT 10")
+            %
+            %   Timestamp columns come back as int64 nanoseconds since the
+            %   epoch, whatever resolution the warehouse sent — pass them
+            %   through nominal.fromNanos for a datetime.
+            %
+            %   The SQL service always needs a workspace, even though the rest
+            %   of the API does not. The client's own workspace is used unless
+            %   Workspace= names another; if the client is unscoped, one must
+            %   be given here.
+            %
+            %   Bounded at 1 GiB. Use queryExportUrl for anything larger.
+            %
+            %   See also NOMINAL.CLIENT/QUERYEXPORTURL, NOMINAL.FROMNANOS
+            arguments
+                obj (1,1) nominal.Client
+                sql (1,1) string
+                options.Workspace (1,1) string = ""
+            end
+            obj.assertLive();
+            [names, columns] = nominalmex('sql_query', obj.Handle, ...
+                                          char(sql), char(options.Workspace));
+
+            if isempty(names)
+                t = table();
+                return
+            end
+            t = table(columns{:});
+
+            % A join can legitimately produce two columns of the same name —
+            % SELECT a.rid, b.rid — and MATLAB refuses duplicate variable
+            % names outright. Disambiguate rather than failing on a query the
+            % warehouse was happy to run.
+            names = matlab.lang.makeUniqueStrings(names);
+
+            % Assigned rather than passed to the constructor, which would
+            % rewrite anything that is not a valid identifier — and a query
+            % selecting `a.b AS "x y"` is entitled to that name.
+            t.Properties.VariableNames = names;
+        end
+
+        function url = queryExportUrl(obj, sql, options)
+            %QUERYEXPORTURL  Run a query and get a download link for the CSV.
+            %
+            %   For results too large for query, which is capped at 1 GiB. The
+            %   export runs without that cap, writes to object storage, and
+            %   returns a time-limited presigned URL.
+            %
+            %   CSV only, and only for queries reading telemetry tables — one
+            %   touching assets, runs, or datasets cannot be exported this way.
+            %   Some deployments have no export bucket configured, in which
+            %   case this fails.
+            %
+            %   See also NOMINAL.CLIENT/QUERY
+            arguments
+                obj (1,1) nominal.Client
+                sql (1,1) string
+                options.Workspace (1,1) string = ""
+            end
+            obj.assertLive();
+            url = string(nominalmex('sql_export_url', obj.Handle, ...
+                                    char(sql), char(options.Workspace)));
         end
     end
 

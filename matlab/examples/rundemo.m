@@ -17,8 +17,8 @@ function rundemo(assetName)
     end
 
     client = connect();
-    asset = client.asset(assetName);
-    dataset = asset.dataset("telemetry", "tlm");
+    asset = client.getOrCreateAsset(assetName);
+    dataset = asset.getOrCreateDataset("telemetry", "tlm");
     fprintf('Asset %s / dataset %s\n', asset.Name, dataset.Name);
 
     % --- create -------------------------------------------------------
