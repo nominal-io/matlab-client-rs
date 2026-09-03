@@ -62,14 +62,23 @@ classdef IngestJob < nominal.Resource
         end
 
         function s = wait(obj)
-            %WAIT  Block until the job finishes, then report how it ended.
+            %WAIT  Block until the job finishes.
             %
-            %   Returns "completed", "failed", or "cancelled". A failed ingest
-            %   comes back as a status rather than an error: the call did what
-            %   it was asked, and the ingest failing is a result.
+            %   Returns "completed" when the ingest succeeds, and RAISES
+            %   nominal:nominalError when it fails. A failed ingest does not
+            %   come back as a status, so the call needs wrapping:
+            %
+            %       try
+            %           job.wait();
+            %       catch e
+            %           % the ingest itself failed; e.message says why
+            %       end
+            %
+            %   Poll status() in a loop instead if you would rather have a
+            %   terminal status than an exception.
             %
             %   Polls server-side with no timeout, so a wedged job blocks
-            %   indefinitely. Loop on status() yourself if you need one.
+            %   indefinitely.
             obj.assertLive();
             s = string(nominalmex('ingest_wait', obj.Client.Handle, obj.Handle));
         end

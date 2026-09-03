@@ -88,7 +88,11 @@ where
         Ok(Err(code)) => code as i32,
         Err(payload) => {
             let detail = panic_message(&payload);
-            fail(error_out, ErrorCode::RuntimeError, format!("panic: {detail}")) as i32
+            fail(
+                error_out,
+                ErrorCode::RuntimeError,
+                format!("panic: {detail}"),
+            ) as i32
         }
     }
 }
@@ -168,8 +172,11 @@ pub extern "C" fn nominal_error_message(
             // No error_out here: reporting a failure to read a failure would
             // just allocate another error to leak.
             Some(err) => {
-                match crate::strings::set_string(out_string, err.message.clone(), std::ptr::null_mut())
-                {
+                match crate::strings::set_string(
+                    out_string,
+                    err.message.clone(),
+                    std::ptr::null_mut(),
+                ) {
                     Ok(()) => ErrorCode::Success as i32,
                     Err(code) => code as i32,
                 }

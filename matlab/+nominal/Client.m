@@ -1,16 +1,25 @@
 classdef Client < nominal.Resource
     % CLIENT  An authenticated connection to Nominal.
     %
-    %   c = nominal.Client(token) connects to Nominal production.
-    %   c = nominal.Client(token, Workspace=rid, BaseUrl=url) scopes the
-    %   client to a workspace and/or targets a different deployment. Both are
-    %   optional; the API does not require a workspace.
+    %   Two ways to authenticate, matching the Python client:
+    %
+    %       c = nominal.Client.fromProfile();          % credentials on disk
+    %       c = nominal.Client.fromToken("<api-key>"); % token in hand
+    %
+    %   fromProfile is the recommended one. It reads the same
+    %   ~/.config/nominal/config.yml that the `nom` CLI and the Python client
+    %   use, so a machine set up for either already works here — and no key
+    %   ends up pasted into a script.
+    %
+    %   nominal.Client(token, Workspace=rid, BaseUrl=url) is the underlying
+    %   constructor. Both options are optional; the API does not require a
+    %   workspace, and an unset base URL means Nominal production.
     %
     %   Surrounding whitespace is trimmed from all three, so a token pasted
     %   with a trailing newline still authenticates.
     %
     %   Example:
-    %       c  = nominal.Client(getenv("NOMINAL_TOKEN"));
+    %       c  = nominal.Client.fromProfile();
     %       a  = c.getOrCreateAsset("engine-3");
     %       ds = a.getOrCreateDataset("telemetry", "tlm");
     %       s  = ds.stream();
@@ -277,7 +286,15 @@ classdef Client < nominal.Resource
         function t = query(obj, sql, options)
             %QUERY  Run a SQL query and return the result as a table.
             %
-            %   t = c.query("SELECT * FROM runs LIMIT 10")
+            %   t = c.query("SELECT ts, channel, value FROM points_double " + ...
+            %               "WHERE dataset_rid = '" + ds.Rid + "' LIMIT 100")
+            %
+            %   The tables are the warehouse's own, not the object model, so
+            %   the columns are not the ones these classes expose. Telemetry
+            %   tables (points_double, points_int, points_string, logs,
+            %   channels) must filter on dataset_rid. Metadata tables (assets,
+            %   runs, datasets, events) need not, and are capped at 10,000
+            %   rows.
             %
             %   Timestamp columns come back as int64 nanoseconds since the
             %   epoch, whatever resolution the warehouse sent — pass them
@@ -305,6 +322,15 @@ classdef Client < nominal.Resource
                 return
             end
             t = table(columns{:});
+
+            % String columns arrive from the gateway as cellstr. Convert to
+            % string so they compare with ==, matching what every listing
+            % returns.
+            for i = 1:width(t)
+                if iscellstr(t.(i)) %#ok<ISCLSTR>
+                    t.(i) = string(t.(i));
+                end
+            end
 
             % A join can legitimately produce two columns of the same name —
             % SELECT a.rid, b.rid — and MATLAB refuses duplicate variable
@@ -339,6 +365,65 @@ classdef Client < nominal.Resource
             obj.assertLive();
             url = string(nominalmex('sql_export_url', obj.Handle, ...
                                     char(sql), char(options.Workspace)));
+        end
+    end
+
+    methods (Static)
+        function c = fromProfile(name, options)
+            %FROMPROFILE  Connect using credentials stored on disk.
+            %
+            %   c = nominal.Client.fromProfile()          % the "default" profile
+            %   c = nominal.Client.fromProfile("staging") % a named one
+            %
+            %   Reads ~/.config/nominal/config.yml — the same file the `nom`
+            %   CLI and the Python client use. Set one up once with:
+            %
+            %       nom config profile add default -t <api-token>
+            %
+            %   A profile carries the base URL, the token, and optionally a
+            %   workspace RID, so nothing else needs passing and no key ends
+            %   up in a script. The MATLAB call is the counterpart of Python's
+            %
+            %       client = NominalClient.from_profile("default")
+            %
+            %   ConfigPath= reads a file somewhere else, which is mainly
+            %   useful in CI where the home directory is not the user's.
+            %
+            %   See also NOMINAL.CLIENT/FROMTOKEN
+            arguments
+                name (1,1) string = "default"
+                options.ConfigPath (1,1) string = ""
+            end
+
+            if options.ConfigPath == ""
+                profile = readProfile(name);
+            else
+                profile = readProfile(name, options.ConfigPath);
+            end
+
+            c = nominal.Client(profile.Token, ...
+                               BaseUrl=profile.BaseUrl, ...
+                               Workspace=profile.WorkspaceRid);
+        end
+
+        function c = fromToken(token, options)
+            %FROMTOKEN  Connect using a token you already hold.
+            %
+            %   c = nominal.Client.fromToken("<api-key>")
+            %   c = nominal.Client.fromToken(tok, BaseUrl="https://api.nominal.test")
+            %
+            %   The counterpart of Python's NominalClient.from_token. Prefer
+            %   fromProfile where you can: a token in a script is a token in
+            %   version control eventually.
+            %
+            %   See also NOMINAL.CLIENT/FROMPROFILE
+            arguments
+                token (1,1) string
+                options.Workspace (1,1) string = ""
+                options.BaseUrl (1,1) string = ""
+            end
+            c = nominal.Client(token, Workspace=options.Workspace, ...
+                                      BaseUrl=options.BaseUrl);
         end
     end
 

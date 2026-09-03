@@ -28,14 +28,17 @@ function t = structsToTable(s, variableNames)
 
     t = struct2table(s, 'AsArray', true);
 
-    % struct2table gives cellstr columns for char fields. string is the type a
-    % MATLAB user expects back from an API, and it compares with == .
+    % struct2table gives cellstr columns for char fields of differing lengths,
+    % but a plain char array when they happen to agree — one row, or same-width
+    % values such as RIDs. Both become string: it is the type a MATLAB user
+    % expects back from an API, it compares with ==, and indexing a char matrix
+    % with (1) would return a single character rather than the first row.
     %
     % Read through t.(i) rather than t{:, i}: brace indexing on a cell-valued
     % table variable has different meanings depending on what is inside it,
     % and every listing here is text.
     for i = 1:width(t)
-        if iscellstr(t.(i)) %#ok<ISCLSTR>
+        if iscellstr(t.(i)) || ischar(t.(i)) %#ok<ISCLSTR>
             t.(i) = string(t.(i));
         end
     end

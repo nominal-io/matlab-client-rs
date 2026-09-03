@@ -30,7 +30,6 @@ use nominal_streaming::api::clients::scout::dataexport::api::{
     AsyncDataExportService, AsyncDataExportServiceClient,
 };
 use nominal_streaming::api::objects::api::{TimeUnit, Timestamp};
-use nominal_streaming::api::objects::scout::run::api::Duration;
 use nominal_streaming::api::objects::scout::compute::api::{
     Context, Dataset, NumericSeries, SavedDataset, SelectSeries, Series, StringConstant,
 };
@@ -39,6 +38,7 @@ use nominal_streaming::api::objects::scout::dataexport::api::{
     ExportTimeDomainChannels, Matfile, MergeTimestampStrategy, RelativeTimestampFormat,
     ResolutionOption, TimeDomainChannel, TimestampFormat, UndecimatedResolution,
 };
+use nominal_streaming::api::objects::scout::run::api::Duration;
 use nominal_streaming::client::conjure::http::client::{AsyncService, ConjureRuntime};
 use nominal_streaming::client::conjure::object::SafeLong;
 use nominal_streaming::client::conjure::runtime::{Agent, Client, UserAgent};
@@ -213,7 +213,13 @@ fn build_request(
 
     let resolution = match resolution {
         0 => ResolutionOption::Undecimated(UndecimatedResolution::new()),
-        1 => ResolutionOption::Buckets(resolution_value as i32),
+        1 => ResolutionOption::Buckets(i32::try_from(resolution_value).map_err(|_| {
+            fail(
+                error_out,
+                ErrorCode::InvalidParameter,
+                format!("bucket count {resolution_value} is outside the representable range"),
+            )
+        })?),
         2 => ResolutionOption::Nanoseconds(SafeLong::try_from(resolution_value).map_err(|_| {
             fail(
                 error_out,
@@ -268,8 +274,10 @@ fn build_request(
                 // Unix nanosecond count, matching every other timestamp in this
                 // library. A string column would arrive in MATLAB as text.
                 .output_timestamp_format(TimestampFormat::Relative(RelativeTimestampFormat::new(
-                    Timestamp::new(SafeLong::try_from(0i64).expect("0 is in range"),
-                                   SafeLong::try_from(0i64).expect("0 is in range")),
+                    Timestamp::new(
+                        SafeLong::try_from(0i64).expect("0 is in range"),
+                        SafeLong::try_from(0i64).expect("0 is in range"),
+                    ),
                     TimeUnit::Nanoseconds,
                 )))
                 // Forward-fill so every channel shares one timestamp column and

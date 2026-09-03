@@ -25,10 +25,14 @@ chrono = { version = "0.4", features = ["clock"] }
 # Streamed response bodies (exports) arrive as a Stream; this is already in the
 # dependency graph via `nominal`, so it costs nothing extra to compile.
 futures = "0.3"
-# The SQL service is gRPC rather than Conjure, so it needs a tonic channel of
-# its own. Versions and TLS features match what `nominal` already uses, so this
-# unifies rather than adding a second stack.
-tonic = { version = "0.13", features = ["tls-ring", "tls-native-roots"] }
+# The SQL service's proto declares Query as server-streaming gRPC, but the
+# gateway only ever exposes it as HTTPS+JSON returning one concatenated body —
+# so it is reached over plain HTTP, not tonic. The Python client carries a
+# hand-written REST shim for the same reason. Version and TLS features match
+# what `nominal` already pulls in, so this unifies rather than adding a second
+# HTTP stack.
+reqwest = { version = "0.12", features = ["rustls-tls-native-roots"] }
+serde_json = "1"
 # SQL results come back as an Arrow IPC stream whose buffers are ZSTD-compressed
 # server-side with no opt-out, hence `ipc_compression`. This is the only genuinely
 # new dependency in the tree.

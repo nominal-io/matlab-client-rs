@@ -132,10 +132,13 @@ classdef Asset < nominal.Resource
             %   The original object still reflects the pre-update state.
             arguments
                 obj (1,1) nominal.Asset
-                options.Name string = string.empty
-                options.Description string = string.empty
-                options.Properties struct = struct.empty
-                options.Labels string = string.empty
+                % Deliberately no defaults: stageUpdate reads field presence
+                % through isfield, so "passed empty" (clear the collection) and
+                % "not passed" (leave it alone) stay distinguishable.
+                options.Name string
+                options.Description string
+                options.Properties struct
+                options.Labels string
             end
             obj.assertLive();
             u = obj.stageUpdate(options);

@@ -33,9 +33,11 @@ function build(options)
 
     here = fileparts(mfilename('fullpath'));
     root = fileparts(here);
-    target = fullfile(root, 'target', 'x86_64-pc-windows-msvc', char(options.Profile));
 
-    staticLib = fullfile(target, 'nominal_ffi.lib');
+    platform = platformSettings();
+    target = fullfile(root, 'target', platform.Triple, char(options.Profile));
+
+    staticLib = fullfile(target, platform.LibName);
     header = fullfile(root, 'crates', 'ffi', 'include');
     source = fullfile(here, 'src', 'nominalmex.c');
     outDir = fullfile(here, '+nominal', 'private');
@@ -47,40 +49,79 @@ function build(options)
         end
         error('nominal:buildFailed', ...
               ['static library not found at %s\n' ...
-               'Build it first: just build-win64%s'], staticLib, suffix);
+               'Build it first: just %s%s'], staticLib, platform.Recipe, suffix);
     end
 
     if ~isfolder(outDir)
         mkdir(outDir);
     end
 
-    % Windows system libraries the Rust standard library and its dependencies
-    % pull in. The MSVC toolchain finds these on its own search path, so they
-    % are named rather than located.
-    systemLibs = {'-lbcrypt', '-ladvapi32', '-lkernel32', '-lntdll', ...
-                  '-luserenv', '-lws2_32', '-ldbghelp'};
-
-    % The windows-targets crate ships its own import libraries inside the cargo
-    % registry rather than relying on the Windows SDK, and rustc injects the
-    % search path for them. Nothing does that for us here, so they are located
-    % by absolute path.
-    windowsLibs = findWindowsTargetLibs();
-
-    fprintf('Compiling gateway (%s profile)...\n', options.Profile);
+    fprintf('Compiling gateway (%s, %s profile)...\n', platform.Triple, options.Profile);
     mex('-R2018a', ...
         ['-I' header], ...
         source, ...
         staticLib, ...
-        windowsLibs{:}, ...
-        systemLibs{:}, ...
+        platform.ExtraLibs{:}, ...
         '-outdir', outDir, ...
         '-output', 'nominalmex');
 
     fprintf('Built %s\n', fullfile(outDir, ['nominalmex.' mexext]));
     fprintf('\nAdd this folder to the path, then:\n');
     fprintf('    addpath(''%s'')\n', here);
-    fprintf('    c = nominal.Client(getenv("NOMINAL_TOKEN"));\n');
+    fprintf('    c = nominal.Client.fromProfile();\n');
     fprintf('    disp(c.whoAmI())\n');
+end
+
+function platform = platformSettings()
+%PLATFORMSETTINGS  Cargo target, library name, and linker flags for this host.
+%
+%   A Rust staticlib does not record the system libraries it needs the way a
+%   shared library does, so the linker has to be told — and the list is
+%   per-platform. Get the authoritative one for a host by running, on that host:
+%
+%       just native-libs
+%
+%   Only the Windows list has been verified against a real link. The macOS and
+%   Linux entries are the usual set for this dependency tree and are a starting
+%   point, not a tested configuration; if the link reports an unresolved symbol,
+%   run the command above and reconcile.
+
+    if ispc
+        platform.Triple = 'x86_64-pc-windows-msvc';
+        platform.LibName = 'nominal_ffi.lib';
+        platform.Recipe = 'build-win64';
+
+        % Named rather than located: the MSVC toolchain has these on its own
+        % search path. The windows-targets import libraries do not work that
+        % way and are found by absolute path — see findWindowsTargetLibs.
+        systemLibs = {'-lbcrypt', '-ladvapi32', '-lkernel32', '-lntdll', ...
+                      '-luserenv', '-lws2_32', '-ldbghelp'};
+        platform.ExtraLibs = [findWindowsTargetLibs(), systemLibs];
+
+    elseif ismac
+        % Apple silicon and Intel differ only in the triple.
+        if strcmp(computer('arch'), 'maca64')
+            platform.Triple = 'aarch64-apple-darwin';
+            platform.Recipe = 'build-macos-arm64';
+        else
+            platform.Triple = 'x86_64-apple-darwin';
+            platform.Recipe = 'build-macos-x64';
+        end
+        platform.LibName = 'libnominal_ffi.a';
+
+        % Frameworks cannot be passed as -l; they go through the linker flags.
+        % Security and CoreFoundation are what rustls' native-roots support
+        % reaches for when it reads the system trust store.
+        platform.ExtraLibs = { ...
+            'LDFLAGS=$LDFLAGS -framework Security -framework CoreFoundation', ...
+            '-lc++'};
+
+    else
+        platform.Triple = 'x86_64-unknown-linux-gnu';
+        platform.LibName = 'libnominal_ffi.a';
+        platform.Recipe = 'build-linux-x64';
+        platform.ExtraLibs = {'-ldl', '-lpthread', '-lm', '-lrt'};
+    end
 end
 
 function libs = findWindowsTargetLibs()

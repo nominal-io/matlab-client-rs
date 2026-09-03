@@ -5,7 +5,7 @@ function smoketest()
 %
 %       addpath(pwd); tests.smoketest
 %
-%   or via `just mex-test-win64`.
+%   or via `just mex-test`.
 %
 %   The client connects lazily, so everything short of an actual API call runs
 %   offline. What this checks is the MATLAB layer itself — that the classes

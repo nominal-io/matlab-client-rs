@@ -4,13 +4,13 @@ function datasetdemo(assetName)
 %   datasetdemo                  % throwaway asset and dataset
 %   datasetdemo("engine-3")      % under an existing asset
 %
-%   Needs NOMINAL_TOKEN. Creates a dataset under the asset, attaches units to
+%   Needs credentials. Creates a dataset under the asset, attaches units to
 %   channels before any data exists, then lists what the dataset holds.
 %
 %   Covers: get-or-create under an asset, get by RID, update, channel metadata
 %   read and write, and listing every channel.
 %
-%   See also NOMINAL.DATASET, NOMINAL.CHANNELMETADATA, ASSETDEMO, STREAMDEMO
+%   See also NOMINAL.DATASET, NOMINAL.CHANNELMETADATA, ASSETDEMO, CONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
@@ -29,14 +29,18 @@ function datasetdemo(assetName)
     fprintf('Dataset "%s"\n  rid %s\n', dataset.Name, dataset.Rid);
 
     % --- fetch the same dataset by RID --------------------------------
-    again = client.datasetByRid(dataset.Rid);
-    fprintf('  refetched by rid, name matches: %d\n', again.Name == dataset.Name);
+    sameDatasetByRid = client.datasetByRid(dataset.Rid);
+    fprintf('  refetched by rid, name matches: %d\n', ...
+            sameDatasetByRid.Name == dataset.Name);
 
     % --- update -------------------------------------------------------
-    updated = dataset.update( ...
+    %
+    % update returns a new object rather than mutating in place, so everything
+    % after this point works against updatedDataset.
+    updatedDataset = dataset.update( ...
         Description = "Created by the Nominal MATLAB demo", ...
         Labels      = "matlab-demo");
-    fprintf('  description: %s\n', updated.Description);
+    fprintf('  description: %s\n', updatedDataset.Description);
 
     % --- channel metadata, before any data exists ---------------------
     %
@@ -47,56 +51,57 @@ function datasetdemo(assetName)
     % The data type is required and always sent — the API has no way to leave
     % it alone, so naming the wrong one re-declares the channel.
     fprintf('Attaching units...\n');
-    units = struct( ...
+
+    % A struct keyed by channel name, so the loop below stays a single pass.
+    % Units are UCUM symbols: "Cel" rather than "C", which UCUM reserves for
+    % coulomb, and "1/min" rather than "rpm", which UCUM does not define.
+    unitByChannelName = struct( ...
         rpm = "1/min", ...
         egt = "Cel", ...
         psi = "kPa");
 
-    names = string(fieldnames(units))';
-    for name = names
-        m = updated.setChannelMetadata(name, "double", ...
-                                       Unit = units.(name), ...
-                                       Description = "demo channel " + name);
-        fprintf('  %-6s %-6s %s\n', m.Name, m.Unit, m.Description);
-        delete(m);
+    numericChannelNames = string(fieldnames(unitByChannelName))';
+    for channelName = numericChannelNames
+        channelMetadata = updatedDataset.setChannelMetadata( ...
+            channelName, "double", ...
+            Unit = unitByChannelName.(channelName), ...
+            Description = "demo channel " + channelName);
+
+        fprintf('  %-6s %-6s %s\n', channelMetadata.Name, ...
+                channelMetadata.Unit, channelMetadata.Description);
+        delete(channelMetadata);
     end
 
-    % A string channel, to show a non-numeric data type.
-    m = updated.setChannelMetadata("mode", "string", ...
-                                   Description = "vehicle mode");
-    fprintf('  %-6s %-6s %s\n', m.Name, "(none)", m.Description);
-    delete(m);
+    % A string channel, to show a non-numeric data type. Units make no sense
+    % here, so none is set.
+    modeMetadata = updatedDataset.setChannelMetadata("mode", "string", ...
+                                                     Description = "vehicle mode");
+    fprintf('  %-6s %-6s %s\n', modeMetadata.Name, "(none)", ...
+            modeMetadata.Description);
+    delete(modeMetadata);
 
     % --- read one back ------------------------------------------------
     %
     % Worth doing rather than trusting what setChannelMetadata returned: that
     % object is built from what you sent, not from what the server holds, so
     % it omits fields you did not set.
-    fetched = updated.channelMetadata("rpm");
-    fprintf('Read back "rpm": unit=%s type=%s\n', fetched.Unit, fetched.DataType);
-    delete(fetched);
+    refetchedMetadata = updatedDataset.channelMetadata("rpm");
+    fprintf('Read back "rpm": unit=%s type=%s\n', ...
+            refetchedMetadata.Unit, refetchedMetadata.DataType);
+    delete(refetchedMetadata);
 
     % --- list every channel -------------------------------------------
-    channels = updated.channels();
-    fprintf('%d channel(s) in the dataset:\n', height(channels));
-    if ~isempty(channels)
-        disp(channels);
+    channelTable = updatedDataset.channels();
+    fprintf('%d channel(s) in the dataset:\n', height(channelTable));
+    if ~isempty(channelTable)
+        disp(channelTable);
     end
 
     % --- teardown -----------------------------------------------------
-    delete(updated);
-    delete(again);
+    delete(updatedDataset);
+    delete(sameDatasetByRid);
     delete(dataset);
     delete(asset);
     delete(client);
     fprintf('Done.\n');
-end
-
-function client = connect()
-    token = string(getenv("NOMINAL_TOKEN"));
-    if token == ""
-        error('nominal:demo', 'set NOMINAL_TOKEN in the environment');
-    end
-    client = nominal.Client(token);
-    fprintf('Connected as %s\n', client.whoAmI());
 end

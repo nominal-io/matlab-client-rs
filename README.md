@@ -9,7 +9,7 @@ Python. One binary, no runtime dependencies, no interpreter in the middle.
 ```matlab
 addpath('matlab')
 
-c  = nominal.Client(getenv("NOMINAL_TOKEN"));
+c  = nominal.Client.fromProfile();
 a  = c.getOrCreateAsset("engine-3");
 ds = a.getOrCreateDataset("telemetry", "tlm");
 s  = ds.stream();
@@ -23,51 +23,88 @@ s.push(chans, t, v);
 delete(s);   % flush now, rather than whenever s is collected
 ```
 
-## Building
+## Building and installing
 
 From the repository root:
 
 ```
-just mex-win64
+just                       # build the gateway
+just mex-test              # offline smoke test
 ```
 
-That builds the Rust static library first, then compiles `src/nominalmex.c`
-into `+nominal/private/`, linking the library in. Requires a configured C
-compiler (`mex -setup C`).
-
-The result is a single binary: `+nominal/private/nominalmex.mexw64` carries the
-Rust code inside it, so there is no accompanying DLL for Windows to locate and
-nothing to set up before first use.
-
-If MATLAB is not on PATH, point the recipe at it — recipes run through bash, so
-use forward slashes:
-
-```
-just matlab='C:/Program Files/MATLAB/R2026a/bin/matlab.exe' mex-win64
-```
-
-Then check it works:
-
-```
-just mex-test-win64
-```
-
-Or from this folder inside MATLAB:
+Then put `matlab/` on the MATLAB path:
 
 ```matlab
-build                     % or build(Profile="fast")
-addpath(pwd); addpath(fullfile(pwd,'tests')); smoketest
+addpath('C:\sw\nominal-matlab\matlab')
 ```
+
+Add the **parent** folder, not `matlab\+nominal` — MATLAB finds a package from
+its parent. The result is a single binary, `+nominal/private/nominalmex.mexw64`,
+with the Rust code linked inside it: no DLL to locate, nothing to register.
+
+See **[BUILDING.md](BUILDING.md)** for prerequisites, the other platforms,
+making the path permanent via `startup.m`, and packaging an installable
+`.mltbx` toolbox for colleagues.
+
+## Authenticating
+
+Credentials come from a profile on disk — the same
+`~/.config/nominal/config.yml` the `nom` CLI and the
+[Python client](https://docs.nominal.io/core/sdk/python-client/authentication)
+use. Set it up once, in a terminal:
+
+```shell
+nom config profile add default -t <api-token>
+
+# or, if `nom` is not on the path:
+python -m nominal.cli config profile add default
+```
+
+Then the MATLAB call is the counterpart of the Python one:
+
+```matlab
+c = nominal.Client.fromProfile();          % Python: NominalClient.from_profile("default")
+c = nominal.Client.fromProfile("staging"); % any named profile
+```
+
+A profile carries the base URL, the token, and optionally a workspace RID, so
+nothing else needs passing — and a self-hosted stack or a staging environment
+is a profile name rather than a code change. If you already use the Python
+client or the CLI on this machine, MATLAB is already set up.
+
+Failing that, a token directly:
+
+```matlab
+c = nominal.Client.fromToken("<api-token>");   % Python: NominalClient.from_token(...)
+```
+
+Prefer the profile. A token in a script is a token in version control
+eventually.
+
+<details>
+<summary>Migrating from the old config file</summary>
+
+If this machine predates profiles it may still have `~/.nominal.yml` with an
+`environments:` block. `fromProfile` detects that and tells you to run:
+
+```shell
+nom config migrate
+```
+
+</details>
+
 
 ## Objects and methods
 
 Everything is reached from a `nominal.Client`. Objects hand you other objects,
 so you rarely construct anything directly.
 
-### Client — `c = nominal.Client(token)`
+### Client — `c = nominal.Client.fromProfile()`
 
 | Action | MATLAB |
 |---|---|
+| Connect from a stored profile | `nominal.Client.fromProfile()` |
+| Connect from a token | `nominal.Client.fromToken(token)` |
 | Who am I (also a credential check) | `c.whoAmI()` |
 | List all assets | `c.assets()` |
 | Search assets by name | `c.assets("engine")` |
@@ -163,7 +200,7 @@ intermediate file, no ingest job.
 
 ```matlab
 load("flight12.mat");                      % gives t (datetime) and V (N-by-3)
-c  = nominal.Client(getenv("NOMINAL_TOKEN"));
+c  = nominal.Client.fromProfile();
 a  = c.getOrCreateAsset("airframe-7");
 ds = a.getOrCreateDataset("Flight 12", "flight12");
 ds.write(["rpm" "egt" "psi"], t, V);
@@ -173,10 +210,18 @@ ds.write(["rpm" "egt" "psi"], t, V);
 the parsing.
 
 ```matlab
-job = c.ingest("flight12.csv", TimestampColumn="time", NewDataset="Flight 12");
-job.wait();                                % blocks until ingest finishes
-ds = c.datasetByRid(job.DatasetRid);
+a  = c.getOrCreateAsset("airframe-7");
+ds = a.getOrCreateDataset("Flight 12", "flight12");
+
+job = c.ingest("flight12.csv", TimestampColumn="time", Dataset=ds);
+job.wait();                                % raises if the ingest fails
 ```
+
+Create the dataset under the asset first and pass `Dataset=`. `NewDataset=`
+also works, but the dataset it creates is attached to no asset — and this
+client cannot attach one afterwards, because the C ABI exposes no
+add-datasource call. `job.wait()` **raises** when the ingest itself fails, so
+wrap it if a failure is an outcome you want to report rather than throw.
 
 Timestamps default to ISO 8601. For a numeric column say so:
 `c.ingest(path, TimestampColumn="t", Kind="epoch", Unit="milliseconds", …)`.
@@ -200,9 +245,14 @@ arbitrary text, so record the provenance alongside the channels.
 ```matlab
 ds.update(Properties=struct(script="reduce_flight.m", ...
                             version="2.4.1", ...
-                            operator=getenv("USERNAME")), ...
+                            matlab=string(version("-release")), ...
+                            operator=c.whoAmI()), ...
           Labels=["flight-test" "reduced"]);
 ```
+
+`c.whoAmI()` is the authenticated Nominal user, which is more useful here than
+the OS login — it identifies who the data belongs to in the system you are
+reading it back from.
 
 **I want the channels to carry units.** This is an upsert, so it works before
 any data exists — declare units ahead of a stream and the plots come out right
@@ -288,9 +338,22 @@ instead.
 **I have a SQL query.** Results come back as a table.
 
 ```matlab
-t = c.query("SELECT name, start_time FROM runs ORDER BY start_time DESC LIMIT 20");
-t.start_time = nominal.fromNanos(t.start_time);   % timestamps arrive as int64 ns
+t = c.query("SELECT ts, channel, value FROM points_double " + ...
+            "WHERE dataset_rid = '" + ds.Rid + "' ORDER BY ts LIMIT 1000");
+t.ts = nominal.fromNanos(t.ts);          % timestamps arrive as int64 ns
 ```
+
+The SQL surface is the warehouse's own tables, not the object model, so the
+column names are not the ones the MATLAB classes use.
+
+**Telemetry tables** — `points_double`, `points_int`, `points_string`,
+`points_struct`, `logs`, `channels` — *must* filter on `dataset_rid`, or the
+query is rejected before it runs. `points_double` carries `ts`, `channel`,
+`value` and `dataset_rid`.
+
+**Metadata tables** — `assets`, `runs`, `run_assets`, `datasets`, `events` —
+have no such requirement, which makes `datasets` a way to find a RID when you
+have none. They are capped at 10,000 rows.
 
 Anything over 1 GiB needs `c.queryExportUrl(sql)`, which returns a CSV download
 link with no size cap.
@@ -402,8 +465,19 @@ are R2019b, but [toNanos.m](matlab/+nominal/toNanos.m) and
 which is newer — going below R2021a needs that checked against a real install
 rather than assumed.
 
-Windows x86-64 only so far. The gateway is portable C, but `build.m` hard-codes
-the MSVC target path and the `.mexw64` extension.
+**Windows x86-64 is the only platform verified end to end.** `build.m` picks
+its cargo target and linker flags from the host, and there are `just` recipes
+for Apple silicon, Intel macOS and Linux x86-64 — but only the Windows link has
+actually been run. The system-library lists for the others are the usual set
+for this dependency tree, not a tested configuration. On a new host:
+
+```
+just native-libs        # authoritative list for that platform
+just mex-macos-arm64    # or mex-linux-x64, mex-macos-x64
+```
+
+and reconcile `platformSettings()` in [build.m](matlab/build.m) if the link
+reports an unresolved symbol.
 
 ## Known gaps
 
@@ -421,7 +495,7 @@ the MSVC target path and the `.mexw64` extension.
 
 ## Status
 
-Built on R2026a with MSVC. `just mex-test-win64` runs the offline smoke test:
+Built on R2026a with MSVC. `just mex-test` runs the offline smoke test:
 class loading, private-folder MEX resolution, `arguments` validation,
 whitespace trimming, empty-means-absent, exception identifiers, and destructor
 release.

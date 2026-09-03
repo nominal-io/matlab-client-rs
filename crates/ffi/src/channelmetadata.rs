@@ -378,7 +378,10 @@ pub extern "C" fn nominal_channelmetadata_list_at(
             fail(
                 error_out,
                 ErrorCode::InvalidParameter,
-                format!("channel index {index} out of range ({} channels)", list.len()),
+                format!(
+                    "channel index {index} out of range ({} channels)",
+                    list.len()
+                ),
             )
         })?;
 

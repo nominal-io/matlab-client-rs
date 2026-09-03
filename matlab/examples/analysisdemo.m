@@ -1,11 +1,16 @@
 function analysisdemo(datasetRid)
 %ANALYSISDEMO  Reading data back out: discovery, fetch, export, and SQL.
 %
-%   analysisdemo("ri.catalog....")   % explicit dataset
-%   analysisdemo                     % reads NOMINAL_DATASET_RID
+%   analysisdemo("ri.catalog....")
 %
-%   Needs NOMINAL_TOKEN. Read-only apart from the file it writes into the
-%   current folder, so it is safe to point at real data.
+%   Needs credentials. Read-only apart from the file it writes into the current
+%   folder, so it is safe to point at real data.
+%
+%   To find a dataset RID:
+%
+%       c   = connect();
+%       rid = c.datasets("telemetry").Rid(1);
+%       analysisdemo(rid)
 %
 %   The other demos put data in. This one takes it back out, which is the half
 %   most MATLAB users care about:
@@ -21,22 +26,14 @@ function analysisdemo(datasetRid)
 %
 %     SQL         — a query against the warehouse, returned as a table.
 %
-%   See also NOMINAL.DATASET/FETCH, NOMINAL.DATASET/EXPORT, NOMINAL.CLIENT/QUERY
+%   See also NOMINAL.DATASET/FETCH, NOMINAL.CLIENT/QUERY, CONNECT
 
     arguments
-        datasetRid (1,1) string = string(getenv("NOMINAL_DATASET_RID"))
+        datasetRid (1,1) string
     end
 
-    token = string(getenv("NOMINAL_TOKEN"));
-    if token == ""
-        error('nominal:demo', 'set NOMINAL_TOKEN in the environment');
-    end
-    if datasetRid == ""
-        error('nominal:demo', 'pass a dataset RID, or set NOMINAL_DATASET_RID');
-    end
-
-    client = nominal.Client(token);
-    fprintf('Connected as %s\n\n', client.whoAmI());
+    client = connect();
+    fprintf('\n');
 
     % 1 ------------------------------------------------------- discovery
     %
@@ -48,18 +45,19 @@ function analysisdemo(datasetRid)
 
     % Searching is a case-insensitive substring match on the name, not a
     % pattern — this is how you find a RID when all you have is a name.
-    matches = client.assets("demo");
-    fprintf('%d asset(s) matching "demo"\n', height(matches));
+    % (Not named "matches": that is a MATLAB builtin for pattern matching.)
+    demoAssets = client.assets("demo");
+    fprintf('%d asset(s) matching "demo"\n', height(demoAssets));
 
     dataset = client.datasetByRid(datasetRid);
     fprintf('Dataset: %s\n\n', dataset.Name);
 
-    channels = dataset.channels();
-    if isempty(channels)
+    channelTable = dataset.channels();
+    if isempty(channelTable)
         fprintf('No channels in this dataset yet — run streamdemo first.\n');
         return
     end
-    disp(head(channels, 10));
+    disp(head(channelTable, 10));
 
     % 2 ----------------------------------------------------------- fetch
     %
@@ -69,36 +67,49 @@ function analysisdemo(datasetRid)
     stopTime  = datetime("now", TimeZone="UTC") + seconds(1);
     startTime = stopTime - days(1);
 
-    name = channels.Name(1);
-    fprintf('\n--- Fetch: %s ---\n', name);
+    firstChannelName = channelTable.Name(1);
+    fprintf('\n--- Fetch: %s ---\n', firstChannelName);
 
-    tt = dataset.fetch(name, startTime, stopTime);
-    fprintf('%d samples\n', height(tt));
+    % The timetable has exactly one variable, named after the channel. It is
+    % addressed positionally here — samples.(1) — because the channel name is
+    % only known at run time.
+    samples = dataset.fetch(firstChannelName, startTime, stopTime);
+    fprintf('%d samples\n', height(samples));
 
-    if height(tt) > 0
-        fprintf('  first %s = %g\n', string(tt.Time(1)), tt.(1)(1));
-        fprintf('  last  %s = %g\n', string(tt.Time(end)), tt.(1)(end));
+    if height(samples) > 0
+        sampleValues = samples.(1);
+        fprintf('  first %s = %g\n', string(samples.Time(1)), sampleValues(1));
+        fprintf('  last  %s = %g\n', string(samples.Time(end)), sampleValues(end));
 
         % A timetable is the point of returning one: this all works directly.
-        fprintf('  mean %g, std %g\n', mean(tt.(1)), std(tt.(1)));
+        fprintf('  mean %g, std %g\n', mean(sampleValues), std(sampleValues));
 
         % Decimated. Ask the server for roughly this many points rather than
         % moving every sample — for a plot the difference is invisible.
-        thinned = dataset.fetch(name, startTime, stopTime, Buckets=200);
-        fprintf('  decimated to %d points\n', height(thinned));
+        decimatedSamples = dataset.fetch(firstChannelName, startTime, stopTime, ...
+                                         Buckets=200);
+        fprintf('  decimated to %d points\n', height(decimatedSamples));
     end
 
     % 3 ------------------------------------------- two channels together
     %
     % synchronize is why fetch returns timetables rather than raw arrays:
-    % aligning two channels on independent clocks is one call.
-    if height(channels) >= 2
+    % aligning two channels on independent clocks is one call. It unions the
+    % row times and fills the gaps, so the result has one row per distinct
+    % instant across both inputs.
+    if height(channelTable) >= 2
         fprintf('\n--- Synchronize ---\n');
-        a = dataset.fetch(channels.Name(1), startTime, stopTime, Buckets=100);
-        b = dataset.fetch(channels.Name(2), startTime, stopTime, Buckets=100);
-        both = synchronize(a, b);
+        secondChannelName = channelTable.Name(2);
+
+        firstSamples = dataset.fetch(firstChannelName, startTime, stopTime, ...
+                                     Buckets=100);
+        secondSamples = dataset.fetch(secondChannelName, startTime, stopTime, ...
+                                      Buckets=100);
+
+        alignedSamples = synchronize(firstSamples, secondSamples);
         fprintf('%s + %s -> %d rows, %d variables\n', ...
-                channels.Name(1), channels.Name(2), height(both), width(both));
+                firstChannelName, secondChannelName, ...
+                height(alignedSamples), width(alignedSamples));
     end
 
     % 4 ---------------------------------------------------------- export
@@ -106,19 +117,25 @@ function analysisdemo(datasetRid)
     % Same data as fetch, but one request and straight to disk. This is the
     % right tool for a wide window, and matfile is the default format.
     fprintf('\n--- Export ---\n');
-    outFile = fullfile(pwd, "analysisdemo.mat");
-    dataset.export(outFile, channels.Name', startTime, stopTime);
-    info = dir(outFile);
-    fprintf('Wrote %s (%.1f KB)\n', outFile, info.bytes / 1024);
+    exportFilePath = fullfile(pwd, "analysisdemo.mat");
+
+    % Transposed: channelTable.Name is a column out of the table, and export
+    % takes a 1-by-C row of names.
+    allChannelNames = channelTable.Name';
+    dataset.export(exportFilePath, allChannelNames, startTime, stopTime);
+
+    exportFileInfo = dir(exportFilePath);
+    fprintf('Wrote %s (%.1f KB)\n', exportFilePath, exportFileInfo.bytes / 1024);
 
     % A link instead of the bytes, for handing to something that is not MATLAB.
     try
-        url = dataset.exportUrl(channels.Name(1), startTime, stopTime, ...
-                                Format="csv");
-        fprintf('Presigned CSV URL: %s...\n', extractBefore(url, min(60, strlength(url))));
-    catch e
+        downloadUrl = dataset.exportUrl(firstChannelName, startTime, stopTime, ...
+                                        Format="csv");
+        fprintf('Presigned CSV URL: %s...\n', ...
+                extractBefore(downloadUrl, min(60, strlength(downloadUrl))));
+    catch exportError
         % Some deployments have no export bucket configured.
-        fprintf('exportUrl unavailable: %s\n', e.message);
+        fprintf('exportUrl unavailable: %s\n', exportError.message);
     end
 
     % 5 ------------------------------------------------------------- SQL
@@ -126,32 +143,40 @@ function analysisdemo(datasetRid)
     % Timestamps arrive as int64 nanoseconds whatever the warehouse sent, so
     % convert the ones you want to read.
     fprintf('\n--- SQL ---\n');
+
+    % Telemetry lives in points_double, keyed by dataset_rid and channel — the
+    % SQL surface is the warehouse's tables, not the object model, so there is
+    % no "datasets" or "runs" table to select from here.
     try
-        runs = client.query("SELECT name, start_time FROM runs " + ...
-                            "ORDER BY start_time DESC LIMIT 5");
-        if height(runs) > 0 && any(strcmp(runs.Properties.VariableNames, 'start_time'))
-            runs.start_time = nominal.fromNanos(runs.start_time);
+        points = client.query( ...
+            "SELECT ts, channel, value FROM points_double " + ...
+            "WHERE dataset_rid = '" + datasetRid + "' " + ...
+            "ORDER BY ts LIMIT 5");
+
+        % ts arrives as int64 nanoseconds. Converting in place turns the column
+        % into datetimes without disturbing the rest of the table.
+        if height(points) > 0
+            points.ts = nominal.fromNanos(points.ts);
         end
-        disp(runs);
-    catch e
+        disp(points);
+    catch queryError
         % The SQL service always needs a workspace, even where the rest of the
         % API does not — an unscoped client has to name one.
-        fprintf('query failed: %s\n  %s\n', e.identifier, e.message);
+        fprintf('query failed: %s\n  %s\n', queryError.identifier, queryError.message);
     end
 
     % For a result too large to hold in memory, ask for a CSV download link
-    % instead of the rows.
-    %
-    % Only queries reading telemetry tables can be exported this way — one
-    % touching assets, runs, or datasets cannot — so the query below is the
-    % same `runs` one and is expected to be refused. Substitute a telemetry
-    % table from your own deployment to see it succeed; the call shape is what
-    % this demonstrates.
+    % instead of the rows. Telemetry tables only, and some deployments have no
+    % export bucket configured.
     try
-        link = client.queryExportUrl("SELECT name FROM runs LIMIT 1000");
-        fprintf('CSV export URL: %s...\n', extractBefore(link, min(60, strlength(link))));
-    catch e
-        fprintf('queryExportUrl declined (expected for `runs`): %s\n', e.identifier);
+        csvDownloadUrl = client.queryExportUrl( ...
+            "SELECT ts, channel, value FROM points_double " + ...
+            "WHERE dataset_rid = '" + datasetRid + "' LIMIT 1000");
+        fprintf('CSV export URL: %s...\n', ...
+                extractBefore(csvDownloadUrl, min(60, strlength(csvDownloadUrl))));
+    catch exportUrlError
+        fprintf('queryExportUrl failed: %s\n  %s\n', ...
+                exportUrlError.identifier, exportUrlError.message);
     end
 
     % 6 -------------------------------------------------------- teardown

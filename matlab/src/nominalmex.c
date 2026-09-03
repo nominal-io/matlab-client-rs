@@ -148,6 +148,23 @@ static void require_args(int nrhs, int wanted, const char *command)
     }
 }
 
+/*
+ * MATLAB sizes plhs to the caller's request, guaranteeing max(nlhs, 1) slots,
+ * so writing plhs[1] when the caller asked for one output is out of bounds.
+ * Commands with two outputs refuse the call up front: an error names the
+ * problem, where skipping the write would silently drop an output and writing
+ * anyway would stomp memory. Every +nominal caller requests both, so this only
+ * fires on a direct nominalmex call.
+ */
+static void require_outputs(int nlhs, int wanted, const char *command)
+{
+    if (nlhs < wanted) {
+        mexErrMsgIdAndTxt("nominal:invalidParameter",
+                          "%s returns %d outputs; request all of them",
+                          command, wanted);
+    }
+}
+
 static int32_t arg_i32(const mxArray *a, const char *what)
 {
     if (!mxIsNumeric(a) || mxIsComplex(a) || mxGetNumberOfElements(a) != 1) {
@@ -215,6 +232,104 @@ static const double *arg_double_vector(const mxArray *a, size_t *count, const ch
 /* Result conversion                                                   */
 /* ------------------------------------------------------------------ */
 
+/*
+ * Decode UTF-8 bytes into UTF-16 code units, returning how many were written.
+ *
+ * `out` must hold at least `length` units, which is always enough: 1-3 byte
+ * sequences produce one unit and 4-byte sequences two.
+ *
+ * The source is a Rust String, so the bytes are valid UTF-8 in practice; the
+ * malformed-input branches are defence, not an expected path. A rejected byte
+ * decodes as U+FFFD and the scan resumes at the next byte, so one bad byte
+ * cannot shift the interpretation of those that follow.
+ */
+static size_t utf8_to_utf16(const unsigned char *bytes, size_t length, mxChar *out)
+{
+    size_t i = 0, n = 0;
+
+    while (i < length) {
+        unsigned char lead = bytes[i];
+        uint32_t cp;
+        size_t need, k;
+        int valid = 1;
+
+        if (lead < 0x80)              { cp = lead;        need = 0; }
+        else if ((lead & 0xE0) == 0xC0) { cp = lead & 0x1F; need = 1; }
+        else if ((lead & 0xF0) == 0xE0) { cp = lead & 0x0F; need = 2; }
+        else if ((lead & 0xF8) == 0xF0) { cp = lead & 0x07; need = 3; }
+        else { out[n++] = 0xFFFD; i++; continue; }
+
+        if (i + need >= length) {  /* truncated sequence at end of input */
+            out[n++] = 0xFFFD;
+            i++;
+            continue;
+        }
+        for (k = 1; k <= need; ++k) {
+            if ((bytes[i + k] & 0xC0) != 0x80) {
+                valid = 0;
+                break;
+            }
+            cp = (cp << 6) | (bytes[i + k] & 0x3F);
+        }
+        if (!valid) {
+            out[n++] = 0xFFFD;
+            i++;
+            continue;
+        }
+        /* Surrogate code points and anything past U+10FFFF cannot be emitted
+         * as UTF-16. Overlong encodings decode to a small cp and pass through
+         * harmlessly; a Rust String never produces one. */
+        if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+            cp = 0xFFFD;
+        }
+
+        if (cp >= 0x10000) {
+            cp -= 0x10000;
+            out[n++] = (mxChar)(0xD800 | (cp >> 10));
+            out[n++] = (mxChar)(0xDC00 | (cp & 0x3FF));
+        } else {
+            out[n++] = (mxChar)cp;
+        }
+        i += 1 + need;
+    }
+    return n;
+}
+
+/*
+ * Build a MATLAB char array from UTF-8 bytes.
+ *
+ * Not mxCreateString: that interprets bytes in MATLAB's locale encoding, which
+ * on Windows has historically been the ANSI codepage. The library's strings
+ * are always UTF-8, so an asset named with non-ASCII characters would come
+ * back as mojibake — and feeding that name back in would then miss on the
+ * server. Decoding explicitly mirrors mxArrayToUTF8String on the way in, and
+ * makes text handling independent of MATLAB version and codepage.
+ */
+static mxArray *utf8_to_mx(const char *bytes, size_t length)
+{
+    mwSize dims[2];
+    mxArray *array;
+    mxChar *units = NULL;
+    size_t count = 0;
+
+    if (length > 0) {
+        units = (mxChar *)mxMalloc(length * sizeof(mxChar));
+        count = utf8_to_utf16((const unsigned char *)bytes, length, units);
+    }
+
+    /* 1-by-n, matching what mxCreateString produced before. */
+    dims[0] = 1;
+    dims[1] = (mwSize)count;
+    array = mxCreateCharArray(2, dims);
+    if (count > 0) {
+        memcpy(mxGetData(array), units, count * sizeof(mxChar));
+    }
+    if (units != NULL) {
+        mxFree(units);
+    }
+    return array;
+}
+
 /* Read the scratch string handle into a MATLAB char array. */
 static mxArray *scratch_to_mx(void)
 {
@@ -223,8 +338,7 @@ static mxArray *scratch_to_mx(void)
     uint32_t copied = nominal_copy_string_from_reference(g_scratch, buffer, length + 1);
     mxArray *out;
 
-    buffer[copied] = '\0';
-    out = mxCreateString(buffer);
+    out = utf8_to_mx(buffer, (size_t)copied);
     mxFree(buffer);
     return out;
 }
@@ -482,12 +596,13 @@ static void cmd_run_add_dataset(mxArray *plhs[], int nrhs, const mxArray *prhs[]
 }
 
 /* Returns [nanos, hasEnd]; an open run reports hasEnd false and nanos 0. */
-static void cmd_run_end_time(mxArray *plhs[], int nrhs, const mxArray *prhs[])
+static void cmd_run_end_time(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
     ErrorHandle err = 0;
     int64_t nanos = 0;
     bool has_end = false;
 
+    require_outputs(nlhs, 2, "run_end_time");
     require_args(nrhs, 1, "run_end_time");
     throw_if_failed(nominal_run_end_time(arg_i32(prhs[1], "run"),
                                          &nanos, &has_end, &err), err);
@@ -962,7 +1077,7 @@ static void cmd_dataset_write(int nrhs, const mxArray *prhs[])
     const double *values;
     int32_t status;
 
-    require_args(nrhs, 4, "dataset_write");
+    require_args(nrhs, 5, "dataset_write");
 
     channels = borrow_string_array(prhs[3], "channels");
     cols = channels.count;
@@ -1058,15 +1173,15 @@ static void cmd_dataset_list(mxArray *plhs[], int nrhs, const mxArray *prhs[],
     mxArray *out;
     char *text = NULL;
 
-    client = arg_i32(prhs[1], "client");
-
     if (strcmp(command, "dataset_search") == 0) {
         require_args(nrhs, 2, command);
+        client = arg_i32(prhs[1], "client");
         text = arg_string(prhs[2], "text");
         status = nominal_dataset_search(client, text, &list, &count, &err);
         mxFree(text);
     } else {
         require_args(nrhs, 1, command);
+        client = arg_i32(prhs[1], "client");
         status = nominal_dataset_list(client, &list, &count, &err);
     }
     throw_if_failed(status, err);
@@ -1278,7 +1393,7 @@ static void cmd_event_assets(mxArray *plhs[], int nrhs, const mxArray *prhs[])
 /* reaches MATLAB — one less thing for a caller to forget to free.      */
 /* ------------------------------------------------------------------ */
 
-static void cmd_dataset_fetch(mxArray *plhs[], int nrhs, const mxArray *prhs[],
+static void cmd_dataset_fetch(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[],
                               const char *command)
 {
     ErrorHandle err = 0;
@@ -1289,6 +1404,7 @@ static void cmd_dataset_fetch(mxArray *plhs[], int nrhs, const mxArray *prhs[],
     mxArray *times = NULL, *values = NULL;
     int decimated = (strcmp(command, "dataset_fetch_decimated") == 0);
 
+    require_outputs(nlhs, 2, command);
     require_args(nrhs, decimated ? 6 : 5, command);
     channel = arg_string(prhs[3], "channel");
 
@@ -1386,7 +1502,7 @@ static void cmd_dataset_export(mxArray *plhs[], int nrhs, const mxArray *prhs[],
 /* Ingest                                                              */
 /* ------------------------------------------------------------------ */
 
-static void cmd_ingest_file(mxArray *plhs[], int nrhs, const mxArray *prhs[],
+static void cmd_ingest_file(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[],
                             const char *command)
 {
     ErrorHandle err = 0;
@@ -1395,6 +1511,7 @@ static void cmd_ingest_file(mxArray *plhs[], int nrhs, const mxArray *prhs[],
     int32_t status, kind_code, unit_code;
     int parquet = (strcmp(command, "ingest_parquet") == 0);
 
+    require_outputs(nlhs, 2, command);
     require_args(nrhs, 7, command);
 
     path = arg_string(prhs[2], "path");
@@ -1445,7 +1562,7 @@ static void cmd_ingest_status(mxArray *plhs[], int nrhs, const mxArray *prhs[],
 /* created and released here, so no cursor escapes into MATLAB.          */
 /* ------------------------------------------------------------------ */
 
-static void cmd_sql_query(mxArray *plhs[], int nrhs, const mxArray *prhs[])
+static void cmd_sql_query(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
     ErrorHandle err = 0;
     QueryResultHandle result = 0;
@@ -1456,6 +1573,7 @@ static void cmd_sql_query(mxArray *plhs[], int nrhs, const mxArray *prhs[])
      * after throw_if_failed has confirmed that happened. */
     mxArray *names = NULL, *columns = NULL;
 
+    require_outputs(nlhs, 2, "sql_query");
     require_args(nrhs, 3, "sql_query");
     query = arg_string(prhs[2], "query");
     workspace = arg_string(prhs[3], "workspaceRid");
@@ -1544,7 +1662,6 @@ static void cmd_sql_query(mxArray *plhs[], int nrhs, const mxArray *prhs[])
     nominal_sql_free(result);
     throw_if_failed(status, err);
 
-    nominal_sql_free(result);
     plhs[0] = names;
     plhs[1] = columns;
 }
@@ -1635,7 +1752,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("run_url"))            { do_getter_string(nominal_run_url, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("run_number"))         { do_getter_u32(nominal_run_number, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("run_start_time"))     { cmd_run_start_time(plhs, nrhs, prhs); return; }
-    if (IS("run_end_time"))       { cmd_run_end_time(plhs, nrhs, prhs); return; }
+    if (IS("run_end_time"))       { cmd_run_end_time(nlhs, plhs, nrhs, prhs); return; }
     if (IS("run_label_count"))    { do_getter_u32(nominal_run_label_count, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("run_label_at"))       { cmd_label_at(nominal_run_label_at, plhs, nrhs, prhs, command); return; }
     if (IS("run_property"))       { cmd_property(nominal_run_property, plhs, nrhs, prhs, command); return; }
@@ -1685,17 +1802,17 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("event_assets"))    { cmd_event_assets(plhs, nrhs, prhs); return; }
 
     /* --- reading data back --- */
-    if (IS("dataset_fetch") || IS("dataset_fetch_decimated")) { cmd_dataset_fetch(plhs, nrhs, prhs, command); return; }
+    if (IS("dataset_fetch") || IS("dataset_fetch_decimated")) { cmd_dataset_fetch(nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("dataset_export") || IS("dataset_export_url"))     { cmd_dataset_export(plhs, nrhs, prhs, command); return; }
 
     /* --- ingest --- */
-    if (IS("ingest_csv") || IS("ingest_parquet"))  { cmd_ingest_file(plhs, nrhs, prhs, command); return; }
+    if (IS("ingest_csv") || IS("ingest_parquet"))  { cmd_ingest_file(nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("ingest_status") || IS("ingest_wait"))  { cmd_ingest_status(plhs, nrhs, prhs, command); return; }
     if (IS("ingest_job_rid")) { do_getter_string(nominal_ingest_job_rid, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("ingest_job_free")) { do_free(nominal_ingest_job_free, nlhs, plhs, nrhs, prhs, command); return; }
 
     /* --- sql --- */
-    if (IS("sql_query"))      { cmd_sql_query(plhs, nrhs, prhs); return; }
+    if (IS("sql_query"))      { cmd_sql_query(nlhs, plhs, nrhs, prhs); return; }
     if (IS("sql_export_url")) { cmd_sql_export_url(plhs, nrhs, prhs); return; }
 
     mexErrMsgIdAndTxt("nominal:invalidParameter", "unknown command '%s'", command);

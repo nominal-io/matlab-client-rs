@@ -188,6 +188,24 @@ fn take_numeric(
             let token = plot.next_page_token().cloned();
             Ok((timestamps, values, token))
         }
+        // Asking the server to decimate returns buckets, not points: one
+        // timestamp per bucket alongside min/max/mean/count. The mean is what
+        // gets returned, since a decimated fetch exists to be plotted and the
+        // mean is the value that traces the signal. Reach for the raw fetch if
+        // you need the extremes — bucketing has already discarded them here.
+        //
+        // An empty bucket has no mean and becomes NaN, matching how nulls are
+        // reported everywhere else in this library. Bucketed responses carry
+        // no page token; the bucket count is the page.
+        ComputeNodeResponse::BucketedNumeric(plot) => {
+            let timestamps = plot.timestamps().iter().map(nanos_from_timestamp).collect();
+            let values = plot
+                .buckets()
+                .iter()
+                .map(|bucket| bucket.mean().unwrap_or(f64::NAN))
+                .collect();
+            Ok((timestamps, values, None))
+        }
         other => Err(fail(
             error_out,
             ErrorCode::NominalError,
@@ -271,11 +289,7 @@ pub extern "C" fn nominal_compute_fetch_decimated(
             .map_err(|e| fail(error_out, ErrorCode::NominalError, format!("{e:?}")))?;
 
         let (timestamps, values, _) = take_numeric(response, error_out)?;
-        deliver(
-            FetchedSeries { timestamps, values },
-            out_series,
-            error_out,
-        )
+        deliver(FetchedSeries { timestamps, values }, out_series, error_out)
     })
 }
 

@@ -47,7 +47,14 @@ use std::sync::Arc;
 
 pub type EventHandle = i32;
 
-handle_registry!(EVENTS, Event, alloc_event, get_event, free_event_entry, clear_events);
+handle_registry!(
+    EVENTS,
+    Event,
+    alloc_event,
+    get_event,
+    free_event_entry,
+    clear_events
+);
 
 /// Event types, as an `int32`. Mirrors the API's own vocabulary.
 #[repr(i32)]
@@ -138,9 +145,7 @@ fn service_for(
     })?;
 
     let service = AsyncEventServiceClient::new(client, &Arc::new(ConjureRuntime::default()));
-    SERVICES
-        .lock()
-        .insert(base_url.to_owned(), service.clone());
+    SERVICES.lock().insert(base_url.to_owned(), service.clone());
     Ok(service)
 }
 
@@ -161,7 +166,10 @@ pub(crate) fn event_or_fail(
 fn split_nanos(nanos: i64) -> (i64, i64) {
     // Euclidean, so instants before the epoch do not produce a negative
     // remainder, which the API rejects.
-    (nanos.div_euclid(1_000_000_000), nanos.rem_euclid(1_000_000_000))
+    (
+        nanos.div_euclid(1_000_000_000),
+        nanos.rem_euclid(1_000_000_000),
+    )
 }
 
 fn safe_long(value: i64, what: &str, error_out: *mut ErrorHandle) -> Result<SafeLong, ErrorCode> {
@@ -388,16 +396,20 @@ pub extern "C" fn nominal_event_asset_at(
     ffi_guard(error_out, || {
         let event = event_or_fail(handle, error_out)?;
         // A BTreeSet, so iteration order is already sorted and stable.
-        let rid = event.asset_rids().iter().nth(index as usize).ok_or_else(|| {
-            fail(
-                error_out,
-                ErrorCode::InvalidParameter,
-                format!(
-                    "asset index {index} out of range ({} attached)",
-                    event.asset_rids().len()
-                ),
-            )
-        })?;
+        let rid = event
+            .asset_rids()
+            .iter()
+            .nth(index as usize)
+            .ok_or_else(|| {
+                fail(
+                    error_out,
+                    ErrorCode::InvalidParameter,
+                    format!(
+                        "asset index {index} out of range ({} attached)",
+                        event.asset_rids().len()
+                    ),
+                )
+            })?;
         set_string(out_string, rid.0.as_str(), error_out)
     })
 }

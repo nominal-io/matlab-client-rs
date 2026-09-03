@@ -18,9 +18,9 @@ macro_rules! handle_registry {
     ($registry:ident, $ty:ty, $alloc:ident, $get:ident, $free:ident, $clear:ident) => {
         static $registry: once_cell::sync::Lazy<
             parking_lot::Mutex<std::collections::HashMap<i32, std::sync::Arc<$ty>>>,
-        > = once_cell::sync::Lazy::new(|| {
-            parking_lot::Mutex::new(std::collections::HashMap::new())
-        });
+        > = once_cell::sync::Lazy::new(
+            || parking_lot::Mutex::new(std::collections::HashMap::new()),
+        );
 
         /// Returns 0 if the handle space is exhausted; callers must treat 0 as
         /// a failure rather than a handle.

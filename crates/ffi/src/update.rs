@@ -165,7 +165,9 @@ pub extern "C" fn nominal_update_set_property(
         let key = unsafe { c_str_to_string(key, "key", error_out)? };
         let value = unsafe { c_str_to_string(value, "value", error_out)? };
         with_staging(handle, error_out, |s| {
-            s.properties.get_or_insert_with(HashMap::new).insert(key, value);
+            s.properties
+                .get_or_insert_with(HashMap::new)
+                .insert(key, value);
         })
     })
 }

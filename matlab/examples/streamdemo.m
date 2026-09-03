@@ -1,36 +1,29 @@
 function streamdemo(datasetRid)
 %STREAMDEMO  End-to-end streaming demo: open, write, tear down.
 %
-%   streamdemo("ri.catalog....")     % explicit dataset
-%   streamdemo                       % reads NOMINAL_DATASET_RID
+%   streamdemo("ri.catalog....")
 %
-%   Needs NOMINAL_TOKEN in the environment. Writes about 200 points across
-%   four channels into the dataset you name, so point it at something
-%   disposable.
+%   Needs credentials. Writes about 200 points across four channels into the
+%   dataset you name, so point it at something disposable.
+%
+%   To find a dataset RID:
+%
+%       c   = connect();
+%       rid = c.datasets("telemetry").Rid(1);
+%       streamdemo(rid)
 %
 %   Writing is one pattern: preallocate an N-by-C matrix, fill it, push it.
 %   MATLAB stores matrices column-major, so each channel's samples are already
 %   contiguous and reach the library with no copy or transpose.
 %
-%   See also NOMINAL.STREAM
+%   See also NOMINAL.STREAM, CONNECT
 
     arguments
-        datasetRid (1,1) string = string(getenv("NOMINAL_DATASET_RID"))
-    end
-
-    token = string(getenv("NOMINAL_TOKEN"));
-    if token == ""
-        error('nominal:demo', 'set NOMINAL_TOKEN in the environment');
-    end
-    if datasetRid == ""
-        error('nominal:demo', ...
-              'pass a dataset RID, or set NOMINAL_DATASET_RID');
+        datasetRid (1,1) string
     end
 
     % 1 ---------------------------------------------------------- client
-    fprintf('Connecting...\n');
-    client = nominal.Client(token);
-    fprintf('  authenticated as %s\n', client.whoAmI());
+    client = connect();
     fprintf('  %s\n', client.BaseUrl);
 
     % 2 ----------------------------------------------------- open stream
@@ -41,42 +34,59 @@ function streamdemo(datasetRid)
     fprintf('Stream opened\n');
 
     % 3 -------------------------------------------------- single channel
-    single = stream.channel("demo.single");
+    %
+    % Named sineChannel rather than "single" because that is a MATLAB builtin
+    % — the single-precision type — and shadowing it in a demo teaches a bad
+    % habit to anyone copying from here.
+    sineChannel = stream.channel("demo.sine");
 
     % 4 ------------------------------------------- push 100 points to it
     %
     % Timestamps are literal here — unlike run times, 0 does not mean "now",
     % because a stream may carry times relative to an epoch you chose.
-    t0 = nominal.now();
-    timestamps = t0 + int64(0:99)' * 1000000;      % 1 ms apart
-    values = sin(linspace(0, 4*pi, 100))';
+    acquisitionStart = nominal.now();
+    sineTimestamps = acquisitionStart + int64(0:99)' * 1000000;  % 1 ms apart
+    sineValues = sin(linspace(0, 4*pi, 100))';                   % two cycles
 
-    stream.push(single, timestamps, values);
-    fprintf('Pushed 100 points to %s\n', single.Name);
+    stream.push(sineChannel, sineTimestamps, sineValues);
+    fprintf('Pushed 100 points to %s\n', sineChannel.Name);
 
     % 5 ------------------------------------------------- three channels
     %
-    % An array of nominal.Channel, all on the one stream.
-    triple = [stream.channel("demo.rpm"), ...
-              stream.channel("demo.egt"), ...
-              stream.channel("demo.psi")];
-    fprintf('Created %d more channels\n', numel(triple));
+    % An array of nominal.Channel, all on the one stream. Engine telemetry
+    % names, chosen because they are recognisable and carry three genuinely
+    % different units: shaft speed, exhaust gas temperature, and a pressure.
+    engineChannels = [stream.channel("demo.rpm"), ...
+                      stream.channel("demo.egt"), ...
+                      stream.channel("demo.psi")];
+    fprintf('Created %d more channels\n', numel(engineChannels));
 
     % A tag is stamped on every point written through that address from here
     % on. Tags belong to points, not to the channel.
-    triple(1).tag("bank", "1");
+    engineChannels(1).tag("bank", "1");
 
     % 6 ------------------------------------------- a block of three series
     %
-    % Preallocate, fill, push once.
-    rows = 100;
-    t = t0 + int64(0:rows-1)' * 1000000;
-    block = zeros(rows, 3);
-    for i = 1:rows
-        block(i, :) = [1500 + 10*i, 700 + i, 30 + 0.1*i];
+    % Preallocate, fill, push once — the pattern this client is fastest at.
+    %
+    % The numbers are synthetic: 100 rows at 1 ms, so a tenth of a second of
+    % an engine spooling up. RPM ramps 1510 -> 2500, exhaust gas temperature
+    % 701 -> 800 Cel, and oil pressure 30.1 -> 40 psi. Steeper than anything
+    % real over 100 ms — nothing reads these values back, they exist so the
+    % charts in Nominal show a trend rather than a flat line.
+    blockRowCount = 100;
+    blockTimestamps = acquisitionStart + int64(0:blockRowCount-1)' * 1000000;
+
+    engineSamples = zeros(blockRowCount, 3);   % one column per channel
+    for row = 1:blockRowCount
+        engineSamples(row, :) = [1500 + 10 * row, ...   % rpm
+                                 700 + row, ...         % egt, Cel
+                                 30 + 0.1 * row];       % psi
     end
-    stream.push(triple, t, block);
-    fprintf('Pushed %d x %d block via matrix push\n', rows, numel(triple));
+
+    stream.push(engineChannels, blockTimestamps, engineSamples);
+    fprintf('Pushed %d x %d block via matrix push\n', ...
+            blockRowCount, numel(engineChannels));
 
     % 7 ------------------------------------------------------- teardown
     %
@@ -87,8 +97,8 @@ function streamdemo(datasetRid)
     %
     % Innermost first: channels, then the stream that owns them, then the
     % dataset and client.
-    delete(triple);
-    delete(single);
+    delete(engineChannels);
+    delete(sineChannel);
     delete(stream);      % flushes; blocks until it completes
     delete(dataset);
     delete(client);

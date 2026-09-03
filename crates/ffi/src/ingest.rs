@@ -323,12 +323,17 @@ pub extern "C" fn nominal_ingest_job_status(
 
 /// Block until a job reaches a terminal state.
 ///
-/// Returns once the job has succeeded or failed. A failed job is reported
-/// through `out_status` rather than as an error — the call did what it was
-/// asked, and the ingest failing is a result, not a fault in the request.
+/// **A failed ingest is returned as an error, not through `out_status`.** The
+/// intent was the opposite — the call did what it was asked, and the ingest
+/// failing is a result rather than a fault in the request — but the upstream
+/// `wait_for_ingest_job` resolves to `Err` for a failed job and there is no
+/// way to tell that apart from a transport failure without matching on the
+/// error text. `out_status` is therefore only ever written on success.
+///
+/// Callers must handle the error case. Poll [`nominal_ingest_job_status`]
+/// instead if you want a terminal status without an exception.
 ///
 /// Polls server-side; there is no timeout, so a wedged job blocks indefinitely.
-/// Use [`nominal_ingest_job_status`] in a loop of your own if you need one.
 #[no_mangle]
 pub extern "C" fn nominal_ingest_wait(
     client_handle: ClientHandle,

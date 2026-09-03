@@ -191,7 +191,10 @@ fn an_empty_optional_argument_means_absent() {
 
     // An empty base URL falls back to the default rather than an empty host.
     assert_eq!(nominal_client_base_url(client, s, &mut err), 0);
-    assert!(read_string(s).starts_with("https://"), "base URL not defaulted");
+    assert!(
+        read_string(s).starts_with("https://"),
+        "base URL not defaulted"
+    );
 
     nominal_string_free(s);
     nominal_client_free(client);

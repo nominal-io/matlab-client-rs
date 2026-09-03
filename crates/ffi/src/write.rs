@@ -98,7 +98,8 @@ fn service_for(
         )
     })?;
 
-    let service = AsyncNominalChannelWriterServiceClient::new(client, &Arc::new(ConjureRuntime::default()));
+    let service =
+        AsyncNominalChannelWriterServiceClient::new(client, &Arc::new(ConjureRuntime::default()));
     SERVICES.lock().insert(base_url.to_owned(), service.clone());
     Ok(service)
 }

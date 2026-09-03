@@ -115,29 +115,41 @@ classdef (Abstract) Resource < handle
             %   the same four fields. The caller owns the returned handle and
             %   must free it — committing does not consume it.
             %
+            %   The callers' arguments blocks give these fields no defaults, so
+            %   a field exists in options only when the caller passed it. That
+            %   is what makes "passed empty" distinguishable from "not passed":
+            %   an empty-but-present collection means "clear" and stages an
+            %   empty replacement, while an absent one leaves the resource's
+            %   set alone.
+            %
             %   Lives here rather than in a subpackage because only code in
             %   this folder can reach the private MEX gateway.
             u = nominalmex('update_begin');
 
-            if ~isempty(options.Name)
+            if isfield(options, 'Name') && ~isempty(options.Name)
                 nominalmex('update_set_name', u, char(options.Name));
             end
-            if ~isempty(options.Description)
+            if isfield(options, 'Description') && ~isempty(options.Description)
                 nominalmex('update_set_description', u, char(options.Description));
             end
 
-            % An empty-but-present collection means "clear", which is distinct
-            % from not passing it at all. MATLAB cannot tell those apart from
-            % the value alone, so emptiness is read through isfield on the
-            % options struct: a field only exists if the caller passed it.
-            if isfield(options, 'Properties') && ~isempty(options.Properties)
-                keys = fieldnames(options.Properties);
+            if isfield(options, 'Properties')
+                keys = {};
+                if ~isempty(options.Properties)
+                    keys = fieldnames(options.Properties);
+                end
+                if isempty(keys)
+                    nominalmex('update_clear_properties', u);
+                end
                 for i = 1:numel(keys)
                     value = options.Properties.(keys{i});
                     nominalmex('update_set_property', u, keys{i}, char(string(value)));
                 end
             end
-            if isfield(options, 'Labels') && ~isempty(options.Labels)
+            if isfield(options, 'Labels')
+                if isempty(options.Labels)
+                    nominalmex('update_clear_labels', u);
+                end
                 for i = 1:numel(options.Labels)
                     nominalmex('update_add_label', u, char(options.Labels(i)));
                 end

@@ -373,13 +373,7 @@ mod tests {
         // guard the call.
         let mut err = 0;
         assert_eq!(
-            nominal_streamchannel_push_doubles(
-                ch,
-                std::ptr::null(),
-                std::ptr::null(),
-                0,
-                &mut err
-            ),
+            nominal_streamchannel_push_doubles(ch, std::ptr::null(), std::ptr::null(), 0, &mut err),
             0
         );
 

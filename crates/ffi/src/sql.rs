@@ -33,37 +33,33 @@
 //!
 //! # Transport
 //!
-//! This is gRPC rather than Conjure, so it needs its own tonic channel. The
-//! response arrives as an Arrow IPC stream whose buffers are ZSTD-compressed
-//! server-side with no way to opt out; the `arrow` crate handles that with its
-//! `ipc_compression` feature.
-
-// The gRPC interceptor closures return `tonic::Status`, which clippy flags as a
-// large Err variant. That is tonic's own signature; there is nothing to box.
-#![allow(clippy::result_large_err)]
+//! Plain HTTPS with a JSON request body, not gRPC — despite the proto declaring
+//! `Query` as server-streaming. The gateway exposes only the REST mapping and
+//! returns one concatenated body, so a tonic client reaches an unrouted path
+//! and gets an HTML 404 back (which surfaces as `invalid compression flag: 60`,
+//! 60 being the `<`). The Python client carries a hand-written REST shim for
+//! exactly this reason.
+//!
+//! The endpoints sit under the same `/api` prefix as the rest of the API:
+//! `POST /sql/v1/query`, `POST /sql/v1/query/export`, `GET /sql/v1/catalog`.
+//!
+//! The query response body *is* the Arrow IPC stream — the RPC maps
+//! `response_body: "payload"`, so there is no JSON envelope to unwrap. Its
+//! buffers are ZSTD-compressed server-side with no way to opt out; the `arrow`
+//! crate handles that with its `ipc_compression` feature.
 
 use crate::client::{client_or_fail, ClientHandle};
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
 use crate::strings::{c_str_to_string, set_string, StringHandle};
 
-use arrow::array::{Array, Float64Array, Int64Array, StringArray, TimestampMicrosecondArray,
-                   TimestampNanosecondArray};
+use arrow::array::{Array, Float64Array, Int64Array, StringArray};
 use arrow::datatypes::{DataType, TimeUnit};
 use arrow::record_batch::RecordBatch;
 
-use nominal_streaming::api::tonic::nominal::sql::v1::sql_service_client::SqlServiceClient;
-use nominal_streaming::api::tonic::nominal::sql::v1::{
-    SqlServiceExportRequest, SqlServiceQueryRequest, SqlServiceQueryResultFormat,
-};
-
 use once_cell::sync::Lazy;
-use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::os::raw::c_char;
 use std::sync::Arc;
-use tonic::metadata::{Ascii, MetadataValue};
-use tonic::transport::{Channel, ClientTlsConfig};
 
 pub type QueryResultHandle = i32;
 
@@ -96,82 +92,85 @@ pub enum ColumnType {
     Unsupported = 4,
 }
 
-/// Channels are cached per host rather than per client, since a channel carries
-/// no credentials — the token goes on each request instead. Caching the service
-/// itself would be wrong: two clients may hold different tokens for one host.
-static CHANNELS: Lazy<Mutex<HashMap<String, Channel>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+/// One client for the process, reused across calls and hosts.
+///
+/// `reqwest::Client` owns a connection pool and is designed to be shared, so
+/// there is nothing to cache per host the way a gRPC channel needed. It carries
+/// no credentials either — the token goes on each request — so one instance is
+/// safe across clients holding different tokens.
+///
+/// Built inside the runtime: constructing it sets up pool timers that need an
+/// ambient reactor even though no I/O happens yet.
+static HTTP: Lazy<reqwest::Client> = Lazy::new(|| {
+    RUNTIME.in_context(|| {
+        reqwest::Client::builder()
+            .user_agent(concat!("nominal-ffi/", env!("CARGO_PKG_VERSION")))
+            .build()
+            .expect("building an HTTP client with default settings cannot fail")
+    })
+});
 
-/// Drop cached gRPC channels. Used by shutdown.
-pub(crate) fn clear_sql_channels() {
-    CHANNELS.lock().clear();
+/// Build a SQL endpoint URL from the client's base URL.
+///
+/// The service lives under the same `/api` prefix as everything else, so the
+/// base URL is used whole rather than reduced to its host — unlike a gRPC
+/// target, which would be scheme and authority only.
+fn sql_url(base_url: &str, path: &str) -> String {
+    format!("{}/sql/v1/{}", base_url.trim_end_matches('/'), path)
 }
 
-/// gRPC services sit at the host root, not under the API's `/api` path.
-fn grpc_root(base_url: &str, error_out: *mut ErrorHandle) -> Result<String, ErrorCode> {
-    let invalid = |reason: String| {
+/// POST a JSON body to a SQL endpoint and return the raw response body.
+///
+/// A non-2xx response carries the reason in its body, so it is read as text and
+/// used as the error message — the alternative is a bare status code, which for
+/// a rejected query says nothing about which part of the SQL the server
+/// disliked.
+fn sql_post(
+    base_url: &str,
+    token: &str,
+    path: &str,
+    accept: &str,
+    body: serde_json::Value,
+    error_out: *mut ErrorHandle,
+) -> Result<Vec<u8>, ErrorCode> {
+    let url = sql_url(base_url, path);
+    let request = HTTP
+        .post(&url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Content-Type", "application/json")
+        .header("Accept", accept)
+        .body(body.to_string());
+
+    let outcome = RUNTIME.block_on(async {
+        let response = request.send().await?;
+        let status = response.status();
+        let bytes = response.bytes().await?;
+        Ok::<_, reqwest::Error>((status, bytes))
+    });
+
+    let (status, bytes) = outcome.map_err(|e| {
         fail(
             error_out,
-            ErrorCode::InvalidParameter,
-            format!("invalid base URL {base_url:?}: {reason}"),
-        )
-    };
-    let url = url_parse(base_url).map_err(invalid)?;
-    Ok(url)
-}
-
-/// Strip the path from a base URL, keeping scheme, host, and any explicit port.
-fn url_parse(base_url: &str) -> Result<String, String> {
-    let (scheme, rest) = base_url
-        .split_once("://")
-        .ok_or_else(|| "URL has no scheme".to_owned())?;
-    let authority = rest.split('/').next().unwrap_or("");
-    if authority.is_empty() {
-        return Err("URL has no host".to_owned());
-    }
-    Ok(format!("{scheme}://{authority}"))
-}
-
-fn channel_for(base_url: &str, error_out: *mut ErrorHandle) -> Result<Channel, ErrorCode> {
-    if let Some(existing) = CHANNELS.lock().get(base_url) {
-        return Ok(existing.clone());
-    }
-
-    let root = grpc_root(base_url, error_out)?;
-    let mut endpoint = Channel::from_shared(root.clone()).map_err(|e| {
-        fail(
-            error_out,
-            ErrorCode::InvalidParameter,
-            format!("invalid gRPC URL {root:?}: {e}"),
+            ErrorCode::NominalError,
+            format!("SQL request to {url} failed: {e}"),
         )
     })?;
 
-    if root.starts_with("https://") {
-        endpoint = endpoint
-            .tls_config(ClientTlsConfig::new().with_native_roots())
-            .map_err(|e| {
-                fail(
-                    error_out,
-                    ErrorCode::NominalError,
-                    format!("TLS setup failed: {e}"),
-                )
-            })?;
+    if !status.is_success() {
+        let detail = String::from_utf8_lossy(&bytes);
+        let detail = detail.trim();
+        return Err(fail(
+            error_out,
+            ErrorCode::NominalError,
+            if detail.is_empty() {
+                format!("SQL request to {url} returned {status}")
+            } else {
+                format!("SQL request to {url} returned {status}: {detail}")
+            },
+        ));
     }
 
-    // Connects on first use, so this does no I/O — but it does construct hyper
-    // resources, which need an ambient runtime.
-    let channel = RUNTIME.in_context(|| endpoint.connect_lazy());
-    CHANNELS.lock().insert(base_url.to_owned(), channel.clone());
-    Ok(channel)
-}
-
-fn bearer(token: &str, error_out: *mut ErrorHandle) -> Result<MetadataValue<Ascii>, ErrorCode> {
-    format!("Bearer {token}").parse().map_err(|e| {
-        fail(
-            error_out,
-            ErrorCode::InvalidParameter,
-            format!("token is not a valid header value: {e}"),
-        )
-    })
+    Ok(bytes.to_vec())
 }
 
 /// Run a query and hold the result.
@@ -195,43 +194,30 @@ pub extern "C" fn nominal_sql_query(
         let query = unsafe { c_str_to_string(query, "query", error_out)? };
 
         let workspace = resolve_workspace(&client, workspace_rid, error_out)?;
-        let header = bearer(client.token(), error_out)?;
-        let channel = channel_for(client.base_url(), error_out)?;
 
-        let payload = RUNTIME.block_on(async {
-            let mut service = SqlServiceClient::with_interceptor(channel, move |mut req: tonic::Request<()>| {
-                req.metadata_mut().insert("authorization", header.clone());
-                Ok(req)
-            });
-
-            let request = SqlServiceQueryRequest {
-                query,
-                // Left unset: when present it is capped at 5000, whereas an
-                // absent value is unbounded subject to the size limit. Callers
-                // who want fewer rows put a LIMIT in the SQL.
-                max_rows: None,
-                workspace_rid: workspace,
-                result_format: SqlServiceQueryResultFormat::ArrowStream as i32,
-            };
-
-            let mut stream = service.query(request).await?.into_inner();
-
-            // Chunks are 64 KiB of one logical Arrow stream, so they are
-            // concatenated before parsing rather than parsed individually.
-            let mut bytes = Vec::new();
-            while let Some(response) = stream.message().await? {
-                bytes.extend_from_slice(&response.payload);
-            }
-            Ok::<_, tonic::Status>(bytes)
+        // `max_rows` is deliberately absent: when present it is capped at 5000,
+        // whereas leaving it out is unbounded subject to the size limit.
+        // Callers who want fewer rows put a LIMIT in the SQL.
+        //
+        // The enum crosses by name rather than by number. Both are valid proto
+        // JSON, and the name survives a renumbering.
+        let body = serde_json::json!({
+            "query": query,
+            "workspace_rid": workspace,
+            "result_format": "SQL_SERVICE_QUERY_RESULT_FORMAT_ARROW_STREAM",
         });
 
-        let payload = payload.map_err(|status| {
-            fail(
-                error_out,
-                ErrorCode::NominalError,
-                format!("{}: {}", status.code(), status.message()),
-            )
-        })?;
+        // The Query RPC maps `response_body: "payload"`, so the response body
+        // is the Arrow IPC stream itself — no JSON envelope to unwrap, and the
+        // gateway has already concatenated what the proto declares as a stream.
+        let payload = sql_post(
+            client.base_url(),
+            client.token(),
+            "query",
+            "application/octet-stream",
+            body,
+            error_out,
+        )?;
 
         let batch = decode_arrow(&payload, error_out)?;
         let handle = alloc_result(batch);
@@ -443,16 +429,30 @@ pub extern "C" fn nominal_sql_column_doubles(
         let batch = result_or_fail(handle, error_out)?;
         let column = column_of(&batch, index, error_out)?;
 
-        let values = column.as_any().downcast_ref::<Float64Array>().ok_or_else(|| {
-            fail(
-                error_out,
-                ErrorCode::InvalidParameter,
-                format!(
-                    "column {index} is {:?}, not a double column",
-                    column.data_type()
-                ),
-            )
-        })?;
+        // Float32 also reports as `ColumnType::Double`, so it must be readable
+        // here — widened by the same cast, which is a cheap no-op for Float64.
+        let casted = match column.data_type() {
+            DataType::Float64 | DataType::Float32 => {
+                arrow::compute::cast(column, &DataType::Float64).map_err(|e| {
+                    fail(
+                        error_out,
+                        ErrorCode::RuntimeError,
+                        format!("could not convert column {index} to doubles: {e}"),
+                    )
+                })?
+            }
+            other => {
+                return Err(fail(
+                    error_out,
+                    ErrorCode::InvalidParameter,
+                    format!("column {index} is {other:?}, not a double column"),
+                ))
+            }
+        };
+        let values = casted
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .expect("cast to Float64");
 
         let count = values.len().min(capacity as usize);
         let out = unsafe { std::slice::from_raw_parts_mut(buffer, count) };
@@ -494,37 +494,22 @@ pub extern "C" fn nominal_sql_column_int64(
         let count = column.len().min(capacity as usize);
         let out = unsafe { std::slice::from_raw_parts_mut(buffer, count) };
 
-        match column.data_type() {
-            DataType::Int64 => {
-                let values = column.as_any().downcast_ref::<Int64Array>().expect("checked");
-                for (slot, row) in out.iter_mut().zip(0..count) {
-                    *slot = if values.is_null(row) { 0 } else { values.value(row) };
-                }
-            }
-            DataType::Timestamp(TimeUnit::Nanosecond, _) => {
-                let values = column
-                    .as_any()
-                    .downcast_ref::<TimestampNanosecondArray>()
-                    .expect("checked");
-                for (slot, row) in out.iter_mut().zip(0..count) {
-                    *slot = if values.is_null(row) { 0 } else { values.value(row) };
-                }
-            }
-            DataType::Timestamp(TimeUnit::Microsecond, _) => {
-                let values = column
-                    .as_any()
-                    .downcast_ref::<TimestampMicrosecondArray>()
-                    .expect("checked");
-                for (slot, row) in out.iter_mut().zip(0..count) {
-                    *slot = if values.is_null(row) {
-                        0
-                    } else {
-                        // Scaled here so every timestamp leaving this library
-                        // is in the same unit.
-                        values.value(row).saturating_mul(1_000)
-                    };
-                }
-            }
+        // Everything `ColumnType::Int64` or `::Timestamp` covers must be
+        // readable here: the narrower integer widths and booleans widen through
+        // the same cast, and a timestamp is scaled so every value leaving this
+        // library is in nanoseconds, whatever resolution the server sent.
+        let factor: i64 = match column.data_type() {
+            DataType::Int64
+            | DataType::Int32
+            | DataType::Int16
+            | DataType::Int8
+            | DataType::Boolean => 1,
+            DataType::Timestamp(unit, _) => match unit {
+                TimeUnit::Second => 1_000_000_000,
+                TimeUnit::Millisecond => 1_000_000,
+                TimeUnit::Microsecond => 1_000,
+                TimeUnit::Nanosecond => 1,
+            },
             other => {
                 return Err(fail(
                     error_out,
@@ -532,6 +517,25 @@ pub extern "C" fn nominal_sql_column_int64(
                     format!("column {index} is {other:?}, not an integer or timestamp column"),
                 ))
             }
+        };
+
+        let casted = arrow::compute::cast(column, &DataType::Int64).map_err(|e| {
+            fail(
+                error_out,
+                ErrorCode::RuntimeError,
+                format!("could not convert column {index} to int64: {e}"),
+            )
+        })?;
+        let values = casted
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .expect("cast to Int64");
+        for (slot, row) in out.iter_mut().zip(0..count) {
+            *slot = if values.is_null(row) {
+                0
+            } else {
+                values.value(row).saturating_mul(factor)
+            };
         }
 
         unsafe { *out_written = count as u32 };
@@ -555,16 +559,19 @@ pub extern "C" fn nominal_sql_column_string_at(
         let batch = result_or_fail(handle, error_out)?;
         let column = column_of(&batch, index, error_out)?;
 
-        let values = column.as_any().downcast_ref::<StringArray>().ok_or_else(|| {
-            fail(
-                error_out,
-                ErrorCode::InvalidParameter,
-                format!(
-                    "column {index} is {:?}, not a string column",
-                    column.data_type()
-                ),
-            )
-        })?;
+        let values = column
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or_else(|| {
+                fail(
+                    error_out,
+                    ErrorCode::InvalidParameter,
+                    format!(
+                        "column {index} is {:?}, not a string column",
+                        column.data_type()
+                    ),
+                )
+            })?;
 
         if row as usize >= values.len() {
             return Err(fail(
@@ -630,30 +637,44 @@ pub extern "C" fn nominal_sql_export_url(
         let client = client_or_fail(client_handle, error_out)?;
         let query = unsafe { c_str_to_string(query, "query", error_out)? };
         let workspace = resolve_workspace(&client, workspace_rid, error_out)?;
-        let header = bearer(client.token(), error_out)?;
-        let channel = channel_for(client.base_url(), error_out)?;
 
-        let response = RUNTIME.block_on(async {
-            let mut service = SqlServiceClient::with_interceptor(channel, move |mut req: tonic::Request<()>| {
-                req.metadata_mut().insert("authorization", header.clone());
-                Ok(req)
-            });
-            service
-                .export(SqlServiceExportRequest {
-                    query,
-                    workspace_rid: workspace,
-                })
-                .await
+        let body = serde_json::json!({
+            "query": query,
+            "workspace_rid": workspace,
         });
 
-        let response = response.map_err(|status| {
+        // Export returns a JSON envelope rather than bytes, unlike query.
+        let raw = sql_post(
+            client.base_url(),
+            client.token(),
+            "query/export",
+            "application/json",
+            body,
+            error_out,
+        )?;
+
+        let parsed: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| {
             fail(
                 error_out,
                 ErrorCode::NominalError,
-                format!("{}: {}", status.code(), status.message()),
+                format!("SQL export returned a body that is not JSON: {e}"),
             )
         })?;
 
-        set_string(out_string, response.into_inner().presigned_url, error_out)
+        // The JSON transcoder emits lowerCamelCase; the proto's own spelling is
+        // accepted too, in case a deployment transcodes with original names.
+        let url = parsed
+            .get("presignedUrl")
+            .or_else(|| parsed.get("presigned_url"))
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| {
+                fail(
+                    error_out,
+                    ErrorCode::NominalError,
+                    format!("SQL export response carried no presigned URL: {parsed}"),
+                )
+            })?;
+
+        set_string(out_string, url, error_out)
     })
 }

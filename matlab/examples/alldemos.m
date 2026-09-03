@@ -1,24 +1,28 @@
 function alldemos()
 %ALLDEMOS  Run every demo against one throwaway asset.
 %
-%   Needs NOMINAL_TOKEN. Creates a single asset named
-%   nominal-matlab-demo-<timestamp> and runs each demo against it, so
-%   everything ends up in one place rather than scattered across four assets.
+%   Needs credentials. Creates a single asset named
+%   nominal-matlab-demo-<timestamp> and runs all seven demos against it, so
+%   everything lands in one place rather than scattered across seven assets.
+%
+%   Order matters: the write demos run first, then streaming, then analysis
+%   last so it has something to read back.
 %
 %   Each demo also runs standalone; see their own help. This exists to
 %   exercise the whole surface in one go after a rebuild.
 %
-%   See also ASSETDEMO, DATASETDEMO, RUNDEMO, EVENTDEMO, STREAMDEMO, ANALYSISDEMO
+%   See also ASSETDEMO, DATASETDEMO, RUNDEMO, EVENTDEMO, UPLOADDEMO,
+%   STREAMDEMO, ANALYSISDEMO, CONNECT
 
-    token = string(getenv("NOMINAL_TOKEN"));
-    if token == ""
-        error('nominal:demo', 'set NOMINAL_TOKEN in the environment');
-    end
+    % Fail here rather than five demos in, if the credentials are not set up.
+    delete(connect());
 
     assetName = "nominal-matlab-demo-" + string(posixtime(datetime("now")));
     fprintf('Shared asset: %s\n\n', assetName);
 
-    demos = {
+    % Name paired with a nullary handle that runs it, so the loop below reports
+    % which one failed without parsing anything out of the error.
+    demosNeedingOnlyAnAsset = {
         "assets",   @() assetdemo(assetName)
         "datasets", @() datasetdemo(assetName)
         "runs",     @() rundemo(assetName)
@@ -26,67 +30,71 @@ function alldemos()
         "upload",   @() uploaddemo(assetName)
     };
 
-    failures = strings(1, 0);
-    for i = 1:size(demos, 1)
-        name = demos{i, 1};
-        banner(name);
+    failedDemoNames = strings(1, 0);
+    for demoIndex = 1:size(demosNeedingOnlyAnAsset, 1)
+        demoName = demosNeedingOnlyAnAsset{demoIndex, 1};
+        runDemo = demosNeedingOnlyAnAsset{demoIndex, 2};
+
+        banner(demoName);
         try
-            demos{i, 2}();
-        catch e
-            fprintf('\n  FAILED: %s\n  %s\n', e.identifier, e.message);
-            failures(end+1) = name; %#ok<AGROW>
+            runDemo();
+        catch demoError
+            fprintf('\n  FAILED: %s\n  %s\n', demoError.identifier, demoError.message);
+            failedDemoNames(end+1) = demoName; %#ok<AGROW>
         end
         fprintf('\n');
     end
 
     % Streaming and analysis both need a dataset RID, which datasetdemo created
     % under the shared asset. Look it up rather than hard-coding one.
-    datasetRid = "";
+    sharedDatasetRid = "";
     try
-        client = nominal.Client(token);
+        client = connect();
         asset = client.getOrCreateAsset(assetName);
-        sources = asset.datasources();
-        datasets = sources(sources.Type == "dataset", :);
-        if ~isempty(datasets)
-            datasetRid = datasets.Rid(1);
+
+        % datasources() lists videos and connections too, and only a dataset
+        % RID can open a stream.
+        dataSources = asset.datasources();
+        attachedDatasets = dataSources(dataSources.Type == "dataset", :);
+        if ~isempty(attachedDatasets)
+            sharedDatasetRid = attachedDatasets.Rid(1);
         end
+
         delete(asset);
         delete(client);
-    catch e
-        fprintf('  could not find a dataset: %s\n', e.message);
+    catch lookupError
+        fprintf('  could not find a dataset: %s\n', lookupError.message);
     end
 
-    banner("streaming");
-    if datasetRid == ""
-        fprintf('  skipped: no dataset on the asset\n');
-    else
-        try
-            streamdemo(datasetRid);
-        catch e
-            fprintf('\n  FAILED: %s\n  %s\n', e.identifier, e.message);
-            failures(end+1) = "streaming"; %#ok<AGROW>
+    % These two take a dataset rather than an asset, so they run outside the
+    % loop above. Analysis goes last, so it reads back what the rest wrote.
+    demosNeedingADataset = {
+        "streaming", @() streamdemo(sharedDatasetRid)
+        "analysis",  @() analysisdemo(sharedDatasetRid)
+    };
+
+    for demoIndex = 1:size(demosNeedingADataset, 1)
+        demoName = demosNeedingADataset{demoIndex, 1};
+        runDemo = demosNeedingADataset{demoIndex, 2};
+
+        banner(demoName);
+        if sharedDatasetRid == ""
+            fprintf('  skipped: no dataset on the asset\n\n');
+            continue
         end
-    end
-    fprintf('\n');
-
-    % Last, so it reads back what everything above just wrote.
-    banner("analysis");
-    if datasetRid == ""
-        fprintf('  skipped: no dataset on the asset\n');
-    else
         try
-            analysisdemo(datasetRid);
-        catch e
-            fprintf('\n  FAILED: %s\n  %s\n', e.identifier, e.message);
-            failures(end+1) = "analysis"; %#ok<AGROW>
+            runDemo();
+        catch demoError
+            fprintf('\n  FAILED: %s\n  %s\n', demoError.identifier, demoError.message);
+            failedDemoNames(end+1) = demoName; %#ok<AGROW>
         end
+        fprintf('\n');
     end
 
-    fprintf('\n');
-    if isempty(failures)
+    if isempty(failedDemoNames)
         fprintf('All demos completed.\n');
     else
-        fprintf('Failed: %s\n', join(failures, ", "));
+        fprintf('Failed: %s\n', join(failedDemoNames, ", "));
     end
     fprintf('Asset: %s\n', assetName);
 

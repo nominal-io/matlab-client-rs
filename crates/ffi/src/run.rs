@@ -35,7 +35,11 @@ pub(crate) fn run_or_fail(
     })
 }
 
-fn deliver(run: Run, out_run: *mut RunHandle, error_out: *mut ErrorHandle) -> Result<(), ErrorCode> {
+fn deliver(
+    run: Run,
+    out_run: *mut RunHandle,
+    error_out: *mut ErrorHandle,
+) -> Result<(), ErrorCode> {
     let handle = alloc_run(run);
     if handle == 0 {
         return Err(fail(

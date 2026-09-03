@@ -142,8 +142,8 @@ pub extern "C" fn nominal_string_alloc(out_handle: *mut StringHandle) -> i32 {
             return ErrorCode::InvalidParameter as i32;
         }
         // Stop rather than wrap: a wrapped counter would reissue a live handle.
-        let Ok(handle) =
-            NEXT_STRING_HANDLE.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
+        let Ok(handle) = NEXT_STRING_HANDLE
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(1))
         else {
             return ErrorCode::NoCapacity as i32;
         };
@@ -218,4 +218,3 @@ pub extern "C" fn nominal_copy_string_from_reference(
         copied as u32
     })
 }
-

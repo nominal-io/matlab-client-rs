@@ -121,10 +121,14 @@ classdef Run < nominal.Resource
             %   Collections REPLACE rather than merge — see nominal.Asset.update.
             arguments
                 obj (1,1) nominal.Run
-                options.Name string = string.empty
-                options.Description string = string.empty
-                options.Properties struct = struct.empty
-                options.Labels string = string.empty
+                % No defaults on the shared fields, so stageUpdate can tell
+                % "passed empty" (clear) from "not passed" (leave alone) — see
+                % nominal.Asset.update. Times keep a sentinel: there is no
+                % "clear" for them, so [] simply means unset.
+                options.Name string
+                options.Description string
+                options.Properties struct
+                options.Labels string
                 options.StartTime = []
                 options.EndTime = []
             end

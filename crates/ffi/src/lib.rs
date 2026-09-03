@@ -84,7 +84,8 @@ pub(crate) fn clear_all_registries() {
     write::clear_write_services();
     export::clear_export_services();
     sql::clear_sql_results();
-    sql::clear_sql_channels();
+    // No SQL transport to clear: it is a shared reqwest client whose pool
+    // drops its idle connections on its own.
     compute::clear_compute_series();
     compute::clear_compute_services();
     ingest::clear_ingest_jobs();

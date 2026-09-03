@@ -145,7 +145,11 @@ classdef Dataset < nominal.Resource
                 channel (1,1) string
                 startTime
                 endTime
-                options.Buckets (1,1) double {mustBePositive, mustBeInteger} = 0
+                % Nonnegative rather than positive: MATLAB validates the
+                % default as well as a supplied value, so mustBePositive with
+                % a default of 0 rejects every call that omits Buckets. Zero
+                % is the sentinel for "no decimation".
+                options.Buckets (1,1) double {mustBeNonnegative, mustBeInteger} = 0
             end
             obj.assertLive();
 
@@ -162,12 +166,15 @@ classdef Dataset < nominal.Resource
 
             tt = timetable(nominal.fromNanos(nanos), values);
 
-            % A channel really can be called "Time", and a timetable cannot
-            % have a variable sharing the row-times dimension name. Move the
-            % dimension rather than the channel, so the variable still answers
-            % to the name the data actually has.
+            % A channel really can be called "Time" or "Variables", and a
+            % timetable cannot have a variable sharing either dimension name.
+            % Move the dimension rather than the channel, so the variable still
+            % answers to the name the data actually has.
             if strcmp(char(channel), tt.Properties.DimensionNames{1})
                 tt.Properties.DimensionNames{1} = 'RowTimes';
+            end
+            if strcmp(char(channel), tt.Properties.DimensionNames{2})
+                tt.Properties.DimensionNames{2} = 'TableVariables';
             end
 
             % Assigned rather than passed to the constructor: channel names
@@ -295,10 +302,12 @@ classdef Dataset < nominal.Resource
             %   Collections REPLACE rather than merge — see nominal.Asset.update.
             arguments
                 obj (1,1) nominal.Dataset
-                options.Name string = string.empty
-                options.Description string = string.empty
-                options.Properties struct = struct.empty
-                options.Labels string = string.empty
+                % No defaults, so stageUpdate can tell "passed empty" (clear)
+                % from "not passed" (leave alone) — see nominal.Asset.update.
+                options.Name string
+                options.Description string
+                options.Properties struct
+                options.Labels string
             end
             obj.assertLive();
             u = obj.stageUpdate(options);
