@@ -1,11 +1,22 @@
-function uploaddemo(assetName)
+function results = uploaddemo(assetName)
 %UPLOADDEMO  Getting data in: from a .mat file, and from a CSV on disk.
 %
 %   uploaddemo                   % throwaway asset
 %   uploaddemo("engine-3")       % under an existing asset
+%   results = uploaddemo(...)
 %
 %   Needs credentials. Writes two small datasets and leaves two files in
 %   tempdir, so point it at something disposable.
+%
+%   The RIDs it creates and the data it sent are returned, and left in the
+%   base workspace as `nominalUpload` — so the next demo can be pointed at
+%   them without copying anything out of the console:
+%
+%       uploaddemo("engine-3")
+%       analysisdemo(nominalUpload.WrittenDatasetRid)
+%
+%   Fields: AssetRid, AssetName, WrittenDatasetRid, IngestedDatasetRid,
+%   ChannelNames, SampleTimes, SampleValues, IngestStatus, MatFile, CsvFile.
 %
 %   streamdemo covers the live path, where samples arrive as a test runs.
 %   This covers the other two, where the data already exists:
@@ -19,14 +30,30 @@ function uploaddemo(assetName)
 %   Also shows the two things worth doing alongside an upload: declaring units
 %   before any data exists, and recording which script produced the data.
 %
-%   See also NOMINAL.DATASET/WRITE, NOMINAL.CLIENT/INGEST, STREAMDEMO, CONNECT
+%   See also NOMINAL.DATASET/WRITE, NOMINAL.CLIENT/INGEST, STREAMDEMO, NOMINALCONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    client = connect();
+    % Filled in as the demo goes, so a step that fails still leaves a struct
+    % that indexes cleanly.
+    results = struct( ...
+        'AssetRid',           "", ...
+        'AssetName',          "", ...
+        'WrittenDatasetRid',  "", ...
+        'IngestedDatasetRid', "", ...
+        'ChannelNames',       strings(1, 0), ...
+        'SampleTimes',        NaT("TimeZone", "UTC"), ...
+        'SampleValues',       [], ...
+        'IngestStatus',       "", ...
+        'MatFile',            "", ...
+        'CsvFile',            "");
+
+    client = nominalconnect();
     asset = client.getOrCreateAsset(assetName);
+    results.AssetRid = asset.Rid;
+    results.AssetName = asset.Name;
     fprintf('Asset: %s\n\n', asset.Name);
 
     % Synthetic engine telemetry, standing in for whatever your acquisition
@@ -61,6 +88,10 @@ function uploaddemo(assetName)
     channelNames = ["matrpm" "mategt" "matpsi"];
     sampleValues = [rpmValues, egtValues, psiValues];
 
+    results.ChannelNames = channelNames;
+    results.SampleTimes = sampleTimes;
+    results.SampleValues = sampleValues;
+
     % 1 ------------------------------------------- units before any data
     %
     % setChannelMetadata is an upsert, so it works on channels that do not
@@ -87,6 +118,7 @@ function uploaddemo(assetName)
     % is needed — MATLAB already has the data in memory, so write it directly.
     fprintf('--- Upload from a .mat file ---\n');
     matFilePath = fullfile(tempdir, "nominal-uploaddemo.mat");
+    results.MatFile = string(matFilePath);
     save(matFilePath, "sampleTimes", "sampleValues");
     fprintf('Saved %s\n', matFilePath);
 
@@ -113,10 +145,11 @@ function uploaddemo(assetName)
                           source="dataset.write"), ...
         Labels=["demo" "uploaded"]);
 
-    % Unlike assets and runs, datasets expose no property getter through this
-    % client — verify in the Nominal app, where the properties show on the
-    % dataset page.
-    fprintf('Recorded script, MATLAB release, and source as properties\n\n');
+    results.WrittenDatasetRid = annotatedDataset.Rid;
+
+    fprintf('Recorded script, MATLAB release, and source as properties\n');
+    fprintf('  script = %s\n', annotatedDataset.property("script"));
+    fprintf('  labels = %s\n\n', join(annotatedDataset.Labels, " "));
 
     % 4 ------------------------------------------------ ingest a CSV file
     %
@@ -132,6 +165,7 @@ function uploaddemo(assetName)
     % in asset.datasources().
     fprintf('--- Ingest a CSV ---\n');
     csvFilePath = fullfile(tempdir, "nominal-uploaddemo.csv");
+    results.CsvFile = string(csvFilePath);
 
     % Two of the three channels, to show that an ingested file decides its own
     % schema — it need not match what was written above.
@@ -141,6 +175,7 @@ function uploaddemo(assetName)
     fprintf('Wrote %s\n', csvFilePath);
 
     ingestTarget = asset.getOrCreateDataset("Ingested telemetry", "ingested");
+    results.IngestedDatasetRid = ingestTarget.Rid;
 
     % Epoch seconds rather than the ISO 8601 default, because that is what
     % posixtime produces and what most logger CSVs carry.
@@ -162,6 +197,7 @@ function uploaddemo(assetName)
     catch ingestError
         fprintf('  ingest failed: %s\n', ingestError.message);
     end
+    results.IngestStatus = finalStatus;
 
     if finalStatus == "completed"
         fprintf('  dataset "%s" now has %d channel(s)\n', ...
@@ -183,5 +219,7 @@ function uploaddemo(assetName)
     delete(dataset);
     delete(asset);
     delete(client);
-    fprintf('Done.\n');
+
+    nominalpublish(results, "nominalUpload");
+    fprintf('  e.g. analysisdemo(nominalUpload.WrittenDatasetRid)\n');
 end

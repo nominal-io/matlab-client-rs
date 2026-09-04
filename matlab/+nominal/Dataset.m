@@ -13,8 +13,10 @@ classdef Dataset < nominal.Resource
     %   See also NOMINAL.ASSET, NOMINAL.STREAM
 
     properties (Dependent, SetAccess = private)
-        Rid string   % Resource identifier.
-        Name string  % Display name.
+        Rid string          % Resource identifier.
+        Name string         % Display name.
+        Description string  % Description, or "" if it has none.
+        Labels string       % All labels, as a string array.
     end
 
     properties (Access = private)
@@ -32,8 +34,28 @@ classdef Dataset < nominal.Resource
             obj.Handle = handle;
         end
 
-        function v = get.Rid(obj);  obj.assertLive(); v = string(nominalmex('dataset_rid', obj.Handle));  end
-        function v = get.Name(obj); obj.assertLive(); v = string(nominalmex('dataset_name', obj.Handle)); end
+        function v = get.Rid(obj);         obj.assertLive(); v = string(nominalmex('dataset_rid', obj.Handle));         end
+        function v = get.Name(obj);        obj.assertLive(); v = string(nominalmex('dataset_name', obj.Handle));        end
+        function v = get.Description(obj); obj.assertLive(); v = string(nominalmex('dataset_description', obj.Handle)); end
+
+        function v = get.Labels(obj)
+            obj.assertLive();
+            n = double(nominalmex('dataset_label_count', obj.Handle));
+            v = strings(1, n);
+            for i = 1:n
+                v(i) = string(nominalmex('dataset_label_at', obj.Handle, int32(i - 1)));
+            end
+        end
+
+        function value = property(obj, key)
+            %PROPERTY  Value of one property. Errors if the key is absent.
+            arguments
+                obj (1,1) nominal.Dataset
+                key (1,1) string
+            end
+            obj.assertLive();
+            value = string(nominalmex('dataset_property', obj.Handle, char(key)));
+        end
 
         function s = stream(obj)
             %STREAM  Open a stream that writes into this dataset.

@@ -1,14 +1,27 @@
-function streamdemo(datasetRid)
+function results = streamdemo(datasetRid)
 %STREAMDEMO  End-to-end streaming demo: open, write, tear down.
 %
 %   streamdemo("ri.catalog....")
+%   results = streamdemo("ri.catalog....")
 %
 %   Needs credentials. Writes about 200 points across four channels into the
 %   dataset you name, so point it at something disposable.
 %
+%   What was pushed is returned, and left in the base workspace as
+%   `nominalStream` — so the data that went up can be compared against what
+%   comes back down:
+%
+%       streamdemo(rid)
+%       plot(nominalStream.BlockTimestamps, nominalStream.EngineSamples)
+%
+%       tt = analysisdemo(rid).Samples;      % the same points, read back
+%
+%   Fields: DatasetRid, DatasetName, SineChannel, SineTimestamps, SineValues,
+%   EngineChannels, BlockTimestamps, EngineSamples.
+%
 %   To find a dataset RID:
 %
-%       c   = connect();
+%       c   = nominalconnect();
 %       rid = c.datasets("telemetry").Rid(1);
 %       streamdemo(rid)
 %
@@ -16,18 +29,29 @@ function streamdemo(datasetRid)
 %   MATLAB stores matrices column-major, so each channel's samples are already
 %   contiguous and reach the library with no copy or transpose.
 %
-%   See also NOMINAL.STREAM, CONNECT
+%   See also NOMINAL.STREAM, NOMINALCONNECT
 
     arguments
         datasetRid (1,1) string
     end
 
+    results = struct( ...
+        'DatasetRid',      datasetRid, ...
+        'DatasetName',     "", ...
+        'SineChannel',     "", ...
+        'SineTimestamps',  int64.empty(0, 1), ...
+        'SineValues',      [], ...
+        'EngineChannels',  strings(1, 0), ...
+        'BlockTimestamps', int64.empty(0, 1), ...
+        'EngineSamples',   []);
+
     % 1 ---------------------------------------------------------- client
-    client = connect();
+    client = nominalconnect();
     fprintf('  %s\n', client.BaseUrl);
 
     % 2 ----------------------------------------------------- open stream
     dataset = client.datasetByRid(datasetRid);
+    results.DatasetName = dataset.Name;
     fprintf('Dataset: %s\n', dataset.Name);
 
     stream = dataset.stream();
@@ -50,6 +74,10 @@ function streamdemo(datasetRid)
 
     stream.push(sineChannel, sineTimestamps, sineValues);
     fprintf('Pushed 100 points to %s\n', sineChannel.Name);
+
+    results.SineChannel = sineChannel.Name;
+    results.SineTimestamps = sineTimestamps;
+    results.SineValues = sineValues;
 
     % 5 ------------------------------------------------- three channels
     %
@@ -88,6 +116,12 @@ function streamdemo(datasetRid)
     fprintf('Pushed %d x %d block via matrix push\n', ...
             blockRowCount, numel(engineChannels));
 
+    % Captured before teardown: the channel objects are released below, so
+    % their names have to be read while they are still live.
+    results.EngineChannels = arrayfun(@(c) c.Name, engineChannels);
+    results.BlockTimestamps = blockTimestamps;
+    results.EngineSamples = engineSamples;
+
     % 7 ------------------------------------------------------- teardown
     %
     % Order matters. Everything here is released automatically when it goes
@@ -105,4 +139,7 @@ function streamdemo(datasetRid)
 
     fprintf('\nDone. Points may take a moment to appear — the stream\n');
     fprintf('batches on a 100 ms delay, and ingest is not instant.\n');
+
+    nominalpublish(results, "nominalStream");
+    fprintf('  e.g. plot(nominalStream.BlockTimestamps, nominalStream.EngineSamples)\n');
 end

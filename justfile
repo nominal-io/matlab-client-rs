@@ -75,10 +75,19 @@ mex-test-win64: mex-test
 test:
     cargo test --workspace
 
-# Run clippy linter
-lint:
+# Lint everything: Rust and MATLAB
+lint: lint-rust lint-matlab
+
+# Formatter and clippy. Separate from lint-matlab because it is fast enough to
+# run constantly, where starting MATLAB is not.
+lint-rust:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
+
+# MATLAB's static analyser — the counterpart to clippy for the other half.
+# Catches syntax errors, unset outputs, and names shadowing builtins.
+lint-matlab:
+    "{{matlab}}" -batch "run('tools/lintmatlab.m')"
 
 # Format code
 fmt:
@@ -116,6 +125,8 @@ help:
     echo "  just mex-test          - Run the MATLAB smoke test"
     echo "  just native-libs       - Print the system libraries the MEX link needs"
     echo "  just test              - Run tests"
-    echo "  just lint              - Run formatter + clippy"
+    echo "  just lint              - Lint Rust and MATLAB"
+    echo "  just lint-rust         - Just fmt + clippy (fast)"
+    echo "  just lint-matlab       - Just MATLAB checkcode"
     echo "  just fmt               - Format code"
     echo "  just clean             - Clean build artifacts"

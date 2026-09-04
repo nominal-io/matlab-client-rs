@@ -1,4 +1,4 @@
-function eventdemo(assetName)
+function results = eventdemo(assetName)
 %EVENTDEMO  Exercise event creation and accessors.
 %
 %   eventdemo                    % throwaway asset
@@ -11,13 +11,13 @@ function eventdemo(assetName)
 %   events whose time falls inside its window; there is no separate link to
 %   make. So to see these on a run, create a run covering the same period.
 %
-%   See also NOMINAL.EVENT, ASSETDEMO, RUNDEMO, CONNECT
+%   See also NOMINAL.EVENT, ASSETDEMO, RUNDEMO, NOMINALCONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    client = connect();
+    client = nominalconnect();
     asset = client.getOrCreateAsset(assetName);
     fprintf('Asset %s\n  %s\n', asset.Name, asset.Rid);
 
@@ -65,6 +65,20 @@ function eventdemo(assetName)
         describe(otherEvents(typeIndex));
     end
 
+    % --- results ------------------------------------------------------
+    %
+    % One row per event, read while the handles are still live. There is no
+    % list-events endpoint in this client, so this table is the only record of
+    % what was created — worth keeping rather than reconstructing from the RIDs.
+    allEvents = [ignitionEvent, overspeedEvent, otherEvents];
+    results = struct('Events', table( ...
+        arrayfun(@(e) e.Rid, allEvents)', ...
+        arrayfun(@(e) e.Name, allEvents)', ...
+        arrayfun(@(e) e.Type, allEvents)', ...
+        arrayfun(@(e) e.Timestamp, allEvents)', ...
+        arrayfun(@(e) e.Duration, allEvents)', ...
+        VariableNames=["Rid" "Name" "Type" "Timestamp" "Duration"]));
+
     % --- teardown -----------------------------------------------------
     %
     % Releasing an event handle does not delete the event in Nominal; it only
@@ -74,8 +88,10 @@ function eventdemo(assetName)
     delete(ignitionEvent);
     delete(asset);
     delete(client);
+
     fprintf('Done. Events are visible on the asset, and on any run whose\n');
     fprintf('window covers them.\n');
+    nominalpublish(results, "nominalEvents");
 end
 
 function describe(event)

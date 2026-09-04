@@ -330,3 +330,80 @@ pub extern "C" fn nominal_dataset_name(
         set_string(out_string, dataset.name(), error_out)
     })
 }
+
+// The three getters below mirror their asset equivalents. They exist because
+// `nominal_dataset_update_commit` accepts a description, labels and properties:
+// a resource that can have a field set but not read back is a gap, not a
+// design.
+
+/// Description of a dataset, or the empty string if it has none.
+#[no_mangle]
+pub extern "C" fn nominal_dataset_description(
+    handle: DatasetHandle,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let dataset = dataset_or_fail(handle, error_out)?;
+        set_string(out_string, dataset.description().unwrap_or(""), error_out)
+    })
+}
+
+/// Number of labels on a dataset.
+#[no_mangle]
+pub extern "C" fn nominal_dataset_label_count(
+    handle: DatasetHandle,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_count, error_out, "out_count")?;
+        let dataset = dataset_or_fail(handle, error_out)?;
+        unsafe { *out_count = dataset.labels().len() as u32 };
+        Ok(())
+    })
+}
+
+/// Label at `index`, counting from zero.
+#[no_mangle]
+pub extern "C" fn nominal_dataset_label_at(
+    handle: DatasetHandle,
+    index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let dataset = dataset_or_fail(handle, error_out)?;
+        let labels = dataset.labels();
+        let label = labels.get(index as usize).ok_or_else(|| {
+            fail(
+                error_out,
+                ErrorCode::InvalidParameter,
+                format!("label index {index} out of range ({} labels)", labels.len()),
+            )
+        })?;
+        set_string(out_string, label.as_str(), error_out)
+    })
+}
+
+/// Value of a property, or an error if the dataset has no such key.
+#[no_mangle]
+pub extern "C" fn nominal_dataset_property(
+    handle: DatasetHandle,
+    key: *const c_char,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let dataset = dataset_or_fail(handle, error_out)?;
+        let key = unsafe { c_str_to_string(key, "key", error_out)? };
+        let value = dataset.properties().get(&key).ok_or_else(|| {
+            fail(
+                error_out,
+                ErrorCode::InvalidParameter,
+                format!("dataset has no property {key:?}"),
+            )
+        })?;
+        set_string(out_string, value.as_str(), error_out)
+    })
+}

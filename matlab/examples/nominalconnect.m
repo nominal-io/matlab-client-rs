@@ -1,5 +1,9 @@
-function client = connect()
-%CONNECT  Authenticate the way every demo in this folder does.
+function client = nominalconnect()
+%NOMINALCONNECT  Authenticate the way every demo in this folder does.
+%
+%   Prefixed rather than just "connect": these example files land on the path
+%   whenever this folder is added to it, and a bare `connect` is a name a user
+%   or another toolbox is likely to want for themselves.
 %
 %   Credentials come from the profile stored on disk — the same
 %   ~/.config/nominal/config.yml that the `nom` CLI and the Python client

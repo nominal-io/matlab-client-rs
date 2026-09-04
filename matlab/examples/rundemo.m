@@ -1,4 +1,4 @@
-function rundemo(assetName)
+function results = rundemo(assetName)
 %RUNDEMO  Exercise every run operation.
 %
 %   rundemo                      % throwaway asset
@@ -10,13 +10,13 @@ function rundemo(assetName)
 %   Covers: create with an explicit start, get by RID, attach a dataset,
 %   update including times, all accessors, and finish.
 %
-%   See also NOMINAL.RUN, ASSETDEMO, EVENTDEMO, CONNECT
+%   See also NOMINAL.RUN, ASSETDEMO, EVENTDEMO, NOMINALCONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    client = connect();
+    client = nominalconnect();
     asset = client.getOrCreateAsset(assetName);
     dataset = asset.getOrCreateDataset("telemetry", "tlm");
     fprintf('Asset %s / dataset %s\n', asset.Name, dataset.Name);
@@ -46,7 +46,14 @@ function rundemo(assetName)
 
     % An open run has no end. EndTime reports NaT rather than erroring or
     % returning 0, which would be a real instant.
-    fprintf('  end    %s (open)\n', string(openRun.EndTime));
+    %
+    % Tested rather than printed: string(NaT) is a <missing> element, and
+    % fprintf refuses to format one.
+    if isnat(openRun.EndTime)
+        fprintf('  end    (none yet - the run is open)\n');
+    else
+        fprintf('  end    %s\n', string(openRun.EndTime));
+    end
 
     % --- fetch by RID -------------------------------------------------
     sameRunByRid = client.runByRid(openRun.Rid);
@@ -56,9 +63,20 @@ function rundemo(assetName)
     % --- attach the dataset -------------------------------------------
     %
     % refName addresses the dataset within the run and must be unique among
-    % its data sources.
-    runWithDataset = openRun.addDataset("tlm", dataset);
-    fprintf('  dataset attached\n');
+    % its data sources — and a run created on an asset already carries that
+    % asset's. This dataset went onto the asset as "tlm" a few lines up, so
+    % reusing "tlm" here is a conflict (Scout:RefNamesAlreadyUsed) rather than
+    % a re-attach. The run gets a reference name of its own.
+    %
+    % Wrapped because that conflict is a 409, not a no-op: a demo should
+    % survive a deployment where the name is already spoken for.
+    runWithDataset = openRun;
+    try
+        runWithDataset = openRun.addDataset("run-tlm", dataset);
+        fprintf('  dataset attached to the run as "run-tlm"\n');
+    catch attachError
+        fprintf('  dataset not attached: %s\n', attachError.message);
+    end
 
     % --- update -------------------------------------------------------
     %
@@ -80,6 +98,21 @@ function rundemo(assetName)
     fprintf('  end    %s (closed)\n', string(finishedRun.EndTime));
     fprintf('  span   %s\n', string(finishedRun.EndTime - finishedRun.StartTime));
 
+    % --- results ------------------------------------------------------
+    %
+    % From the last link in the chain, which is the only one that reflects
+    % every change made along the way.
+    results = struct( ...
+        'Rid',         finishedRun.Rid, ...
+        'Name',        finishedRun.Name, ...
+        'Number',      finishedRun.Number, ...
+        'Url',         finishedRun.Url, ...
+        'Description', finishedRun.Description, ...
+        'Labels',      finishedRun.Labels, ...
+        'StartTime',   finishedRun.StartTime, ...
+        'EndTime',     finishedRun.EndTime, ...
+        'DatasetRid',  dataset.Rid);
+
     % --- teardown -----------------------------------------------------
     %
     % Every link in the chain is its own handle and needs its own release.
@@ -91,5 +124,6 @@ function rundemo(assetName)
     delete(dataset);
     delete(asset);
     delete(client);
-    fprintf('Done.\n');
+
+    nominalpublish(results, "nominalRun");
 end

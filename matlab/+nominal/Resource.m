@@ -82,17 +82,28 @@ classdef (Abstract) Resource < handle
     methods (Static, Access = private)
         function text = brief(value)
             % One line per property, whatever the type underneath.
-            if isstring(value) || ischar(value)
-                text = strjoin(cellstr(string(value)), ', ');
+            if isstring(value) || ischar(value) || isdatetime(value) ...
+                    || isnumeric(value) || islogical(value)
+                text = string(value(:)');
+
+                % An open run's EndTime is NaT, which becomes a <missing>
+                % string element — and cellstr will not convert one, so
+                % displaying such a run would fail here rather than in the
+                % getter the try/catch above is guarding.
+                if isdatetime(value)
+                    text(ismissing(text)) = "NaT";
+                else
+                    text(ismissing(text)) = "<missing>";
+                end
+
+                text = strjoin(cellstr(text), ', ');
                 if strlength(text) > 60
                     text = extractBefore(text, 58) + "...";
                 end
-            elseif isdatetime(value) || isnumeric(value) || islogical(value)
-                text = strjoin(cellstr(string(value(:)')), ', ');
             else
                 text = sprintf('[%s]', class(value));
             end
-            if isempty(char(text))
+            if strlength(text) == 0
                 text = '""';
             end
         end

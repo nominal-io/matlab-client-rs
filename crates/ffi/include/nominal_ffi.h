@@ -681,6 +681,36 @@ int32_t nominal_dataset_rid(DatasetHandle handle, StringHandle out_string, Error
 int32_t nominal_dataset_name(DatasetHandle handle, StringHandle out_string, ErrorHandle *error_out);
 
 /**
+ * Description of a dataset, or the empty string if it has none.
+ */
+int32_t nominal_dataset_description(DatasetHandle handle,
+                                    StringHandle out_string,
+                                    ErrorHandle *error_out);
+
+/**
+ * Number of labels on a dataset.
+ */
+int32_t nominal_dataset_label_count(DatasetHandle handle,
+                                    uint32_t *out_count,
+                                    ErrorHandle *error_out);
+
+/**
+ * Label at `index`, counting from zero.
+ */
+int32_t nominal_dataset_label_at(DatasetHandle handle,
+                                 uint32_t index,
+                                 StringHandle out_string,
+                                 ErrorHandle *error_out);
+
+/**
+ * Value of a property, or an error if the dataset has no such key.
+ */
+int32_t nominal_dataset_property(DatasetHandle handle,
+                                 const char *key,
+                                 StringHandle out_string,
+                                 ErrorHandle *error_out);
+
+/**
  * Create an event on one or more assets.
  *
  * `asset_rids` is an array of `asset_count` NUL-terminated RID strings. At

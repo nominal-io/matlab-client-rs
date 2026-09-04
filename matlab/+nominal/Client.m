@@ -70,15 +70,18 @@ classdef Client < nominal.Resource
             %
             %   Variables: Name, Rid, Description. Ordered by name.
             %
-            %   With no argument, lists everything. With one, keeps only assets
-            %   whose name contains it — a case-insensitive substring match, not
-            %   a pattern.
+            %   With one argument, keeps only assets whose name contains it —
+            %   a case-insensitive substring match, not a pattern. This is how
+            %   you find a RID when all you have is a name:
             %
-            %   This is where you start when you have no RID:
-            %
-            %       c.assets()
             %       c.assets("engine")
             %       a = c.assetByRid(c.assets("engine").Rid(1));
+            %
+            %   With no argument it fetches EVERY asset in the workspace, in
+            %   one unpaginated call. That is tens of thousands of rows on a
+            %   real deployment and takes correspondingly long — there is no
+            %   limit or page size to pass, so filter unless you genuinely
+            %   want the lot.
             %
             %   See also NOMINAL.CLIENT/DATASETS
             arguments
@@ -100,8 +103,11 @@ classdef Client < nominal.Resource
             %   Variables: Name, Rid. Ordered by name. With one argument, keeps
             %   only datasets whose name contains it.
             %
-            %       c.datasets()
             %       ds = c.datasetByRid(c.datasets("telemetry").Rid(1));
+            %
+            %   With no argument it fetches EVERY dataset in the workspace, in
+            %   one unpaginated call — slow on a real deployment, and there is
+            %   no limit to pass. Filter unless you want all of them.
             %
             %   To see what is inside one, use its channels:
             %

@@ -106,10 +106,10 @@ so you rarely construct anything directly.
 | Connect from a stored profile | `nominal.Client.fromProfile()` |
 | Connect from a token | `nominal.Client.fromToken(token)` |
 | Who am I (also a credential check) | `c.whoAmI()` |
-| List all assets | `c.assets()` |
 | Search assets by name | `c.assets("engine")` |
-| List all datasets | `c.datasets()` |
 | Search datasets by name | `c.datasets("telemetry")` |
+| List *every* asset — slow, unpaginated | `c.assets()` |
+| List *every* dataset — slow, unpaginated | `c.datasets()` |
 | Get an asset by RID | `c.assetByRid(rid)` |
 | Get an asset by name, creating if absent | `c.getOrCreateAsset(name)` |
 | Get a dataset by RID | `c.datasetByRid(rid)` |
@@ -282,15 +282,19 @@ c.createEvent(a.Rid, "overspeed", Type="error", ...
 
 ### Getting data out
 
-**I do not know the RID of anything.** Start with a listing; both come back as
+**I do not know the RID of anything.** Search by name; both come back as
 tables.
 
 ```matlab
-c.assets()                                 % everything
 c.assets("engine")                         % name contains "engine"
 ds = c.datasetByRid(c.datasets("telemetry").Rid(1));
 ds.channels()                              % what is inside it
 ```
+
+Pass a filter. `c.assets()` and `c.datasets()` with no argument fetch every
+asset or dataset in the workspace in a single unpaginated call — tens of
+thousands of rows on a real deployment, and there is no limit or page size to
+pass.
 
 **I want a channel in my workspace to work on.** `fetch` gives a timetable, so
 it plots and resamples with no conversion.
@@ -487,6 +491,11 @@ reports an unresolved symbol.
   object you get at creation. The C ABI has no list endpoint to expose.
 - **Video and connection data sources** appear in `a.datasources()` with the
   right `Type`, but there is nothing to do with one from here.
+- **Listings cannot be limited or paged.** `nominal_asset_list` and
+  `nominal_dataset_list` take a client and nothing else, so `c.assets()` and
+  `c.datasets()` are all-or-nothing — on a large workspace that is tens of
+  thousands of rows and several seconds. Search by name instead. Adding a
+  limit means a parameter on the C ABI, not just a MATLAB change.
 - **`mxCreateString` and non-ASCII text.** Strings going *in* are converted
   explicitly with `mxArrayToUTF8String`; strings coming *back* go through
   `mxCreateString`, which may interpret bytes in the platform codepage rather

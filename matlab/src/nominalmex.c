@@ -1738,6 +1738,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("dataset_free"))           { do_free(nominal_dataset_free, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("dataset_rid"))            { do_getter_string(nominal_dataset_rid, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("dataset_name"))           { do_getter_string(nominal_dataset_name, nlhs, plhs, nrhs, prhs, command); return; }
+    if (IS("dataset_description"))    { do_getter_string(nominal_dataset_description, nlhs, plhs, nrhs, prhs, command); return; }
+    if (IS("dataset_label_count"))    { do_getter_u32(nominal_dataset_label_count, nlhs, plhs, nrhs, prhs, command); return; }
+    if (IS("dataset_label_at"))       { cmd_label_at(nominal_dataset_label_at, plhs, nrhs, prhs, command); return; }
+    if (IS("dataset_property"))       { cmd_property(nominal_dataset_property, plhs, nrhs, prhs, command); return; }
 
     /* --- run --- */
     if (IS("run_create"))         { cmd_run_create(plhs, nrhs, prhs); return; }

@@ -1,4 +1,4 @@
-function assetdemo(assetName)
+function results = assetdemo(assetName)
 %ASSETDEMO  Exercise every asset operation.
 %
 %   assetdemo                    % uses a timestamped throwaway name
@@ -11,13 +11,13 @@ function assetdemo(assetName)
 %   Covers: get-or-create, get by RID, metadata update, all accessors, and
 %   listing attached data sources.
 %
-%   See also NOMINAL.ASSET, DATASETDEMO, RUNDEMO, EVENTDEMO, CONNECT
+%   See also NOMINAL.ASSET, DATASETDEMO, RUNDEMO, EVENTDEMO, NOMINALCONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    client = connect();
+    client = nominalconnect();
 
     % --- get or create ------------------------------------------------
     %
@@ -70,10 +70,23 @@ function assetdemo(assetName)
         disp(dataSources);
     end
 
+    % --- results ------------------------------------------------------
+    %
+    % Read off the updated handle while it is still live: the objects are
+    % released below, and a released one reports nothing.
+    results = struct( ...
+        'Rid',         updatedAsset.Rid, ...
+        'Name',        updatedAsset.Name, ...
+        'Description', updatedAsset.Description, ...
+        'Url',         updatedAsset.Url, ...
+        'Labels',      updatedAsset.Labels, ...
+        'DataSources', dataSources);
+
     % --- teardown -----------------------------------------------------
     delete(updatedAsset);
     delete(sameAssetByRid);
     delete(asset);
     delete(client);
-    fprintf('Done.\n');
+
+    nominalpublish(results, "nominalAsset");
 end

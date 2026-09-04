@@ -129,10 +129,16 @@ double-clicking.
 
 Three things to get right:
 
-**Keep `examples/` off the installed path.** It exports `connect.m` — a generic
-name very likely to collide with a user's own code or another toolbox. Either
-exclude `examples/` and `tests/` from `ToolboxMatlabPath`, or move the helper
-into the package as `nominal.connect` first.
+**Decide whether `examples/` goes on the installed path.** Every file in it
+becomes a global function name for anyone who has it pathed, which is why the
+shared helpers are `nominalconnect` and `nominalpublish` rather than `connect`
+and `publish` — the latter is a MATLAB builtin. The demo names
+(`streamdemo`, `uploaddemo`, …) are distinctive enough to ship, but excluding
+`examples/` and `tests/` from `ToolboxMatlabPath` is the tidier default.
+
+The same reasoning applies to `matlab/build.m`: it is on the path as a bare
+`build` for anyone who adds `matlab/`. Worth moving to `tools/` alongside
+`lintmatlab.m` if that ever bites.
 
 **A toolbox can carry every platform at once.** Put `nominalmex.mexw64`,
 `.mexa64` and `.mexmaci64` side by side in `+nominal/private/` and MATLAB picks
