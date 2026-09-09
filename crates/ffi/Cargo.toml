@@ -43,7 +43,16 @@ futures = "0.3"
 # 0.12 matches what `nominal` uses. It does not unify the tree: `nominal-streaming`
 # pulls reqwest 0.13, so two versions compile either way, and picking 0.13 here
 # would not change that. Follow whichever version `nominal` moves to.
-reqwest = { version = "0.12", features = ["rustls-tls-native-roots"] }
+#
+# `default-features = false` is load-bearing, not tidiness. reqwest's default
+# feature set includes `default-tls`, which pulls native-tls — and features
+# unify, so leaving defaults on re-enables it for the whole graph even though
+# `nominal` carefully turns it off. On Windows native-tls binds to schannel and
+# nobody notices; on Linux it binds to OpenSSL, and the build dies in
+# openssl-sys looking for a system `openssl.pc`. TLS here is rustls throughout.
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls-native-roots",
+] }
 serde_json = "1"
 # SQL results come back as an Arrow IPC stream whose buffers are ZSTD-compressed
 # server-side with no opt-out, hence `ipc_compression`. This is the only genuinely

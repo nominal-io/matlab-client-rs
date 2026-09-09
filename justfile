@@ -1,10 +1,35 @@
 #!/usr/bin/env just --justfile
 
-# MATLAB is often not on PATH. Override with the full path to matlab.exe.
-# Recipes run through bash, so use forward slashes — backslashes are eaten as
-# escapes before the path ever reaches the executable:
-#   just matlab='C:/Program Files/MATLAB/R2026a/bin/matlab.exe' mex-win64
-matlab := env_var_or_default("MATLAB", "matlab")
+# MATLAB is often not on PATH. Two environment variables are read, and an
+# explicit `just matlab=...` still overrides both:
+#
+#   MATLAB_ROOT  the installation directory — what $MATLAB means nearly
+#                everywhere else. The executable is derived from it.
+#                  export MATLAB_ROOT=/usr/local/MATLAB/R2026a
+#   MATLAB_BIN   the executable itself, for an install that does not follow the
+#                usual <root>/bin/matlab layout.
+#                  export MATLAB_BIN='C:/Program Files/MATLAB/R2026a/bin/matlab.exe'
+#
+# Recipes run through bash, so use forward slashes in either — backslashes are
+# eaten as escapes before the path ever reaches the executable.
+#
+# $MATLAB itself is deliberately *not* read. This file used to take it as the
+# path to the executable, which collides with the near-universal convention
+# that $MATLAB is the install root: setting it the conventional way made just
+# try to execute a directory, and the resulting error named neither cause.
+matlab_root := env_var_or_default("MATLAB_ROOT", "")
+matlab_bin := env_var_or_default("MATLAB_BIN", "")
+
+# os() is how a recipe stays one recipe across platforms rather than three.
+matlab_exe := if os() == "windows" { "matlab.exe" } else { "matlab" }
+
+matlab := if matlab_bin != "" {
+    matlab_bin
+} else if matlab_root != "" {
+    matlab_root / "bin" / matlab_exe
+} else {
+    matlab_exe
+}
 
 # mex links macOS gateways with -mmacosx-version-min set to this, so cargo has
 # to build the static library against the same floor. Left to itself cargo
@@ -28,9 +53,10 @@ header:
 # MEX gateway links it in — so every build- recipe here has a matching arm in
 # build.m. Add the two together or not at all.
 #
-# Windows and macOS arm64 have been verified end to end. The Linux recipe
-# builds, but its system-library list in build.m is unconfirmed; run
-# `just native-libs` on that host and reconcile if the MEX link complains.
+# Windows x86-64, macOS arm64 and Linux x86-64 have all been verified end to
+# end, so the system-library lists in build.m are observed rather than guessed.
+# They are still hand maintained: run `just native-libs` on the host and
+# reconcile whenever a MEX link reports an unresolved symbol.
 
 # Build the static library the MEX gateway links in
 build-win64:
@@ -183,10 +209,10 @@ clean:
 # Show help
 help:
     echo "Available targets:"
-    echo "  just mex-win64         - Build the MATLAB gateway (the default)"
+    echo "  just mex-win64         - Build the MATLAB gateway"
     echo "  just mex-win64-fast    - Same, against the no-LTO library build"
     echo "  just mex-macos-arm64   - Gateway on Apple silicon"
-    echo "  just mex-linux-x64     - Gateway on Linux x86_64 (unverified)"
+    echo "  just mex-linux-x64     - Gateway on Linux x86_64"
     echo "  just build-win64       - Just the static library, without the gateway"
     echo "  just package           - Build a Windows .mltbx into dist/"
     echo "  just package-only      - Package existing gateways, build none"

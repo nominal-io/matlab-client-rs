@@ -81,10 +81,10 @@ function platform = platformSettings()
 %
 %       just native-libs
 %
-%   The Windows and macOS lists have been verified against a real link. The
-%   Linux entries are the usual set for this dependency tree and are a starting
-%   point, not a tested configuration; if the link reports an unresolved symbol,
-%   run the command above and reconcile.
+%   All three lists have now been verified against a real link, so none of them
+%   is guesswork. They still have to be maintained by hand, though: if a link
+%   reports an unresolved symbol — most likely after a dependency bump changes
+%   the graph — run the command above on that host and reconcile.
 
     if ispc
         platform.Triple = 'x86_64-pc-windows-msvc';
@@ -129,7 +129,13 @@ function platform = platformSettings()
         platform.Triple = 'x86_64-unknown-linux-gnu';
         platform.LibName = 'libnominal_ffi.a';
         platform.Recipe = 'build-linux-x64';
-        platform.ExtraLibs = {'-ldl', '-lpthread', '-lm', '-lrt'};
+        % Verified against `just native-libs` on Fedora 44 / rustc 1.98.1,
+        % which reports: -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc.
+        % -lc is omitted because the compiler driver links it last anyway;
+        % naming it here only risks disturbing that ordering. -lgcc_s (unwind
+        % tables) and -lutil (forkpty, reached through std::process) were both
+        % missing from the earlier guessed list.
+        platform.ExtraLibs = {'-lgcc_s', '-lutil', '-lrt', '-lpthread', '-lm', '-ldl'};
     end
 end
 

@@ -16,21 +16,54 @@ Once it is built, see [USAGE.md](USAGE.md) for authenticating and using it.
 | [`just`](https://github.com/casey/just) | runs the recipes below |
 | [`cbindgen`](https://github.com/mozilla/cbindgen) | only if you change the Rust FFI surface |
 
-## Building
-
-From the repository root:
+On a minimal Linux image the MathWorks installer needs GUI libraries that are
+not installed by default — its UI is embedded Chromium. Without them `./install`
+exits with status 42 and prints nothing, in silent mode as well as interactive.
+On Fedora:
 
 ```
-just              # same as just mex-win64
+sudo dnf install alsa-lib atk at-spi2-atk at-spi2-core mesa-libgbm \
+                 libglvnd-glx libXcomposite libXdamage libXfixes libXrandr
+```
+
+Nothing in this repository needs OpenSSL — TLS is rustls throughout — so a
+build that fails in `openssl-sys` means a dependency has re-enabled reqwest's
+`default-tls` feature. Fix the feature flags rather than installing OpenSSL.
+
+## Building
+
+From the repository root, run the recipe for your platform — `just` on its own
+lists them:
+
+```
+just mex-win64    # or mex-macos-arm64, or mex-linux-x64
 ```
 
 That builds the Rust static library, then compiles `matlab/src/nominalmex.c`
-against it. If MATLAB is not on `PATH`, point the recipe at it — recipes run
-through bash, so use forward slashes:
+against it.
+
+If MATLAB is not on `PATH`, set `MATLAB_ROOT` to the installation directory and
+the recipes derive the executable from it:
+
+```
+export MATLAB_ROOT='C:/Program Files/MATLAB/R2026a'    # Windows
+export MATLAB_ROOT=/usr/local/MATLAB/R2026a            # Linux
+export MATLAB_ROOT=/Applications/MATLAB_R2026a.app     # macOS
+```
+
+For an install that does not follow the usual `<root>/bin/matlab` layout, set
+`MATLAB_BIN` to the executable itself instead; it takes precedence. Either way
+the recipes run through bash, so use forward slashes — backslashes are eaten as
+escapes before the path reaches the executable. A one-off still works too:
 
 ```
 just matlab='C:/Program Files/MATLAB/R2026a/bin/matlab.exe' mex-win64
 ```
+
+Note that `MATLAB` itself is not read. It used to be, as the path to the
+executable — but nearly everything else in the ecosystem uses `$MATLAB` for the
+installation *root*, and setting it that way made `just` try to execute a
+directory. `MATLAB_ROOT` is that conventional meaning, spelled unambiguously.
 
 Then check it:
 
@@ -52,10 +85,12 @@ Windows x86-64, Apple silicon and Linux x86-64. Intel macOS is not a target —
 `build.m` errors on one rather than building a triple that has never been
 linked.
 
-**Windows and Apple silicon have been verified end to end.** The Linux
-system-library list in `platformSettings()` is the usual set for this
-dependency tree, not a tested configuration. On a new host, get the
-authoritative list and reconcile:
+**All three platforms have been verified end to end** — Windows x86-64, Apple
+silicon and Linux x86-64, each through the static library, the MEX link and the
+offline smoke test. The system-library lists in `platformSettings()` are
+therefore observed rather than guessed. They are still per-host and still hand
+maintained, so on a new host — or after a dependency bump changes the graph —
+get the authoritative list and reconcile:
 
 ```
 just native-libs
