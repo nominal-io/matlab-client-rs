@@ -23,7 +23,7 @@ target
 .claude
 .vscode
 
-# Built MEX gateways. Each is ~35 MB with the Rust library linked in, and git
+# Built MEX gateways. Each is large with the Rust library linked in, and git
 # keeps every version — build them with `just` instead.
 *.mexw64
 *.mexa64

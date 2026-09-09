@@ -6,6 +6,15 @@
 #   just matlab='C:/Program Files/MATLAB/R2026a/bin/matlab.exe' mex-win64
 matlab := env_var_or_default("MATLAB", "matlab")
 
+# mex links macOS gateways with -mmacosx-version-min set to this, so cargo has
+# to build the static library against the same floor. Left to itself cargo
+# targets the host, and the gateway then advertises this version in its
+# LC_BUILD_VERSION while containing objects built against a much newer SDK —
+# it loads fine on the build machine and is undefined anywhere older. Check
+# MACOSX_DEPLOYMENT_TARGET in <MATLAB>/bin/maca64/mexopts/clang_maca64.xml
+# after a MATLAB upgrade; MathWorks moves it between releases.
+macos_target := "13.3"
+
 # Default target: the thing you actually load in MATLAB.
 default: help
 
@@ -19,9 +28,9 @@ header:
 # MEX gateway links it in — so every build- recipe here has a matching arm in
 # build.m. Add the two together or not at all.
 #
-# Only the Windows path has been verified end to end. The macOS and Linux
-# recipes build, but their system-library lists in build.m are unconfirmed;
-# run `just native-libs` on that host and reconcile if the MEX link complains.
+# Windows and macOS arm64 have been verified end to end. The Linux recipe
+# builds, but its system-library list in build.m is unconfirmed; run
+# `just native-libs` on that host and reconcile if the MEX link complains.
 
 # Build the static library the MEX gateway links in
 build-win64:
@@ -33,11 +42,11 @@ build-win64-fast:
 
 # macOS, Apple silicon
 build-macos-arm64:
-    cargo build --release --target aarch64-apple-darwin -p nominal-ffi
+    MACOSX_DEPLOYMENT_TARGET={{macos_target}} cargo build --release --target aarch64-apple-darwin -p nominal-ffi
 
 # Same, without LTO
 build-macos-arm64-fast:
-    cargo build --profile fast --target aarch64-apple-darwin -p nominal-ffi
+    MACOSX_DEPLOYMENT_TARGET={{macos_target}} cargo build --profile fast --target aarch64-apple-darwin -p nominal-ffi
 
 # Linux x86_64
 build-linux-x64:
@@ -111,6 +120,50 @@ fmt:
     cargo fmt --all
 
 
+# macOS only. MATLAB's mex config gates on a preference that only full Xcode
+# ever writes, so on a Command Line Tools-only host it reports
+#
+#     Xcode is installed, but its license has not been accepted.
+#     Run Xcode and accept its license agreement.
+#
+# when the truth is that Xcode is not installed at all — there is nothing to
+# launch, and `xcodebuild -license accept` ships with Xcode too, so that fails
+# the same way. Every other probe in MATLAB's config (xcrun, the SDK path and
+# version, clang) is already satisfied by CLT alone; this preference is the only
+# gate that fails. See XCODE_AGREED_VERSION in
+# <MATLAB>/bin/maca64/mexopts/clang_maca64.xml.
+#
+# The value only has to parse as a version above 4.3 to pass that check. It is
+# written to the per-user domain, which MATLAB reads before the system one, so
+# no sudo is needed and nothing outside your account changes. Running this
+# asserts you have read and agreed to the agreement it prints — read it first.
+#
+# Note this leaves you on a toolchain MathWorks does not test against, since
+# they document full Xcode as the macOS requirement. Nothing in this build
+# needs Xcode proper, but a tool that shells out to xcodebuild still will.
+
+# Satisfy MATLAB's Xcode-license check on a Command Line Tools-only macOS host
+accept-xcode-license:
+    @echo "This records agreement to the Xcode and Apple SDKs Agreement:"
+    @echo "    https://www.apple.com/legal/sla/docs/xcode.pdf"
+    @echo ""
+    defaults write com.apple.dt.Xcode IDEXcodeVersionForAgreedToGMLicense 26.0
+    @echo "Recorded. Verify with: just mex-setup"
+
+# Undo accept-xcode-license
+revoke-xcode-accept:
+    @if defaults read com.apple.dt.Xcode IDEXcodeVersionForAgreedToGMLicense >/dev/null 2>&1; then \
+        defaults delete com.apple.dt.Xcode IDEXcodeVersionForAgreedToGMLicense; \
+        echo "Removed. mex will report no supported compiler until you accept again."; \
+    else \
+        echo "Nothing to remove — not set in your user domain."; \
+    fi
+
+# Report which compiler mex is configured to use
+mex-setup:
+    "{{matlab}}" -batch "mex -setup C"
+
+
 # A Rust staticlib does not record its own dependencies, so build.m has to name
 # them. Run this on the host you are building for and reconcile the result
 # against platformSettings() in build.m — after a dependency bump, or whenever
@@ -132,13 +185,16 @@ help:
     echo "Available targets:"
     echo "  just mex-win64         - Build the MATLAB gateway (the default)"
     echo "  just mex-win64-fast    - Same, against the no-LTO library build"
-    echo "  just mex-macos-arm64   - Gateway on Apple silicon (unverified)"
+    echo "  just mex-macos-arm64   - Gateway on Apple silicon"
     echo "  just mex-linux-x64     - Gateway on Linux x86_64 (unverified)"
     echo "  just build-win64       - Just the static library, without the gateway"
     echo "  just package           - Build a Windows .mltbx into dist/"
     echo "  just package-only      - Package existing gateways, build none"
     echo "  just mex-test          - Run the MATLAB smoke test"
     echo "  just native-libs       - Print the system libraries the MEX link needs"
+    echo "  just mex-setup         - Report which compiler mex is configured to use"
+    echo "  just accept-xcode-license - Clear MATLAB's Xcode-license check on macOS"
+    echo "                              (undo with just revoke-xcode-accept)"
     echo "  just test              - Run tests"
     echo "  just lint              - Lint Rust and MATLAB"
     echo "  just lint-rust         - Just fmt + clippy (fast)"

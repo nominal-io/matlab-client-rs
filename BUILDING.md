@@ -52,8 +52,8 @@ Windows x86-64, Apple silicon and Linux x86-64. Intel macOS is not a target —
 `build.m` errors on one rather than building a triple that has never been
 linked.
 
-**Only the Windows path has been verified end to end.** The macOS and Linux
-system-library lists in `platformSettings()` are the usual set for this
+**Windows and Apple silicon have been verified end to end.** The Linux
+system-library list in `platformSettings()` is the usual set for this
 dependency tree, not a tested configuration. On a new host, get the
 authoritative list and reconcile:
 
@@ -173,7 +173,7 @@ explained in [tools/package.m](tools/package.m).
 ## Build artifacts and version control
 
 `nominalmex.mexw64` and its siblings are gitignored, as is `dist/`. Static
-linking took the gateway from 44 KB to roughly 35 MB, and git keeps every
-version, so committing a rebuild each time would grow the repository fast.
+linking makes the gateway large, and git keeps every version, so committing a
+rebuild each time would grow the repository fast.
 A fresh clone therefore has no gateway until you run `just` — and releases
 carry the `.mltbx` rather than the loose binary.

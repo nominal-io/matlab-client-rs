@@ -81,7 +81,7 @@ function platform = platformSettings()
 %
 %       just native-libs
 %
-%   Only the Windows list has been verified against a real link. The macOS and
+%   The Windows and macOS lists have been verified against a real link. The
 %   Linux entries are the usual set for this dependency tree and are a starting
 %   point, not a tested configuration; if the link reports an unresolved symbol,
 %   run the command above and reconcile.
@@ -114,10 +114,15 @@ function platform = platformSettings()
         platform.LibName = 'libnominal_ffi.a';
 
         % Frameworks cannot be passed as -l; they go through the linker flags.
-        % Security and CoreFoundation are what rustls' native-roots support
-        % reaches for when it reads the system trust store.
+        % This is the list `just native-libs` prints, minus -lSystem/-lc/-lm,
+        % which clang links on its own:
+        %   Security, CoreFoundation  rustls reading the system trust store
+        %   SystemConfiguration      the system_configuration crate, and
+        %                            hyper-util's system proxy matcher
+        %   iconv                    pulled in transitively by CoreFoundation
         platform.ExtraLibs = { ...
-            'LDFLAGS=$LDFLAGS -framework Security -framework CoreFoundation', ...
+            ['LDFLAGS=$LDFLAGS -framework Security -framework CoreFoundation' ...
+             ' -framework SystemConfiguration -liconv'], ...
             '-lc++'};
 
     else
