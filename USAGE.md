@@ -156,11 +156,18 @@ so you rarely construct anything directly.
 | Identity and metadata | `a.Rid`, `a.Name`, `a.Description`, `a.Url`, `a.Labels` |
 | Read one property | `a.property("phase")` |
 | Everything attached to it | `a.datasources()` |
+| …re-read from the server | `a.datasources(Refresh=true)` |
 | A dataset already on it, by name | `a.getAttachedDataset(name)` |
 | Ensure it has a dataset of that name | `a.getOrCreateDataset(name, refName)` |
 | …without adopting an existing one | `a.getOrCreateDataset(name, refName, AttachExisting=false)` |
 | Start a run on it | `a.run(name)`, `a.run(name, startTime)` |
 | Change metadata | `a.update(Name=…, Description=…, Labels=…, Properties=…)` |
+
+An asset handle is a **snapshot**, taken when it was fetched — which is why
+`update()` returns a new object rather than changing the one you have. That
+applies to `datasources()` too, so a dataset attached since the fetch is not
+listed until you pass `Refresh=true`, which costs one request and leaves the
+handle itself untouched.
 
 A bare name is not unique in Nominal, so `getOrCreateDataset` resolves in three
 steps and prints which one it took: a dataset of that name already on the asset

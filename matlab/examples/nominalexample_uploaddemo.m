@@ -213,12 +213,16 @@ function results = nominalexample_uploaddemo(assetName)
 
     % 5 -------------------------------------------------------- teardown
     %
-    % Both datasets hang off the asset, so a.datasources() lists them and the
-    % asset page in Nominal shows both.
+    % Both datasets hang off the asset, so this lists them and the asset page
+    % in Nominal shows both.
+    %
+    % Refresh=true is required here, not decorative: this asset handle was
+    % fetched before either dataset existed, and a handle is a snapshot. The
+    % default read would list only what was attached when it was fetched.
     fprintf('\n--- Result ---\n');
-    fprintf('asset %s has %d data source(s):\n', ...
-            asset.Name, height(asset.datasources()));
-    disp(asset.datasources());
+    attached = asset.datasources(Refresh=true);
+    fprintf('asset %s has %d data source(s):\n', asset.Name, height(attached));
+    disp(attached);
 
     delete(ingestJob);
     delete(ingestTarget);
