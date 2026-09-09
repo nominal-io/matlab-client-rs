@@ -166,10 +166,9 @@ function results = nominalexample_uploaddemo(assetName)
     %
     % The dataset is created under the asset *first*, then handed to ingest as
     % Dataset=. Passing NewDataset= instead would work, but the dataset it
-    % creates is not attached to any asset — and this client has no way to
-    % attach one afterwards, since the C ABI exposes no add-datasource call.
-    % Creating it under the asset is the only route to a dataset that shows up
-    % in asset.datasources().
+    % creates is not attached to any asset, and the only way to attach one
+    % afterwards is to ask for it by name — there is no attach-by-RID call.
+    % Creating it under the asset keeps that unambiguous.
     fprintf('--- Ingest a CSV ---\n');
     csvFilePath = fullfile(tempdir, "nominal-uploaddemo.csv");
     results.CsvFile = string(csvFilePath);

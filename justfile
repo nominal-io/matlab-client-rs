@@ -71,10 +71,21 @@ mex-linux-x64: build-linux-x64 header
     "{{matlab}}" -batch "cd matlab; build"
 
 # Build an installable .mltbx. Depends on the release gateway so a packaged
-# toolbox is never a -fast build; on macOS or Linux, build that host's gateway
-# first and the package picks it up. tools/package.m holds the packaging
+# toolbox is never a -fast build. tools/package.m holds the packaging
 # decisions — which paths are exposed, which platforms are claimed.
+#
+# Windows only, because of that dependency. To package on another host, or to
+# ship one .mltbx covering several platforms, use package-only.
 package: mex-win64
+    "{{matlab}}" -batch "run('tools/package.m')"
+
+# Package whatever gateways are already in +nominal/private/, building none.
+#
+# This is the multi-platform path: build on each host, collect the .mex* files
+# into one checkout, then run this there. package.m claims only the platforms
+# it finds a binary for, so nothing is promised that is not in the box.
+# See PACKAGING.md.
+package-only:
     "{{matlab}}" -batch "run('tools/package.m')"
 
 # Exercise the MATLAB layer (no network required). Host-independent.
@@ -132,7 +143,8 @@ help:
     echo "  just mex-macos-x64     - Gateway on Intel macOS (unverified)"
     echo "  just mex-linux-x64     - Gateway on Linux x86_64 (unverified)"
     echo "  just build-win64       - Just the static library, without the gateway"
-    echo "  just package           - Build an installable .mltbx into dist/"
+    echo "  just package           - Build a Windows .mltbx into dist/"
+    echo "  just package-only      - Package existing gateways, build none"
     echo "  just mex-test          - Run the MATLAB smoke test"
     echo "  just native-libs       - Print the system libraries the MEX link needs"
     echo "  just test              - Run tests"

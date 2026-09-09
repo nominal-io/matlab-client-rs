@@ -156,11 +156,11 @@ double-clicking.
 
 The version comes from the workspace `Cargo.toml`, so bump it there. The
 packaged platforms come from which MEX binaries are sitting in
-`+nominal/private/` at the time — a toolbox can carry all of them at once
-(`nominalmex.mexw64`, `.mexa64`, `.mexmaci64` side by side; MATLAB picks by
-`mexext`), so to ship a multi-platform build, collect each host's gateway into
-that folder before packaging. `just package` only builds the Windows one
-itself.
+`+nominal/private/` at the time.
+
+One `.mltbx` can carry every platform at once — MATLAB picks by `mexext` — but
+`just package` builds only the Windows gateway. For a multi-platform build, see
+[PACKAGING.md](PACKAGING.md), which uses `just package-only`.
 
 Everything else the packager decides — the fixed identifier UUID, which folders
 land on the installed path, the `MinimumMatlabRelease` floor — is set and

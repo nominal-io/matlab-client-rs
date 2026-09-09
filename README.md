@@ -19,8 +19,10 @@ tt = ds.fetch("rpm", t0, t1);              % a timetable straight back
 
 | | |
 |---|---|
+| **[HELLOWORLD.md](HELLOWORLD.md)** | Handed a `.mltbx`? Install it, connect, run something — no repo needed |
 | **[USAGE.md](USAGE.md)** | Quick start, authenticating, every object and method, and the common workflows |
 | **[BUILDING.md](BUILDING.md)** | Prerequisites, building the gateway, installing it, packaging a `.mltbx` |
+| **[PACKAGING.md](PACKAGING.md)** | Building on Windows, macOS and Linux and shipping one multi-platform `.mltbx` |
 | **[matlab/examples/](matlab/examples/)** | Runnable demos — `nominalexample_alldemos` exercises the whole surface |
 
 ## What it gives you over the raw C API
@@ -123,9 +125,11 @@ actually been run. See [BUILDING.md](BUILDING.md).
   but has no MEX command, so streams carry doubles only.
 - **Events cannot be listed or searched**, only created and read back from the
   object you get at creation. The C ABI has no list endpoint to expose.
-- **A dataset cannot be attached to an asset after the fact.** The C ABI has no
-  add-datasource call, so a dataset must be created under the asset it belongs
-  to. `Run` likewise exposes no `datasources()`.
+- **A dataset can only be attached by name, not by RID.**
+  `a.getOrCreateDataset(name, refName)` will attach an existing dataset of that
+  exact name, but there is no `a.addDataset(rid)` — so a dataset you already
+  hold a handle to can only be attached by asking for it again by name. `Run`
+  likewise exposes no `datasources()`.
 - **`Run.addDataset` cannot succeed.** A run's data sources are its asset's,
   live — a dataset added to the asset after the run exists is already on the
   run. So every reference name the asset uses returns
