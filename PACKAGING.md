@@ -38,17 +38,16 @@ links it into a MEX file.
 |---|---|---|
 | Windows x86-64 | `just mex-win64` | `nominalmex.mexw64` |
 | macOS Apple silicon | `just mex-macos-arm64` | `nominalmex.mexmaca64` |
-| macOS Intel | `just mex-macos-x64` | `nominalmex.mexmaci64` |
 | Linux x86-64 | `just mex-linux-x64` | `nominalmex.mexa64` |
 
-All four land in `matlab/+nominal/private/`.
+All three land in `matlab/+nominal/private/`.
 
 Don't run bare `just` off Windows — the default recipe is `mex-win64`, and it
 will try to build for a Windows target on whatever host you're on.
 
-The two macOS rows need two physical Macs. An Apple silicon machine can produce
-an Intel *library* with `rustup target add x86_64-apple-darwin`, but the MEX
-link still needs an Intel MATLAB to link against.
+Intel macOS is not supported. `build.m` refuses to run on one rather than
+building a triple that has never been linked; Apple silicon is the only Mac
+target.
 
 Sanity-check each build before moving on — no network needed:
 
@@ -65,7 +64,6 @@ its checkout, alongside the one already there:
 matlab/+nominal/private/
 ├── nominalmex.mexw64        from the Windows box
 ├── nominalmex.mexmaca64     from the Apple silicon Mac
-├── nominalmex.mexmaci64     from the Intel Mac
 └── nominalmex.mexa64        from the Linux box
 ```
 
@@ -93,8 +91,7 @@ Windows alone compresses to roughly 12 MB.
 Check the platforms line. `tools/package.m` derives `SupportedPlatforms` from the
 binaries actually present, so a platform missing from it is a gateway you
 forgot to copy — and MATLAB will refuse to install on that platform rather
-than installing and failing on the first call. Both macOS variants map to the
-single `Mac` flag.
+than installing and failing on the first call.
 
 **Use `package-only`, not `package`.** `just package` depends on `mex-win64`,
 so it rebuilds the Windows gateway and works only on Windows. `package-only`

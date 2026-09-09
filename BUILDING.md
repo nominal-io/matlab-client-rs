@@ -1,7 +1,7 @@
 # Building and installing
 
 Building produces one file: `matlab/+nominal/private/nominalmex.mexw64` (or
-`.mexa64` / `.mexmaci64`). The Rust library is linked into it statically, so
+`.mexa64` / `.mexmaca64`). The Rust library is linked into it statically, so
 there is no accompanying DLL, nothing to register, and nothing to put on
 `PATH`. Installing means getting `matlab/` onto the MATLAB path.
 
@@ -45,8 +45,12 @@ the recipes differ only in which static library they build first:
 
 ```
 just mex-win64          just mex-macos-arm64      just mex-linux-x64
-just mex-win64-fast     just mex-macos-arm64-fast just mex-macos-x64
+just mex-win64-fast     just mex-macos-arm64-fast
 ```
+
+Windows x86-64, Apple silicon and Linux x86-64. Intel macOS is not a target —
+`build.m` errors on one rather than building a triple that has never been
+linked.
 
 **Only the Windows path has been verified end to end.** The macOS and Linux
 system-library lists in `platformSettings()` are the usual set for this

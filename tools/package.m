@@ -95,9 +95,11 @@ function platforms = supportedPlatforms(matlabRoot)
     privateDir = fullfile(matlabRoot, '+nominal', 'private');
     has = @(ext) isfile(fullfile(privateDir, "nominalmex." + ext));
 
+    % MATLAB has one Mac flag, not one per architecture. Only Apple silicon is
+    % supported here, so mexmaca64 is the only Mac binary that can appear.
     platforms.Win64   = has("mexw64");
     platforms.Glnxa64 = has("mexa64");
-    platforms.Mac     = has("mexmaci64") || has("mexmaca64");
+    platforms.Mac     = has("mexmaca64");
 
     % MATLAB Online cannot load a MEX file built here whatever the platform.
     platforms.MatlabOnline = false;

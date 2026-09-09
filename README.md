@@ -116,8 +116,8 @@ rather than assumed.
 
 **Windows x86-64 is the only platform verified end to end.** `build.m` picks
 its cargo target and linker flags from the host, and there are `just` recipes
-for Apple silicon, Intel macOS and Linux x86-64 — but only the Windows link has
-actually been run. See [BUILDING.md](BUILDING.md).
+for Apple silicon and Linux x86-64 — but only the Windows link has actually
+been run. Intel macOS is not supported. See [BUILDING.md](BUILDING.md).
 
 ## Known gaps
 

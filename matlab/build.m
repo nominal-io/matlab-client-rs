@@ -99,14 +99,18 @@ function platform = platformSettings()
         platform.ExtraLibs = [findWindowsTargetLibs(), systemLibs];
 
     elseif ismac
-        % Apple silicon and Intel differ only in the triple.
-        if strcmp(computer('arch'), 'maca64')
-            platform.Triple = 'aarch64-apple-darwin';
-            platform.Recipe = 'build-macos-arm64';
-        else
-            platform.Triple = 'x86_64-apple-darwin';
-            platform.Recipe = 'build-macos-x64';
+        % Apple silicon only. Intel Macs are not supported: the last one
+        % shipped in 2020, and carrying a target nobody builds means shipping
+        % a triple that has never been linked. Adding it back is this branch
+        % plus x86_64-apple-darwin recipes in the justfile.
+        if ~strcmp(computer('arch'), 'maca64')
+            error('nominal:unsupportedPlatform', ...
+                  ['Intel macOS is not supported (this is %s).\n' ...
+                   'Apple silicon, Windows x86-64 and Linux x86-64 are.'], ...
+                  computer('arch'));
         end
+        platform.Triple = 'aarch64-apple-darwin';
+        platform.Recipe = 'build-macos-arm64';
         platform.LibName = 'libnominal_ffi.a';
 
         % Frameworks cannot be passed as -l; they go through the linker flags.

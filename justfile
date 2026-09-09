@@ -39,10 +39,6 @@ build-macos-arm64:
 build-macos-arm64-fast:
     cargo build --profile fast --target aarch64-apple-darwin -p nominal-ffi
 
-# macOS, Intel
-build-macos-x64:
-    cargo build --release --target x86_64-apple-darwin -p nominal-ffi
-
 # Linux x86_64
 build-linux-x64:
     cargo build --release --target x86_64-unknown-linux-gnu -p nominal-ffi
@@ -64,27 +60,24 @@ mex-macos-arm64: build-macos-arm64 header
 mex-macos-arm64-fast: build-macos-arm64-fast header
     "{{matlab}}" -batch "cd matlab; build(Profile='fast')"
 
-mex-macos-x64: build-macos-x64 header
-    "{{matlab}}" -batch "cd matlab; build"
-
 mex-linux-x64: build-linux-x64 header
     "{{matlab}}" -batch "cd matlab; build"
 
-# Build an installable .mltbx. Depends on the release gateway so a packaged
-# toolbox is never a -fast build. tools/package.m holds the packaging
-# decisions — which paths are exposed, which platforms are claimed.
+# tools/package.m holds the packaging decisions — which paths are exposed,
+# which platforms are claimed. Both recipes below run it; they differ only in
+# whether they build a gateway first.
 #
-# Windows only, because of that dependency. To package on another host, or to
-# ship one .mltbx covering several platforms, use package-only.
+# `package` depends on the release gateway, so a packaged toolbox is never a
+# -fast build — but that also makes it Windows-only. `package-only` builds
+# nothing, which is what a multi-platform box needs: build on each host,
+# collect the .mex* files into one checkout, then package there. Only the
+# platforms with a binary present are claimed. See PACKAGING.md.
+
+# Build a Windows .mltbx into dist/
 package: mex-win64
     "{{matlab}}" -batch "run('tools/package.m')"
 
-# Package whatever gateways are already in +nominal/private/, building none.
-#
-# This is the multi-platform path: build on each host, collect the .mex* files
-# into one checkout, then run this there. package.m claims only the platforms
-# it finds a binary for, so nothing is promised that is not in the box.
-# See PACKAGING.md.
+# Package the gateways already in +nominal/private/, building none
 package-only:
     "{{matlab}}" -batch "run('tools/package.m')"
 
@@ -140,7 +133,6 @@ help:
     echo "  just mex-win64         - Build the MATLAB gateway (the default)"
     echo "  just mex-win64-fast    - Same, against the no-LTO library build"
     echo "  just mex-macos-arm64   - Gateway on Apple silicon (unverified)"
-    echo "  just mex-macos-x64     - Gateway on Intel macOS (unverified)"
     echo "  just mex-linux-x64     - Gateway on Linux x86_64 (unverified)"
     echo "  just build-win64       - Just the static library, without the gateway"
     echo "  just package           - Build a Windows .mltbx into dist/"
