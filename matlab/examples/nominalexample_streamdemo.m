@@ -1,8 +1,8 @@
-function results = streamdemo(datasetRid)
-%STREAMDEMO  End-to-end streaming demo: open, write, tear down.
+function results = nominalexample_streamdemo(datasetRid)
+%NOMINALEXAMPLE_STREAMDEMO  End-to-end streaming: open, write, tear down.
 %
-%   streamdemo("ri.catalog....")
-%   results = streamdemo("ri.catalog....")
+%   nominalexample_streamdemo("ri.catalog....")
+%   results = nominalexample_streamdemo("ri.catalog....")
 %
 %   Needs credentials. Writes about 200 points across four channels into the
 %   dataset you name, so point it at something disposable.
@@ -11,25 +11,26 @@ function results = streamdemo(datasetRid)
 %   `nominalStream` — so the data that went up can be compared against what
 %   comes back down:
 %
-%       streamdemo(rid)
+%       nominalexample_streamdemo(rid)
 %       plot(nominalStream.BlockTimestamps, nominalStream.EngineSamples)
 %
-%       tt = analysisdemo(rid).Samples;      % the same points, read back
+%       % the same points, read back
+%       tt = nominalexample_analysisdemo(rid).Samples;
 %
 %   Fields: DatasetRid, DatasetName, SineChannel, SineTimestamps, SineValues,
 %   EngineChannels, BlockTimestamps, EngineSamples.
 %
 %   To find a dataset RID:
 %
-%       c   = nominalconnect();
+%       c   = nominalexample_connect();
 %       rid = c.datasets("telemetry").Rid(1);
-%       streamdemo(rid)
+%       nominalexample_streamdemo(rid)
 %
 %   Writing is one pattern: preallocate an N-by-C matrix, fill it, push it.
 %   MATLAB stores matrices column-major, so each channel's samples are already
 %   contiguous and reach the library with no copy or transpose.
 %
-%   See also NOMINAL.STREAM, NOMINALCONNECT
+%   See also NOMINAL.STREAM, NOMINALEXAMPLE_CONNECT
 
     arguments
         datasetRid (1,1) string
@@ -46,7 +47,7 @@ function results = streamdemo(datasetRid)
         'EngineSamples',   []);
 
     % 1 ---------------------------------------------------------- client
-    client = nominalconnect();
+    client = nominalexample_connect();
     fprintf('  %s\n', client.BaseUrl);
 
     % 2 ----------------------------------------------------- open stream
@@ -140,6 +141,6 @@ function results = streamdemo(datasetRid)
     fprintf('\nDone. Points may take a moment to appear — the stream\n');
     fprintf('batches on a 100 ms delay, and ingest is not instant.\n');
 
-    nominalpublish(results, "nominalStream");
+    nominalexample_publish(results, "nominalStream");
     fprintf('  e.g. plot(nominalStream.BlockTimestamps, nominalStream.EngineSamples)\n');
 end

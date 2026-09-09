@@ -1,8 +1,8 @@
-function results = datasetdemo(assetName)
-%DATASETDEMO  Exercise dataset operations and channel metadata.
+function results = nominalexample_datasetdemo(assetName)
+%NOMINALEXAMPLE_DATASETDEMO  Exercise dataset operations and channel metadata.
 %
-%   datasetdemo                  % throwaway asset and dataset
-%   datasetdemo("engine-3")      % under an existing asset
+%   nominalexample_datasetdemo               % throwaway asset and dataset
+%   nominalexample_datasetdemo("engine-3")   % under an existing asset
 %
 %   Needs credentials. Creates a dataset under the asset, attaches units to
 %   channels before any data exists, then lists what the dataset holds.
@@ -10,13 +10,14 @@ function results = datasetdemo(assetName)
 %   Covers: get-or-create under an asset, get by RID, update, channel metadata
 %   read and write, and listing every channel.
 %
-%   See also NOMINAL.DATASET, NOMINAL.CHANNELMETADATA, ASSETDEMO, NOMINALCONNECT
+%   See also NOMINAL.DATASET, NOMINAL.CHANNELMETADATA,
+%   NOMINALEXAMPLE_ASSETDEMO, NOMINALEXAMPLE_CONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    client = nominalconnect();
+    client = nominalexample_connect();
     asset = client.getOrCreateAsset(assetName);
     fprintf('Asset: %s\n', asset.Name);
 
@@ -112,5 +113,5 @@ function results = datasetdemo(assetName)
     delete(asset);
     delete(client);
 
-    nominalpublish(results, "nominalDataset");
+    nominalexample_publish(results, "nominalDataset");
 end

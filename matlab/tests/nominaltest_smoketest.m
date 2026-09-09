@@ -1,11 +1,14 @@
-function smoketest()
-%SMOKETEST  Exercise the MATLAB layer without touching the network.
+function nominaltest_smoketest()
+%NOMINALTEST_SMOKETEST  Exercise the MATLAB layer without touching the network.
 %
 %   Run from the matlab/ folder:
 %
-%       addpath(pwd); tests.smoketest
+%       addpath(pwd, fullfile(pwd, 'tests')); nominaltest_smoketest
 %
 %   or via `just mex-test`.
+%
+%   Prefixed because tests/ is a plain folder, not a package: put it on the
+%   path and every filename in it becomes a global function name.
 %
 %   The client connects lazily, so everything short of an actual API call runs
 %   offline. What this checks is the MATLAB layer itself — that the classes

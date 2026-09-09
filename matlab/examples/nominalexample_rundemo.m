@@ -1,22 +1,24 @@
-function results = rundemo(assetName)
-%RUNDEMO  Exercise every run operation.
+function results = nominalexample_rundemo(assetName)
+%NOMINALEXAMPLE_RUNDEMO  Exercise every run operation.
 %
-%   rundemo                      % throwaway asset
-%   rundemo("engine-3")          % under an existing asset
+%   nominalexample_rundemo                   % throwaway asset
+%   nominalexample_rundemo("engine-3")       % under an existing asset
 %
-%   Needs credentials. Creates an asset, a dataset, and a run; attaches the
-%   dataset to the run; then closes it.
+%   Needs credentials. Creates an asset, a dataset, and a run over them, then
+%   closes it.
 %
-%   Covers: create with an explicit start, get by RID, attach a dataset,
-%   update including times, all accessors, and finish.
+%   Covers: create with an explicit start, get by RID, update including times,
+%   all accessors, and finish. Not addDataset — a run's data sources are its
+%   asset's, so there is nothing for it to do; see nominal.Run.addDataset.
 %
-%   See also NOMINAL.RUN, ASSETDEMO, EVENTDEMO, NOMINALCONNECT
+%   See also NOMINAL.RUN, NOMINALEXAMPLE_ASSETDEMO,
+%   NOMINALEXAMPLE_EVENTDEMO, NOMINALEXAMPLE_CONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    client = nominalconnect();
+    client = nominalexample_connect();
     asset = client.getOrCreateAsset(assetName);
     dataset = asset.getOrCreateDataset("telemetry", "tlm");
     fprintf('Asset %s / dataset %s\n', asset.Name, dataset.Name);
@@ -60,29 +62,23 @@ function results = rundemo(assetName)
     fprintf('  refetched by rid, number matches: %d\n', ...
             sameRunByRid.Number == openRun.Number);
 
-    % --- attach the dataset -------------------------------------------
+    % --- the run's data ------------------------------------------------
     %
-    % refName addresses the dataset within the run and must be unique among
-    % its data sources — and a run created on an asset already carries that
-    % asset's. This dataset went onto the asset as "tlm" a few lines up, so
-    % reusing "tlm" here is a conflict (Scout:RefNamesAlreadyUsed) rather than
-    % a re-attach. The run gets a reference name of its own.
+    % There is no attach step, because there is nothing to attach: a run's
+    % data sources *are* its asset's, live. The dataset created above is
+    % already on the run, and so is anything added to the asset later.
     %
-    % Wrapped because that conflict is a 409, not a no-op: a demo should
-    % survive a deployment where the name is already spoken for.
-    runWithDataset = openRun;
-    try
-        runWithDataset = openRun.addDataset("run-tlm", dataset);
-        fprintf('  dataset attached to the run as "run-tlm"\n');
-    catch attachError
-        fprintf('  dataset not attached: %s\n', attachError.message);
-    end
+    % nominal.Run.addDataset exists but cannot succeed here — see its help.
+    % Every reference name the asset uses is reported as already taken, and
+    % every other name as invalid, so there is no argument that works for a
+    % run made with asset.run(). Calling it would only print an error.
+    fprintf('  data sources come from the asset; nothing to attach\n');
 
     % --- update -------------------------------------------------------
     %
     % Runs honour start and end times as well as the shared metadata fields.
     % Collections replace rather than merge.
-    updatedRun = runWithDataset.update( ...
+    updatedRun = openRun.update( ...
         Description = "Created by the Nominal MATLAB demo", ...
         Labels      = ["matlab-demo" "smoke"], ...
         Properties  = struct(operator = "matlab", phase = "demo"));
@@ -118,12 +114,11 @@ function results = rundemo(assetName)
     % Every link in the chain is its own handle and needs its own release.
     delete(finishedRun);
     delete(updatedRun);
-    delete(runWithDataset);
     delete(sameRunByRid);
     delete(openRun);
     delete(dataset);
     delete(asset);
     delete(client);
 
-    nominalpublish(results, "nominalRun");
+    nominalexample_publish(results, "nominalRun");
 end

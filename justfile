@@ -9,6 +9,12 @@ matlab := env_var_or_default("MATLAB", "matlab")
 # Default target: the thing you actually load in MATLAB.
 default: mex-win64
 
+
+
+# Generate C header from Rust code
+header:
+    cbindgen crates/ffi --output crates/ffi/include/nominal_ffi.h
+
 # A static library on its own is not a deliverable — nothing loads it until a
 # MEX gateway links it in — so every build- recipe here has a matching arm in
 # build.m. Add the two together or not at all.
@@ -45,28 +51,35 @@ build-linux-x64:
 # mex- recipes differ only in which static library they build first.
 
 # Build the MATLAB MEX gateway
-mex-win64: build-win64
+mex-win64: build-win64 header
     "{{matlab}}" -batch "cd matlab; build"
 
 # Same, against the no-LTO library build
-mex-win64-fast: build-win64-fast
+mex-win64-fast: build-win64-fast header
     "{{matlab}}" -batch "cd matlab; build(Profile='fast')"
 
-mex-macos-arm64: build-macos-arm64
+mex-macos-arm64: build-macos-arm64 header
     "{{matlab}}" -batch "cd matlab; build"
 
-mex-macos-arm64-fast: build-macos-arm64-fast
+mex-macos-arm64-fast: build-macos-arm64-fast header
     "{{matlab}}" -batch "cd matlab; build(Profile='fast')"
 
-mex-macos-x64: build-macos-x64
+mex-macos-x64: build-macos-x64 header
     "{{matlab}}" -batch "cd matlab; build"
 
-mex-linux-x64: build-linux-x64
+mex-linux-x64: build-linux-x64 header
     "{{matlab}}" -batch "cd matlab; build"
+
+# Build an installable .mltbx. Depends on the release gateway so a packaged
+# toolbox is never a -fast build; on macOS or Linux, build that host's gateway
+# first and the package picks it up. tools/package.m holds the packaging
+# decisions — which paths are exposed, which platforms are claimed.
+package: mex-win64
+    "{{matlab}}" -batch "run('tools/package.m')"
 
 # Exercise the MATLAB layer (no network required). Host-independent.
 mex-test:
-    "{{matlab}}" -batch "cd matlab; addpath(pwd); addpath(fullfile(pwd,'tests')); smoketest"
+    "{{matlab}}" -batch "cd matlab; addpath(pwd); addpath(fullfile(pwd,'tests')); nominaltest_smoketest"
 
 # Kept as an alias: the old name is in the README and in muscle memory.
 mex-test-win64: mex-test
@@ -93,9 +106,6 @@ lint-matlab:
 fmt:
     cargo fmt --all
 
-# Generate C header from Rust code
-header:
-    cbindgen crates/ffi --output crates/ffi/include/nominal_ffi.h
 
 # A Rust staticlib does not record its own dependencies, so build.m has to name
 # them. Run this on the host you are building for and reconcile the result
@@ -122,6 +132,7 @@ help:
     echo "  just mex-macos-x64     - Gateway on Intel macOS (unverified)"
     echo "  just mex-linux-x64     - Gateway on Linux x86_64 (unverified)"
     echo "  just build-win64       - Just the static library, without the gateway"
+    echo "  just package           - Build an installable .mltbx into dist/"
     echo "  just mex-test          - Run the MATLAB smoke test"
     echo "  just native-libs       - Print the system libraries the MEX link needs"
     echo "  just test              - Run tests"

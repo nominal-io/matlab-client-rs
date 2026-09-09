@@ -103,6 +103,18 @@ classdef Run < nominal.Resource
             %
             %   The reference name addresses the dataset within this run and
             %   must be unique among its data sources.
+            %
+            %   **This cannot succeed for a run made with nominal.Asset.run,
+            %   which is the only kind this client can create.** A run's data
+            %   sources are its asset's, live — a dataset added to the asset
+            %   after the run was created is already on the run. So every
+            %   reference name the asset uses comes back as
+            %   Scout:RefNamesAlreadyUsed, and every other name as
+            %   Default:InvalidArgument. There is no argument that works.
+            %
+            %   Kept because it is the C ABI's surface and presumably serves
+            %   runs created without an asset, which this client cannot make.
+            %   Nothing needs calling to get an asset's data onto its run.
             arguments
                 obj (1,1) nominal.Run
                 refName (1,1) string
@@ -123,10 +135,11 @@ classdef Run < nominal.Resource
                 obj (1,1) nominal.Run
                 % No defaults on the shared fields, so stageUpdate can tell
                 % "passed empty" (clear) from "not passed" (leave alone) — see
-                % nominal.Asset.update. Times keep a sentinel: there is no
+                % nominal.Asset.update, which also explains why only Labels is
+                % left unconstrained. Times keep a sentinel: there is no
                 % "clear" for them, so [] simply means unset.
-                options.Name string
-                options.Description string
+                options.Name (1,1) string
+                options.Description (1,1) string
                 options.Properties struct
                 options.Labels string
                 options.StartTime = []

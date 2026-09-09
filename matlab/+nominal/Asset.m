@@ -134,9 +134,15 @@ classdef Asset < nominal.Resource
                 obj (1,1) nominal.Asset
                 % Deliberately no defaults: stageUpdate reads field presence
                 % through isfield, so "passed empty" (clear the collection) and
-                % "not passed" (leave it alone) stay distinguishable.
-                options.Name string
-                options.Description string
+                % "not passed" (leave it alone) stay distinguishable. A size
+                % constraint is still checked when the argument IS passed, so
+                % (1,1) below costs nothing on the absent path.
+                %
+                % Name and Description are single strings; Labels is a list, so
+                % it stays unconstrained — `string` is already an array class,
+                % and the shape is the only thing that says which is meant.
+                options.Name (1,1) string
+                options.Description (1,1) string
                 options.Properties struct
                 options.Labels string
             end

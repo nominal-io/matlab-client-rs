@@ -1,8 +1,8 @@
-function results = assetdemo(assetName)
-%ASSETDEMO  Exercise every asset operation.
+function results = nominalexample_assetdemo(assetName)
+%NOMINALEXAMPLE_ASSETDEMO  Exercise every asset operation.
 %
-%   assetdemo                    % uses a timestamped throwaway name
-%   assetdemo("engine-3")        % an existing asset
+%   nominalexample_assetdemo                 % timestamped throwaway name
+%   nominalexample_assetdemo("engine-3")     % an existing asset
 %
 %   Needs credentials. With no argument this creates a new asset named
 %   nominal-matlab-demo-<timestamp>, so it is safe to run repeatedly; pass a
@@ -11,13 +11,14 @@ function results = assetdemo(assetName)
 %   Covers: get-or-create, get by RID, metadata update, all accessors, and
 %   listing attached data sources.
 %
-%   See also NOMINAL.ASSET, DATASETDEMO, RUNDEMO, EVENTDEMO, NOMINALCONNECT
+%   See also NOMINAL.ASSET, NOMINALEXAMPLE_DATASETDEMO,
+%   NOMINALEXAMPLE_RUNDEMO, NOMINALEXAMPLE_EVENTDEMO, NOMINALEXAMPLE_CONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    client = nominalconnect();
+    client = nominalexample_connect();
 
     % --- get or create ------------------------------------------------
     %
@@ -50,7 +51,7 @@ function results = assetdemo(assetName)
     updatedAsset = asset.update( ...
         Description = "Created by the Nominal MATLAB demo", ...
         Labels      = unique([labelsBefore, "matlab-demo"]), ...
-        Properties  = struct(source = "assetdemo", language = "matlab"));
+        Properties  = struct(source = "nominalexample_assetdemo", language = "matlab"));
 
     fprintf('  labels after:  %s\n', join(updatedAsset.Labels, " "));
     fprintf('  description:   %s\n', updatedAsset.Description);
@@ -88,5 +89,5 @@ function results = assetdemo(assetName)
     delete(asset);
     delete(client);
 
-    nominalpublish(results, "nominalAsset");
+    nominalexample_publish(results, "nominalAsset");
 end

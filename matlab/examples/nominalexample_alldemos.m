@@ -1,5 +1,5 @@
-function alldemos()
-%ALLDEMOS  Run every demo against one throwaway asset.
+function nominalexample_alldemos()
+%NOMINALEXAMPLE_ALLDEMOS  Run every demo against one throwaway asset.
 %
 %   Needs credentials. Creates a single asset named
 %   nominal-matlab-demo-<timestamp> and runs all seven demos against it, so
@@ -11,11 +11,13 @@ function alldemos()
 %   Each demo also runs standalone; see their own help. This exists to
 %   exercise the whole surface in one go after a rebuild.
 %
-%   See also ASSETDEMO, DATASETDEMO, RUNDEMO, EVENTDEMO, UPLOADDEMO,
-%   STREAMDEMO, ANALYSISDEMO, NOMINALCONNECT
+%   See also NOMINALEXAMPLE_ASSETDEMO, NOMINALEXAMPLE_DATASETDEMO,
+%   NOMINALEXAMPLE_RUNDEMO, NOMINALEXAMPLE_EVENTDEMO,
+%   NOMINALEXAMPLE_UPLOADDEMO, NOMINALEXAMPLE_STREAMDEMO,
+%   NOMINALEXAMPLE_ANALYSISDEMO, NOMINALEXAMPLE_CONNECT
 
     % Fail here rather than five demos in, if the credentials are not set up.
-    delete(nominalconnect());
+    delete(nominalexample_connect());
 
     assetName = "nominal-matlab-demo-" + string(posixtime(datetime("now")));
     fprintf('Shared asset: %s\n\n', assetName);
@@ -25,11 +27,11 @@ function alldemos()
     % tracked so the summary at the end lists only what actually landed — a
     % demo that failed published nothing.
     demosNeedingOnlyAnAsset = {
-        "assets",   "nominalAsset",   @() assetdemo(assetName)
-        "datasets", "nominalDataset", @() datasetdemo(assetName)
-        "runs",     "nominalRun",     @() rundemo(assetName)
-        "events",   "nominalEvents",  @() eventdemo(assetName)
-        "upload",   "nominalUpload",  @() uploaddemo(assetName)
+        "assets",   "nominalAsset",   @() nominalexample_assetdemo(assetName)
+        "datasets", "nominalDataset", @() nominalexample_datasetdemo(assetName)
+        "runs",     "nominalRun",     @() nominalexample_rundemo(assetName)
+        "events",   "nominalEvents",  @() nominalexample_eventdemo(assetName)
+        "upload",   "nominalUpload",  @() nominalexample_uploaddemo(assetName)
     };
 
     failedDemoNames = strings(1, 0);
@@ -38,11 +40,11 @@ function alldemos()
     [failedDemoNames, publishedNames] = ...
         runAll(demosNeedingOnlyAnAsset, failedDemoNames, publishedNames);
 
-    % Streaming and analysis both need a dataset RID, which datasetdemo created
+    % Streaming and analysis both need a dataset RID, which the dataset demo
     % under the shared asset. Look it up rather than hard-coding one.
     sharedDatasetRid = "";
     try
-        client = nominalconnect();
+        client = nominalexample_connect();
         asset = client.getOrCreateAsset(assetName);
 
         % datasources() lists videos and connections too, and only a dataset
@@ -62,8 +64,8 @@ function alldemos()
     % These two take a dataset rather than an asset, so they run outside the
     % loop above. Analysis goes last, so it reads back what the rest wrote.
     demosNeedingADataset = {
-        "streaming", "nominalStream",   @() streamdemo(sharedDatasetRid)
-        "analysis",  "nominalAnalysis", @() analysisdemo(sharedDatasetRid)
+        "streaming", "nominalStream",   @() nominalexample_streamdemo(sharedDatasetRid)
+        "analysis",  "nominalAnalysis", @() nominalexample_analysisdemo(sharedDatasetRid)
     };
 
     if sharedDatasetRid == ""

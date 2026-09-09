@@ -1,8 +1,8 @@
-function results = eventdemo(assetName)
-%EVENTDEMO  Exercise event creation and accessors.
+function results = nominalexample_eventdemo(assetName)
+%NOMINALEXAMPLE_EVENTDEMO  Exercise event creation and accessors.
 %
-%   eventdemo                    % throwaway asset
-%   eventdemo("engine-3")        % on an existing asset
+%   nominalexample_eventdemo                 % throwaway asset
+%   nominalexample_eventdemo("engine-3")     % on an existing asset
 %
 %   Needs credentials. Creates one event of each type on the asset — an
 %   instantaneous one and a spanning one.
@@ -11,13 +11,14 @@ function results = eventdemo(assetName)
 %   events whose time falls inside its window; there is no separate link to
 %   make. So to see these on a run, create a run covering the same period.
 %
-%   See also NOMINAL.EVENT, ASSETDEMO, RUNDEMO, NOMINALCONNECT
+%   See also NOMINAL.EVENT, NOMINALEXAMPLE_ASSETDEMO,
+%   NOMINALEXAMPLE_RUNDEMO, NOMINALEXAMPLE_CONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    client = nominalconnect();
+    client = nominalexample_connect();
     asset = client.getOrCreateAsset(assetName);
     fprintf('Asset %s\n  %s\n', asset.Name, asset.Rid);
 
@@ -91,7 +92,7 @@ function results = eventdemo(assetName)
 
     fprintf('Done. Events are visible on the asset, and on any run whose\n');
     fprintf('window covers them.\n');
-    nominalpublish(results, "nominalEvents");
+    nominalexample_publish(results, "nominalEvents");
 end
 
 function describe(event)

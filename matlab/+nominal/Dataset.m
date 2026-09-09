@@ -325,9 +325,10 @@ classdef Dataset < nominal.Resource
             arguments
                 obj (1,1) nominal.Dataset
                 % No defaults, so stageUpdate can tell "passed empty" (clear)
-                % from "not passed" (leave alone) — see nominal.Asset.update.
-                options.Name string
-                options.Description string
+                % from "not passed" (leave alone) — see nominal.Asset.update,
+                % which also explains why only Labels is left unconstrained.
+                options.Name (1,1) string
+                options.Description (1,1) string
                 options.Properties struct
                 options.Labels string
             end

@@ -28,3 +28,6 @@ target
 *.mexw64
 *.mexa64
 *.mexmaci64
+
+# Packaged toolboxes from `just package`
+dist

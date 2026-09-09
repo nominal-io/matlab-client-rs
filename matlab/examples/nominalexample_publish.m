@@ -1,7 +1,7 @@
-function nominalpublish(results, name)
-%NOMINALPUBLISH  Leave a demo's results where they can be inspected afterwards.
+function nominalexample_publish(results, name)
+%NOMINALEXAMPLE_PUBLISH  Leave a demo's results where they can be inspected.
 %
-%   Prefixed for the same reason as nominalconnect: these files land on the
+%   Prefixed for the same reason as every other file here: they land on the
 %   path whenever this folder is added to it, so they should not claim plain
 %   names. `publish` in particular is a MATLAB builtin.
 %
@@ -9,7 +9,7 @@ function nominalpublish(results, name)
 %   discards its output — so each demo also pushes its results into the base
 %   workspace under a name of its own:
 %
-%       streamdemo(rid)
+%       nominalexample_streamdemo(rid)
 %       plot(nominalStream.Timestamps, nominalStream.Values)
 %
 %   Base variables are session-scoped and disappear on `clear`, unlike a
@@ -18,12 +18,12 @@ function nominalpublish(results, name)
 %
 %   One struct per demo rather than a scatter of loose names, so nothing of
 %   yours gets clobbered by accident, and distinct names per demo so a full
-%   alldemos run leaves all of them rather than overwriting one.
+%   nominalexample_alldemos run leaves all of them rather than overwriting one.
 %
-%   Not called `publish`: that is a MATLAB builtin which generates formatted
-%   output from a script.
+%   The published names are *not* prefixed: they are workspace variables the
+%   user is meant to type, and `nominalStream` is already distinctive enough.
 %
-%   See also ASSIGNIN, NOMINALCONNECT
+%   See also ASSIGNIN, NOMINALEXAMPLE_CONNECT
 
     arguments
         results struct

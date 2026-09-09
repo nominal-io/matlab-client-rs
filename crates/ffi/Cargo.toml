@@ -13,7 +13,17 @@ crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 nominal = "0.7"
-nominal-streaming = "0.9"
+# Pinned exactly, and not casually. `nominal` 0.7.x wants nominal-api ^0.1349,
+# and nominal-streaming moved to ^0.1379 in 0.9.4. Cargo treats 0.1349 and
+# 0.1379 as incompatible — for a 0.x crate the minor version is the breaking
+# position — so any pairing other than this one compiles nominal-api-conjure
+# twice. That crate is 3,574 generated files and ~300 MB of rlib, so the
+# duplicate roughly doubles a cold build.
+#
+# 0.9.3 is the newest streaming release that still agrees with nominal 0.7.1.
+# Lift this the moment `nominal` moves past 0.1349, and prefer matching whatever
+# nominal-api version `nominal` is on rather than taking the newest streaming.
+nominal-streaming = "=0.9.3"
 # Declare what runtime.rs actually uses: new_multi_thread() needs
 # rt-multi-thread, enable_all() needs net and time. These currently arrive
 # anyway through nominal-streaming's `full`, but relying on feature unification
@@ -28,9 +38,11 @@ futures = "0.3"
 # The SQL service's proto declares Query as server-streaming gRPC, but the
 # gateway only ever exposes it as HTTPS+JSON returning one concatenated body —
 # so it is reached over plain HTTP, not tonic. The Python client carries a
-# hand-written REST shim for the same reason. Version and TLS features match
-# what `nominal` already pulls in, so this unifies rather than adding a second
-# HTTP stack.
+# hand-written REST shim for the same reason.
+#
+# 0.12 matches what `nominal` uses. It does not unify the tree: `nominal-streaming`
+# pulls reqwest 0.13, so two versions compile either way, and picking 0.13 here
+# would not change that. Follow whichever version `nominal` moves to.
 reqwest = { version = "0.12", features = ["rustls-tls-native-roots"] }
 serde_json = "1"
 # SQL results come back as an Arrow IPC stream whose buffers are ZSTD-compressed

@@ -5,6 +5,8 @@ Building produces one file: `matlab/+nominal/private/nominalmex.mexw64` (or
 there is no accompanying DLL, nothing to register, and nothing to put on
 `PATH`. Installing means getting `matlab/` onto the MATLAB path.
 
+Once it is built, see [USAGE.md](USAGE.md) for authenticating and using it.
+
 ## Prerequisites
 
 | | |
@@ -74,6 +76,44 @@ release build.
 just header
 ```
 
+## The edit-build-test loop
+
+What to run depends on which layer you touched.
+
+| Changed | Run |
+|---|---|
+| `matlab/+nominal/*.m`, `matlab/examples/*.m` | nothing — but see the caching note below |
+| `matlab/src/nominalmex.c` | `just mex-win64-fast` |
+| `crates/ffi/src/*.rs` | `just mex-win64-fast` |
+| A Rust export added, renamed or removed | `just header` **first**, then `just mex-win64-fast` |
+
+Then `just lint` (clippy and MATLAB `checkcode`), `just test` (Rust), and
+`just mex-test` (the offline MATLAB smoke test).
+
+`just header` before the rebuild is the one that catches people out: the C
+gateway includes the generated header, so a new `nominal_*` export does not
+exist as far as the compiler is concerned until cbindgen has run.
+
+### MATLAB caches compiled functions
+
+An open MATLAB session keeps compiled copies of the `.m` files it has run. It
+usually notices a changed file, but **not reliably when the change came from
+outside the MATLAB editor** — a text editor, a git checkout, or an agent
+writing files. The symptom is a stack trace whose line numbers and source text
+do not match the file on disk.
+
+Before re-running anything after an external edit:
+
+```matlab
+clear functions      % drop cached .m code
+rehash path          % if you added or renamed a file
+```
+
+`clear functions` is enough for edits to existing files, and unlike `clear all`
+it leaves your workspace variables — including whatever the demos published —
+intact. `clear mex` additionally unloads the gateway, which is what you want
+before overwriting the binary with a rebuild.
+
 ## Installing
 
 ### This session only
@@ -105,53 +145,31 @@ This is the real answer to "install it". Packaging produces a single `.mltbx`
 that colleagues double-click: it registers under **Add-Ons**, manages the path
 itself, and supports versioning and uninstall.
 
-```matlab
-opts = matlab.addons.toolbox.ToolboxOptions("matlab", "<a-uuid>");
-opts.ToolboxName          = "Nominal for MATLAB";
-opts.ToolboxVersion       = "0.1.0";
-opts.Summary              = "Native MATLAB client for Nominal";
-opts.MinimumMatlabRelease = "R2021a";
-
-% Only the platforms whose MEX binary is actually in the folder. MATLAB then
-% refuses to install elsewhere, rather than installing and failing on the
-% first call.
-opts.SupportedPlatforms.Win64        = true;
-opts.SupportedPlatforms.Maci64       = false;
-opts.SupportedPlatforms.Glnxa64      = false;
-opts.SupportedPlatforms.MatlabOnline = false;
-
-opts.OutputFile = "NominalForMATLAB.mltbx";
-matlab.addons.toolbox.packageToolbox(opts);
+```
+just package
 ```
 
-Install it with `matlab.addons.install("NominalForMATLAB.mltbx")`, or by
+That builds a release gateway, then runs `tools/package.m` to write
+`dist/NominalForMATLAB-<version>.mltbx`. Install it with
+`matlab.addons.install("dist/NominalForMATLAB-0.1.0.mltbx")`, or by
 double-clicking.
 
-Three things to get right:
+The version comes from the workspace `Cargo.toml`, so bump it there. The
+packaged platforms come from which MEX binaries are sitting in
+`+nominal/private/` at the time — a toolbox can carry all of them at once
+(`nominalmex.mexw64`, `.mexa64`, `.mexmaci64` side by side; MATLAB picks by
+`mexext`), so to ship a multi-platform build, collect each host's gateway into
+that folder before packaging. `just package` only builds the Windows one
+itself.
 
-**Decide whether `examples/` goes on the installed path.** Every file in it
-becomes a global function name for anyone who has it pathed, which is why the
-shared helpers are `nominalconnect` and `nominalpublish` rather than `connect`
-and `publish` — the latter is a MATLAB builtin. The demo names
-(`streamdemo`, `uploaddemo`, …) are distinctive enough to ship, but excluding
-`examples/` and `tests/` from `ToolboxMatlabPath` is the tidier default.
-
-The same reasoning applies to `matlab/build.m`: it is on the path as a bare
-`build` for anyone who adds `matlab/`. Worth moving to `tools/` alongside
-`lintmatlab.m` if that ever bites.
-
-**A toolbox can carry every platform at once.** Put `nominalmex.mexw64`,
-`.mexa64` and `.mexmaci64` side by side in `+nominal/private/` and MATLAB picks
-by `mexext`. Set the matching `SupportedPlatforms` flags as they land.
-
-**`MinimumMatlabRelease` is a claim, not a check.** R2021a is the floor implied
-by the `Name=Value` call syntax used throughout, but nothing below R2026a has
-been tested — see the Requirements section of the README.
+Everything else the packager decides — the fixed identifier UUID, which folders
+land on the installed path, the `MinimumMatlabRelease` floor — is set and
+explained in [tools/package.m](tools/package.m).
 
 ## Build artifacts and version control
 
-`matlab/+nominal/private/nominalmex.mexw64` is currently tracked in git, and
-static linking took it from 44 KB to roughly 35 MB. Git keeps every version, so
-committing a rebuild each time will grow the repository quickly. It is a build
-output and belongs in `.gitignore`, with releases carrying the `.mltbx`
-instead.
+`nominalmex.mexw64` and its siblings are gitignored, as is `dist/`. Static
+linking took the gateway from 44 KB to roughly 35 MB, and git keeps every
+version, so committing a rebuild each time would grow the repository fast.
+A fresh clone therefore has no gateway until you run `just` — and releases
+carry the `.mltbx` rather than the loose binary.

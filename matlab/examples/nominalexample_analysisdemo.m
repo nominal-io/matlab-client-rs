@@ -1,8 +1,8 @@
-function results = analysisdemo(datasetRid)
-%ANALYSISDEMO  Reading data back out: discovery, fetch, export, and SQL.
+function results = nominalexample_analysisdemo(datasetRid)
+%NOMINALEXAMPLE_ANALYSISDEMO  Reading data out: discovery, fetch, export, SQL.
 %
-%   analysisdemo("ri.catalog....")
-%   results = analysisdemo("ri.catalog....")
+%   nominalexample_analysisdemo("ri.catalog....")
+%   results = nominalexample_analysisdemo("ri.catalog....")
 %
 %   Needs credentials. Read-only apart from the file it writes into the current
 %   folder, so it is safe to point at real data.
@@ -11,7 +11,7 @@ function results = analysisdemo(datasetRid)
 %   workspace as `nominalAnalysis` so there is something to poke at afterwards
 %   even when the demo is run as a bare statement:
 %
-%       analysisdemo(rid)
+%       nominalexample_analysisdemo(rid)
 %       plot(nominalAnalysis.Samples.Time, nominalAnalysis.Samples.(1))
 %       head(nominalAnalysis.Points)
 %
@@ -21,9 +21,9 @@ function results = analysisdemo(datasetRid)
 %
 %   To find a dataset RID:
 %
-%       c   = nominalconnect();
+%       c   = nominalexample_connect();
 %       rid = c.datasets("telemetry").Rid(1);
-%       analysisdemo(rid)
+%       nominalexample_analysisdemo(rid)
 %
 %   The other demos put data in. This one takes it back out, which is the half
 %   most MATLAB users care about:
@@ -39,7 +39,8 @@ function results = analysisdemo(datasetRid)
 %
 %     SQL         — a query against the warehouse, returned as a table.
 %
-%   See also NOMINAL.DATASET/FETCH, NOMINAL.CLIENT/QUERY, NOMINALCONNECT
+%   See also NOMINAL.DATASET/FETCH, NOMINAL.CLIENT/QUERY,
+%   NOMINALEXAMPLE_CONNECT
 
     arguments
         datasetRid (1,1) string
@@ -58,7 +59,7 @@ function results = analysisdemo(datasetRid)
         'StartTime',  NaT("TimeZone", "UTC"), ...
         'StopTime',   NaT("TimeZone", "UTC"));
 
-    client = nominalconnect();
+    client = nominalexample_connect();
     fprintf('\n');
 
     % 1 ------------------------------------------------------- discovery
@@ -73,8 +74,8 @@ function results = analysisdemo(datasetRid)
 
     results.Channels = dataset.channels();
     if isempty(results.Channels)
-        fprintf('No channels in this dataset yet — run streamdemo first.\n');
-        nominalpublish(results, "nominalAnalysis");
+        fprintf('No channels yet — run nominalexample_streamdemo first.\n');
+        nominalexample_publish(results, "nominalAnalysis");
         delete(dataset); delete(client);
         return
     end
@@ -138,7 +139,7 @@ function results = analysisdemo(datasetRid)
     % Same data as fetch, but one request and straight to disk. This is the
     % right tool for a wide window, and matfile is the default format.
     fprintf('\n--- Export ---\n');
-    results.ExportFile = string(fullfile(pwd, "analysisdemo.mat"));
+    results.ExportFile = string(fullfile(pwd, "nominalexample_analysisdemo.mat"));
 
     % Transposed: Channels.Name is a column out of the table, and export takes
     % a 1-by-C row of names.
@@ -200,6 +201,6 @@ function results = analysisdemo(datasetRid)
     % 6 -------------------------------------------------------- teardown
     delete(dataset);
     delete(client);
-    nominalpublish(results, "nominalAnalysis");
+    nominalexample_publish(results, "nominalAnalysis");
     fprintf('  e.g. plot(nominalAnalysis.Samples.Time, nominalAnalysis.Samples.(1))\n');
 end

@@ -1,9 +1,9 @@
-function results = uploaddemo(assetName)
-%UPLOADDEMO  Getting data in: from a .mat file, and from a CSV on disk.
+function results = nominalexample_uploaddemo(assetName)
+%NOMINALEXAMPLE_UPLOADDEMO  Getting data in: from a .mat file, and from a CSV.
 %
-%   uploaddemo                   % throwaway asset
-%   uploaddemo("engine-3")       % under an existing asset
-%   results = uploaddemo(...)
+%   nominalexample_uploaddemo                % throwaway asset
+%   nominalexample_uploaddemo("engine-3")    % under an existing asset
+%   results = nominalexample_uploaddemo(...)
 %
 %   Needs credentials. Writes two small datasets and leaves two files in
 %   tempdir, so point it at something disposable.
@@ -12,14 +12,14 @@ function results = uploaddemo(assetName)
 %   base workspace as `nominalUpload` — so the next demo can be pointed at
 %   them without copying anything out of the console:
 %
-%       uploaddemo("engine-3")
-%       analysisdemo(nominalUpload.WrittenDatasetRid)
+%       nominalexample_uploaddemo("engine-3")
+%       nominalexample_analysisdemo(nominalUpload.WrittenDatasetRid)
 %
 %   Fields: AssetRid, AssetName, WrittenDatasetRid, IngestedDatasetRid,
 %   ChannelNames, SampleTimes, SampleValues, IngestStatus, MatFile, CsvFile.
 %
-%   streamdemo covers the live path, where samples arrive as a test runs.
-%   This covers the other two, where the data already exists:
+%   nominalexample_streamdemo covers the live path, where samples arrive as a
+%   test runs. This covers the other two, where the data already exists:
 %
 %     write    — a matrix already in the workspace, or loaded from a .mat.
 %                One call, no stream, returns when the data has landed.
@@ -30,7 +30,8 @@ function results = uploaddemo(assetName)
 %   Also shows the two things worth doing alongside an upload: declaring units
 %   before any data exists, and recording which script produced the data.
 %
-%   See also NOMINAL.DATASET/WRITE, NOMINAL.CLIENT/INGEST, STREAMDEMO, NOMINALCONNECT
+%   See also NOMINAL.DATASET/WRITE, NOMINAL.CLIENT/INGEST,
+%   NOMINALEXAMPLE_STREAMDEMO, NOMINALEXAMPLE_CONNECT
 
     arguments
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
@@ -50,7 +51,7 @@ function results = uploaddemo(assetName)
         'MatFile',            "", ...
         'CsvFile',            "");
 
-    client = nominalconnect();
+    client = nominalexample_connect();
     asset = client.getOrCreateAsset(assetName);
     results.AssetRid = asset.Rid;
     results.AssetName = asset.Name;
@@ -140,7 +141,7 @@ function results = uploaddemo(assetName)
     % gets its own name — the original dataset handle still reports the
     % pre-update state.
     annotatedDataset = dataset.update( ...
-        Properties=struct(script="uploaddemo.m", ...
+        Properties=struct(script="nominalexample_uploaddemo.m", ...
                           matlab=string(version("-release")), ...
                           source="dataset.write"), ...
         Labels=["demo" "uploaded"]);
@@ -220,6 +221,6 @@ function results = uploaddemo(assetName)
     delete(asset);
     delete(client);
 
-    nominalpublish(results, "nominalUpload");
-    fprintf('  e.g. analysisdemo(nominalUpload.WrittenDatasetRid)\n');
+    nominalexample_publish(results, "nominalUpload");
+    fprintf('  e.g. nominalexample_analysisdemo(nominalUpload.WrittenDatasetRid)\n');
 end

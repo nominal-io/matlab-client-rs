@@ -375,6 +375,66 @@ classdef Client < nominal.Resource
     end
 
     methods (Static)
+        function c = connect(name)
+            %CONNECT  Connect from a stored profile, falling back to the token
+            %in NOMINAL_TOKEN.
+            %
+            %   c = nominal.Client.connect()          % the "default" profile
+            %   c = nominal.Client.connect("staging") % a named one
+            %
+            %   For code that has to run both on a workstation, where a profile
+            %   is set up, and in CI, where only an environment variable is.
+            %   Prefer fromProfile or fromToken when you know which you have —
+            %   an explicit call cannot pick the wrong one.
+            %
+            %   The profile wins. It carries a base URL and a workspace;
+            %   NOMINAL_TOKEN carries neither, so falling back to it means
+            %   talking to Nominal production with no workspace scope. A
+            %   profile pointing at staging that fails to load would otherwise
+            %   send you somewhere else entirely without saying so, which is
+            %   why the fallback warns.
+            %
+            %   Raises nominal:noCredentials when neither is available,
+            %   reporting the profile problem — it names the file it looked in
+            %   and the command that would fix it.
+            %
+            %   This has no counterpart in the Python client, which offers only
+            %   the two explicit constructors.
+            %
+            %   See also NOMINAL.CLIENT/FROMPROFILE, NOMINAL.CLIENT/FROMTOKEN
+            arguments
+                name (1,1) string = "default"
+            end
+
+            try
+                c = nominal.Client.fromProfile(name);
+                return
+            catch profileError
+                % Fall through to the environment variable. The error is kept
+                % because it is the more useful one to report if that is unset
+                % too: it names the config file and the command to fix it.
+            end
+
+            token = string(getenv("NOMINAL_TOKEN"));
+            if token == ""
+                error('nominal:noCredentials', ...
+                      ['no credentials found.\n\n%s\n\n' ...
+                       'Alternatively set NOMINAL_TOKEN in the environment. ' ...
+                       'Note that MATLAB reads the environment it was ' ...
+                       'launched with — on macOS, starting MATLAB from the ' ...
+                       'Dock does not pick up shell exports.'], ...
+                      profileError.message);
+            end
+
+            warning('nominal:profileFallback', ...
+                    ['profile "%s" could not be read, so NOMINAL_TOKEN is ' ...
+                     'being used instead — that reaches Nominal production ' ...
+                     'with no workspace scope, whatever the profile said. ' ...
+                     'The profile error was: %s'], name, profileError.message);
+
+            c = nominal.Client.fromToken(token);
+        end
+
         function c = fromProfile(name, options)
             %FROMPROFILE  Connect using credentials stored on disk.
             %
