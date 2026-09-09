@@ -124,11 +124,9 @@ from the host. Intel macOS is not supported. See [BUILDING.md](BUILDING.md).
   but has no MEX command, so streams carry doubles only.
 - **Events cannot be listed or searched**, only created and read back from the
   object you get at creation. The C ABI has no list endpoint to expose.
-- **A dataset can only be attached by name, not by RID.**
-  `a.getOrCreateDataset(name, refName)` will attach an existing dataset of that
-  exact name, but there is no `a.addDataset(rid)` — so a dataset you already
-  hold a handle to can only be attached by asking for it again by name. `Run`
-  likewise exposes no `datasources()`.
+- **`Run` exposes no `datasources()`.** An asset's are listed with
+  `a.datasources()`; a run has no equivalent, though its data sources are its
+  asset's anyway.
 - **`Run.addDataset` cannot succeed.** A run's data sources are its asset's,
   live — a dataset added to the asset after the run exists is already on the
   run. So every reference name the asset uses returns

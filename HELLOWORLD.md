@@ -108,6 +108,10 @@ nominalexample_assetdemo("engine-3")
 The same loop, without the demo scaffolding: connect, find an asset, add a
 dataset, push a matrix, read it back.
 
+The same code as a live script, if you would rather run it a section at a time
+with the plots inline than paste it into the command window:
+[helloworldlive.mlx](hello%20world/helloworldlive.mlx), in the repo.
+
 ```matlab
 client = nominal.Client.connect();
 
@@ -186,30 +190,3 @@ For the full object and method reference, the other workflows (streaming,
 ingest, export, decimated fetch), and how authentication resolves, see
 [USAGE.md](USAGE.md).
 
-## Uninstalling
-
-By **name** or GUID, not by the `.mltbx` filename:
-
-```matlab
-matlab.addons.uninstall("Nominal for MATLAB")
-```
-
-To pick a specific version when several are installed, or to remove all of
-them:
-
-```matlab
-matlab.addons.uninstall("Nominal for MATLAB", "0.1.0")
-matlab.addons.uninstall("Nominal for MATLAB", "All")
-```
-
-Installing a newer `.mltbx` with the same identifier upgrades in place, so
-uninstalling first is not necessary to update.
-
-## Requirements
-
-- **MATLAB R2021a or newer.** The client uses `Name=Value` call syntax
-  throughout, which R2021a introduced.
-- **A supported platform.** The `.mltbx` declares the platforms whose native
-  gateway is inside it; MATLAB refuses to install elsewhere rather than
-  installing and failing on the first call.
-- No MathWorks toolboxes beyond base MATLAB.

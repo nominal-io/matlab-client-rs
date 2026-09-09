@@ -158,8 +158,9 @@ so you rarely construct anything directly.
 | Everything attached to it | `a.datasources()` |
 | …re-read from the server | `a.datasources(Refresh=true)` |
 | A dataset already on it, by name | `a.getAttachedDataset(name)` |
-| Ensure it has a dataset of that name | `a.getOrCreateDataset(name, refName)` |
-| …without adopting an existing one | `a.getOrCreateDataset(name, refName, AttachExisting=false)` |
+| Attach a dataset you already have | `a.addDataset(ds)`, `a.addDataset(ds, "can")` |
+| Ensure it has a dataset of that name | `a.getOrCreateDataset(name)` |
+| …without adopting an existing one | `a.getOrCreateDataset(name, AttachExisting=false)` |
 | Start a run on it | `a.run(name)`, `a.run(name, startTime)` |
 | Change metadata | `a.update(Name=…, Description=…, Labels=…, Properties=…)` |
 
@@ -178,8 +179,15 @@ already made — and because it changes your asset on the strength of a name
 match, it announces itself and can be switched off with `AttachExisting=false`.
 
 If several datasets share the name, it errors and lists their RIDs rather than
-picking one. `refName` is used only when attaching, never to decide which
-dataset you meant.
+picking one — at which point `a.addDataset(c.datasetByRid(rid))` attaches the
+one you meant.
+
+`refName` defaults to `"default"` and is used only when attaching, never to
+decide which dataset you meant. It exists for an asset carrying two sources
+that measure the same thing — a flight controller logging over CAN and a test
+rig probing the unit, both reporting `engine temp` — and is what tells them
+apart. Supply one when there is a second data source; the server's only rule
+is that it be unique on the asset.
 
 ### Dataset — `ds = a.getOrCreateDataset("telemetry", "tlm")`
 

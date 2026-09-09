@@ -13,6 +13,8 @@ typedef int32_t ClientHandle;
 
 typedef int32_t AssetHandle;
 
+typedef int32_t DatasetHandle;
+
 /**
  * A fetched list of assets, held so that indices stay stable.
  */
@@ -34,8 +36,6 @@ typedef int32_t SeriesHandle;
  * A fetched list of datasets, held so that indices stay stable.
  */
 typedef int32_t DatasetListHandle;
-
-typedef int32_t DatasetHandle;
 
 typedef int32_t EventHandle;
 
@@ -245,6 +245,28 @@ int32_t nominal_asset_update_commit(ClientHandle client_handle,
                                     UpdateHandle update_handle,
                                     AssetHandle *out_asset,
                                     ErrorHandle *error_out);
+
+/**
+ * Attach an existing dataset to this asset under `ref_name`.
+ *
+ * The direct form of what `nominal_dataset_get_or_create_by_name` does as a
+ * side effect: it takes a dataset you already hold rather than a name to look
+ * up, so a handle obtained any way at all — by RID, from a search, from an
+ * ingest — can be put on an asset.
+ *
+ * `ref_name` addresses the dataset within the asset and must be unique among
+ * its data sources. That is the only constraint the server enforces on it:
+ * spaces, dots, hyphens and mixed case are all accepted. A collision comes
+ * back as `Assets:DuplicateDataScopeNames`.
+ *
+ * Returns nothing. The caller's asset handle is a snapshot and does not see
+ * the new data source; re-fetch to observe it.
+ */
+int32_t nominal_asset_add_dataset(ClientHandle client_handle,
+                                  AssetHandle asset_handle,
+                                  const char *ref_name,
+                                  DatasetHandle dataset_handle,
+                                  ErrorHandle *error_out);
 
 /**
  * Release an asset handle. Freeing an unknown handle is a no-op.

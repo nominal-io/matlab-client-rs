@@ -556,6 +556,22 @@ static void cmd_dataset_get_or_create(mxArray *plhs[], int nlhs, int nrhs,
     }
 }
 
+static void cmd_asset_add_dataset(int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    char *ref_name;
+    int32_t status;
+
+    require_args(nrhs, 4, "asset_add_dataset");
+    ref_name = arg_string(prhs[3], "refName");
+    status = nominal_asset_add_dataset(arg_i32(prhs[1], "client"),
+                                       arg_i32(prhs[2], "asset"),
+                                       ref_name,
+                                       arg_i32(prhs[4], "dataset"), &err);
+    mxFree(ref_name);
+    throw_if_failed(status, err);
+}
+
 static void cmd_asset_attached_dataset(mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
     ErrorHandle err = 0;
@@ -1763,6 +1779,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("dataset_write"))          { cmd_dataset_write(nrhs, prhs); return; }
     if (IS("dataset_get_or_create"))  { cmd_dataset_get_or_create(plhs, nlhs, nrhs, prhs); return; }
     if (IS("asset_attached_dataset")) { cmd_asset_attached_dataset(plhs, nrhs, prhs); return; }
+    if (IS("asset_add_dataset"))      { cmd_asset_add_dataset(nrhs, prhs); return; }
     if (IS("dataset_update_commit"))  { cmd_dataset_update_commit(plhs, nrhs, prhs); return; }
     if (IS("dataset_free"))           { do_free(nominal_dataset_free, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("dataset_rid"))            { do_getter_string(nominal_dataset_rid, nlhs, plhs, nrhs, prhs, command); return; }

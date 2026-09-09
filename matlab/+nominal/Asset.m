@@ -114,6 +114,54 @@ classdef Asset < nominal.Resource
                                ["RefName" "Rid" "Type"]);
         end
 
+        function addDataset(obj, dataset, refName)
+            %ADDDATASET  Attach a dataset you already have to this asset.
+            %
+            %   a.addDataset(ds);
+            %   a.addDataset(ds, "can");
+            %
+            %   Takes the dataset itself, so a handle obtained any way at all
+            %   — by RID, from a search, from an ingest — can be put on an
+            %   asset. getOrCreateDataset only reaches datasets it can find by
+            %   name, which is no help when you are already holding one.
+            %
+            %   refName addresses the dataset within this asset and must be
+            %   unique among its data sources; that is the only rule the
+            %   server enforces, so spaces, dots and mixed case are all fine.
+            %   It exists for the case where one asset carries two sources
+            %   measuring the same thing — a flight controller logging over
+            %   CAN and a test rig probing the unit directly, both reporting
+            %   "engine temp" — and it is what tells those apart. Omit it and
+            %   you get "default", which is right until there are two.
+            %
+            %   This asset handle is a snapshot and will not show the new data
+            %   source. Use a.datasources(Refresh=true) to see it.
+            %
+            %   See also NOMINAL.ASSET/GETORCREATEDATASET, NOMINAL.ASSET/DATASOURCES
+            arguments
+                obj (1,1) nominal.Asset
+                dataset (1,1) nominal.Dataset
+                refName (1,1) string = "default"
+            end
+            obj.assertLive();
+
+            try
+                nominalmex('asset_add_dataset', obj.Client.Handle, obj.Handle, ...
+                           char(refName), dataset.Handle);
+            catch attachError
+                % The server rejects a reference name already in use on this
+                % asset. Said plainly, because the raw error names an internal
+                % concept ("data scope") that appears nowhere in this API.
+                if contains(attachError.message, "DuplicateDataScopeNames")
+                    error('nominal:refNameInUse', ...
+                          ['asset "%s" already has a data source called "%s".\n' ...
+                           'Pass a different reference name to tell them apart:\n' ...
+                           '    a.addDataset(ds, "can")'], obj.Name, refName);
+                end
+                rethrow(attachError);
+            end
+        end
+
         function d = getAttachedDataset(obj, name)
             %GETATTACHEDDATASET  A dataset already on this asset, by name.
             %
@@ -142,8 +190,9 @@ classdef Asset < nominal.Resource
         function d = getOrCreateDataset(obj, name, refName, options)
             %GETORCREATEDATASET  Ensure this asset has a dataset of that name.
             %
+            %   d = a.getOrCreateDataset("telemetry");
             %   d = a.getOrCreateDataset("telemetry", "tlm");
-            %   d = a.getOrCreateDataset("telemetry", "tlm", AttachExisting=false);
+            %   d = a.getOrCreateDataset("telemetry", AttachExisting=false);
             %
             %   A bare name is not unique in Nominal, so this resolves in three
             %   steps and says which one it took:
@@ -164,15 +213,16 @@ classdef Asset < nominal.Resource
             %   name, naming the RIDs so you can pick one with
             %   client.datasetByRid.
             %
-            %   refName addresses the dataset within this asset and must be
-            %   unique among its data sources. It is used only when attaching
-            %   — never to decide which dataset you meant.
+            %   refName defaults to "default" and is used only when attaching
+            %   — never to decide which dataset you meant. Supply one when the
+            %   asset carries more than one data source; see
+            %   nominal.Asset.addDataset for what it is actually for.
             %
-            %   See also NOMINAL.ASSET/GETATTACHEDDATASET, NOMINAL.CLIENT/DATASETBYRID
+            %   See also NOMINAL.ASSET/ADDDATASET, NOMINAL.ASSET/GETATTACHEDDATASET
             arguments
                 obj (1,1) nominal.Asset
                 name (1,1) string
-                refName (1,1) string
+                refName (1,1) string = "default"
                 options.AttachExisting (1,1) logical = true
             end
             obj.assertLive();

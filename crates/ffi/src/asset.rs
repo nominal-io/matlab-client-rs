@@ -1,4 +1,5 @@
 use crate::client::{client_or_fail, ClientHandle};
+use crate::dataset::{dataset_or_fail, DatasetHandle};
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
 use crate::strings::{c_str_to_string, set_string, StringHandle};
@@ -143,6 +144,46 @@ pub extern "C" fn nominal_asset_update_commit(
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
 
         deliver(updated, out_asset, error_out)
+    })
+}
+
+/// Attach an existing dataset to this asset under `ref_name`.
+///
+/// The direct form of what `nominal_dataset_get_or_create_by_name` does as a
+/// side effect: it takes a dataset you already hold rather than a name to look
+/// up, so a handle obtained any way at all — by RID, from a search, from an
+/// ingest — can be put on an asset.
+///
+/// `ref_name` addresses the dataset within the asset and must be unique among
+/// its data sources. That is the only constraint the server enforces on it:
+/// spaces, dots, hyphens and mixed case are all accepted. A collision comes
+/// back as `Assets:DuplicateDataScopeNames`.
+///
+/// Returns nothing. The caller's asset handle is a snapshot and does not see
+/// the new data source; re-fetch to observe it.
+#[no_mangle]
+pub extern "C" fn nominal_asset_add_dataset(
+    client_handle: ClientHandle,
+    asset_handle: AssetHandle,
+    ref_name: *const c_char,
+    dataset_handle: DatasetHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let client = client_or_fail(client_handle, error_out)?;
+        let asset = asset_or_fail(asset_handle, error_out)?;
+        let dataset = dataset_or_fail(dataset_handle, error_out)?;
+        let ref_name = unsafe { c_str_to_string(ref_name, "ref_name", error_out)? };
+
+        RUNTIME
+            .block_on(
+                client
+                    .assets()
+                    .add_dataset(asset.rid(), &ref_name, dataset.rid()),
+            )
+            .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+
+        Ok(())
     })
 }
 
