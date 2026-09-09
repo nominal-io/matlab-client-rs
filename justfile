@@ -7,7 +7,7 @@
 matlab := env_var_or_default("MATLAB", "matlab")
 
 # Default target: the thing you actually load in MATLAB.
-default: mex-win64
+default: help
 
 
 
