@@ -208,40 +208,161 @@ pub extern "C" fn nominal_dataset_get_by_rid(
     })
 }
 
-/// Fetch a dataset by name, creating it and attaching it to `asset_handle` if
-/// no dataset with that exact name exists.
+/// What `nominal_dataset_get_or_create_by_name` actually did.
 ///
-/// The dataset is attached to the asset under `ref_name`, which is how it is
-/// addressed within that asset and must be unique among the asset's data
-/// sources. An existing dataset is returned as-is and is not re-attached.
+/// Reported rather than printed: a MEX writing to stdout from Rust fights
+/// MATLAB's own output handling, so the caller decides what the user sees.
+#[repr(i32)]
+pub enum GetOrCreateOutcome {
+    /// Already attached to the asset; nothing was changed.
+    FoundAttached = 0,
+    /// Existed elsewhere in the workspace and was attached to the asset.
+    AttachedExisting = 1,
+    /// Did not exist; created and attached.
+    Created = 2,
+}
+
+/// Every dataset attached to `asset_rid`, fetched in one round trip.
+///
+/// The asset is re-fetched rather than read from the caller's handle, which is
+/// a snapshot taken when the asset was last fetched and does not see its own
+/// attachments. `get_dataset_batch` then costs one request however many data
+/// sources the asset has, so this is two requests flat.
+fn attached_datasets(
+    client: &nominal::core::NominalClient,
+    asset_rid: &str,
+    error_out: *mut ErrorHandle,
+) -> Result<Vec<Dataset>, ErrorCode> {
+    let asset = RUNTIME
+        .block_on(client.assets().get(asset_rid))
+        .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+
+    // Videos and connections are data sources too, and only datasets can be
+    // fetched from the catalog.
+    let rids: Vec<String> = asset
+        .data_sources()
+        .values()
+        .filter_map(|source| match source {
+            nominal::core::DataSource::Dataset(_) => Some(source.rid().to_string()),
+            _ => None,
+        })
+        .collect();
+
+    if rids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let by_rid = RUNTIME
+        .block_on(client.catalog().get_dataset_batch(&rids))
+        .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+
+    Ok(by_rid.into_values().collect())
+}
+
+/// Pick the one dataset named exactly `name`, or fail if several are.
+///
+/// Duplicate names are refused rather than resolved by picking the first: the
+/// choice would be arbitrary, and both silently returning and silently
+/// attaching the wrong dataset are worse than an error naming the candidates.
+fn exactly_one_named(
+    mut candidates: Vec<Dataset>,
+    name: &str,
+    where_: &str,
+    error_out: *mut ErrorHandle,
+) -> Result<Option<Dataset>, ErrorCode> {
+    candidates.retain(|d| d.name() == name);
+
+    match candidates.len() {
+        0 => Ok(None),
+        1 => Ok(Some(candidates.remove(0))),
+        n => {
+            let rids: Vec<&str> = candidates.iter().map(|d| d.rid()).collect();
+            Err(fail(
+                error_out,
+                ErrorCode::NominalError,
+                format!(
+                    "{n} datasets named \"{name}\" {where_}: {}. \
+                     Fetch the one you mean by RID instead.",
+                    rids.join(", ")
+                ),
+            ))
+        }
+    }
+}
+
+/// Fetch the dataset named `name` on this asset, attaching or creating it.
+///
+/// Resolution order, which exists because a bare name is not unique in Nominal:
+///
+/// 1. A dataset of that name already attached to the asset — returned as-is.
+/// 2. Otherwise, when `attach_existing` is non-zero, a dataset of that exact
+///    name anywhere in the workspace — attached to the asset and returned.
+/// 3. Otherwise created and attached.
+///
+/// Step 2 is what makes "the dataset for serial 12345678" resolve to the
+/// dataset someone else already made, which is usually what was meant. It is
+/// also a mutation driven by a name match, so it is defeatable: pass
+/// `attach_existing = 0` to go straight from step 1 to step 3.
+///
+/// `ref_name` addresses the dataset within the asset and must be unique among
+/// its data sources; it is used only when attaching, never to decide identity.
+///
+/// `out_outcome` reports which branch ran — see `GetOrCreateOutcome`.
 #[no_mangle]
 pub extern "C" fn nominal_dataset_get_or_create_by_name(
     client_handle: ClientHandle,
     asset_handle: i32,
     name: *const c_char,
     ref_name: *const c_char,
+    attach_existing: i32,
     out_dataset: *mut DatasetHandle,
+    out_outcome: *mut i32,
     error_out: *mut ErrorHandle,
 ) -> i32 {
     ffi_guard(error_out, || {
         require_out(out_dataset, error_out, "out_dataset")?;
+        require_out(out_outcome, error_out, "out_outcome")?;
         let client = client_or_fail(client_handle, error_out)?;
         let asset = asset_or_fail(asset_handle, error_out)?;
         let name = unsafe { c_str_to_string(name, "name", error_out)? };
         let ref_name = unsafe { c_str_to_string(ref_name, "ref_name", error_out)? };
 
-        let matches = RUNTIME
-            .block_on(
-                client
-                    .catalog()
-                    .search_datasets(DatasetQuery::substring_match(&name)),
-            )
-            .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
-
-        if let Some(existing) = matches.into_iter().find(|d| d.name() == name) {
+        // 1 — already on the asset.
+        let attached = attached_datasets(&client, asset.rid(), error_out)?;
+        if let Some(existing) =
+            exactly_one_named(attached, &name, "attached to this asset", error_out)?
+        {
+            unsafe { *out_outcome = GetOrCreateOutcome::FoundAttached as i32 };
             return deliver(existing, out_dataset, error_out);
         }
 
+        // 2 — exists in the workspace, attach it.
+        if attach_existing != 0 {
+            let matches = RUNTIME
+                .block_on(
+                    client
+                        .catalog()
+                        .search_datasets(DatasetQuery::substring_match(&name)),
+                )
+                .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+
+            if let Some(existing) =
+                exactly_one_named(matches, &name, "in this workspace", error_out)?
+            {
+                RUNTIME
+                    .block_on(
+                        client
+                            .assets()
+                            .add_dataset(asset.rid(), &ref_name, existing.rid()),
+                    )
+                    .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+
+                unsafe { *out_outcome = GetOrCreateOutcome::AttachedExisting as i32 };
+                return deliver(existing, out_dataset, error_out);
+            }
+        }
+
+        // 3 — create it.
         let dataset = RUNTIME
             .block_on(client.catalog().create_dataset(DatasetCreate::new(name)))
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
@@ -254,7 +375,40 @@ pub extern "C" fn nominal_dataset_get_or_create_by_name(
             )
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
 
+        unsafe { *out_outcome = GetOrCreateOutcome::Created as i32 };
         deliver(dataset, out_dataset, error_out)
+    })
+}
+
+/// Fetch a dataset already attached to this asset, by name. Never mutates.
+///
+/// Step 1 of `nominal_dataset_get_or_create_by_name` on its own, for callers
+/// who want to know whether the asset has the dataset rather than to ensure
+/// that it does. Fails when it does not, and when several attached datasets
+/// share the name.
+#[no_mangle]
+pub extern "C" fn nominal_asset_attached_dataset_by_name(
+    client_handle: ClientHandle,
+    asset_handle: i32,
+    name: *const c_char,
+    out_dataset: *mut DatasetHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_dataset, error_out, "out_dataset")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let asset = asset_or_fail(asset_handle, error_out)?;
+        let name = unsafe { c_str_to_string(name, "name", error_out)? };
+
+        let attached = attached_datasets(&client, asset.rid(), error_out)?;
+        match exactly_one_named(attached, &name, "attached to this asset", error_out)? {
+            Some(dataset) => deliver(dataset, out_dataset, error_out),
+            None => Err(fail(
+                error_out,
+                ErrorCode::NominalError,
+                format!("no dataset named \"{name}\" is attached to this asset"),
+            )),
+        }
     })
 }
 

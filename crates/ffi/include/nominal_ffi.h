@@ -639,19 +639,47 @@ int32_t nominal_dataset_get_by_rid(ClientHandle client_handle,
                                    ErrorHandle *error_out);
 
 /**
- * Fetch a dataset by name, creating it and attaching it to `asset_handle` if
- * no dataset with that exact name exists.
+ * Fetch the dataset named `name` on this asset, attaching or creating it.
  *
- * The dataset is attached to the asset under `ref_name`, which is how it is
- * addressed within that asset and must be unique among the asset's data
- * sources. An existing dataset is returned as-is and is not re-attached.
+ * Resolution order, which exists because a bare name is not unique in Nominal:
+ *
+ * 1. A dataset of that name already attached to the asset — returned as-is.
+ * 2. Otherwise, when `attach_existing` is non-zero, a dataset of that exact
+ *    name anywhere in the workspace — attached to the asset and returned.
+ * 3. Otherwise created and attached.
+ *
+ * Step 2 is what makes "the dataset for serial 12345678" resolve to the
+ * dataset someone else already made, which is usually what was meant. It is
+ * also a mutation driven by a name match, so it is defeatable: pass
+ * `attach_existing = 0` to go straight from step 1 to step 3.
+ *
+ * `ref_name` addresses the dataset within the asset and must be unique among
+ * its data sources; it is used only when attaching, never to decide identity.
+ *
+ * `out_outcome` reports which branch ran — see `GetOrCreateOutcome`.
  */
 int32_t nominal_dataset_get_or_create_by_name(ClientHandle client_handle,
                                               int32_t asset_handle,
                                               const char *name,
                                               const char *ref_name,
+                                              int32_t attach_existing,
                                               DatasetHandle *out_dataset,
+                                              int32_t *out_outcome,
                                               ErrorHandle *error_out);
+
+/**
+ * Fetch a dataset already attached to this asset, by name. Never mutates.
+ *
+ * Step 1 of `nominal_dataset_get_or_create_by_name` on its own, for callers
+ * who want to know whether the asset has the dataset rather than to ensure
+ * that it does. Fails when it does not, and when several attached datasets
+ * share the name.
+ */
+int32_t nominal_asset_attached_dataset_by_name(ClientHandle client_handle,
+                                               int32_t asset_handle,
+                                               const char *name,
+                                               DatasetHandle *out_dataset,
+                                               ErrorHandle *error_out);
 
 /**
  * Apply a staged update and return the updated dataset as a new handle.

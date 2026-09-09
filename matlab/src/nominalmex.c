@@ -526,21 +526,49 @@ static void cmd_run_update_commit(mxArray *plhs[], int nrhs, const mxArray *prhs
     plhs[0] = mx_i32(out);
 }
 
-static void cmd_dataset_get_or_create(mxArray *plhs[], int nrhs, const mxArray *prhs[])
+/* Returns the dataset handle and, as a second output, which branch ran:
+   0 already attached, 1 attached an existing dataset, 2 created one. The
+   caller prints it — Rust writing to stdout from inside a MEX fights
+   MATLAB's own output handling. */
+static void cmd_dataset_get_or_create(mxArray *plhs[], int nlhs, int nrhs,
+                                      const mxArray *prhs[])
 {
     ErrorHandle err = 0;
     DatasetHandle out = 0;
+    int32_t outcome = 0;
     char *name, *ref_name;
     int32_t status;
 
-    require_args(nrhs, 4, "dataset_get_or_create");
+    require_args(nrhs, 5, "dataset_get_or_create");
     name = arg_string(prhs[3], "name");
     ref_name = arg_string(prhs[4], "refName");
     status = nominal_dataset_get_or_create_by_name(arg_i32(prhs[1], "client"),
                                                    arg_i32(prhs[2], "asset"),
-                                                   name, ref_name, &out, &err);
+                                                   name, ref_name,
+                                                   arg_i32(prhs[5], "attachExisting"),
+                                                   &out, &outcome, &err);
     mxFree(name);
     mxFree(ref_name);
+    throw_if_failed(status, err);
+    plhs[0] = mx_i32(out);
+    if (nlhs > 1) {
+        plhs[1] = mx_i32(outcome);
+    }
+}
+
+static void cmd_asset_attached_dataset(mxArray *plhs[], int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    DatasetHandle out = 0;
+    char *name;
+    int32_t status;
+
+    require_args(nrhs, 3, "asset_attached_dataset");
+    name = arg_string(prhs[3], "name");
+    status = nominal_asset_attached_dataset_by_name(arg_i32(prhs[1], "client"),
+                                                    arg_i32(prhs[2], "asset"),
+                                                    name, &out, &err);
+    mxFree(name);
     throw_if_failed(status, err);
     plhs[0] = mx_i32(out);
 }
@@ -1733,7 +1761,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("dataset_get_by_rid"))     { do_lookup(nominal_dataset_get_by_rid, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("dataset_list") || IS("dataset_search")) { cmd_dataset_list(plhs, nrhs, prhs, command); return; }
     if (IS("dataset_write"))          { cmd_dataset_write(nrhs, prhs); return; }
-    if (IS("dataset_get_or_create"))  { cmd_dataset_get_or_create(plhs, nrhs, prhs); return; }
+    if (IS("dataset_get_or_create"))  { cmd_dataset_get_or_create(plhs, nlhs, nrhs, prhs); return; }
+    if (IS("asset_attached_dataset")) { cmd_asset_attached_dataset(plhs, nrhs, prhs); return; }
     if (IS("dataset_update_commit"))  { cmd_dataset_update_commit(plhs, nrhs, prhs); return; }
     if (IS("dataset_free"))           { do_free(nominal_dataset_free, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("dataset_rid"))            { do_getter_string(nominal_dataset_rid, nlhs, plhs, nrhs, prhs, command); return; }

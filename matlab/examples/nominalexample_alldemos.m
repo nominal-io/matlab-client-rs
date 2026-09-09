@@ -40,8 +40,8 @@ function nominalexample_alldemos()
     [failedDemoNames, publishedNames] = ...
         runAll(demosNeedingOnlyAnAsset, failedDemoNames, publishedNames);
 
-    % Streaming and analysis both need a dataset RID, which the dataset demo
-    % under the shared asset. Look it up rather than hard-coding one.
+    % Streaming and analysis both need a dataset RID. The dataset demo made one
+    % under the shared asset; look it up rather than hard-coding one.
     sharedDatasetRid = "";
     try
         client = nominalexample_connect();
@@ -68,20 +68,32 @@ function nominalexample_alldemos()
         "analysis",  "nominalAnalysis", @() nominalexample_analysisdemo(sharedDatasetRid)
     };
 
+    skippedDemoNames = strings(1, 0);
     if sharedDatasetRid == ""
         for demoIndex = 1:size(demosNeedingADataset, 1)
             banner(demosNeedingADataset{demoIndex, 1});
             fprintf('  skipped: no dataset on the asset\n\n');
+            skippedDemoNames(end+1) = demosNeedingADataset{demoIndex, 1}; %#ok<AGROW>
         end
     else
         [failedDemoNames, publishedNames] = ...
             runAll(demosNeedingADataset, failedDemoNames, publishedNames);
     end
 
-    if isempty(failedDemoNames)
+    % A skip is not a pass. Reporting "all demos completed" after quietly
+    % running five of seven is how a broken client looks healthy — which is
+    % exactly what it did before this was tracked.
+    if isempty(failedDemoNames) && isempty(skippedDemoNames)
         fprintf('All demos completed.\n');
     else
-        fprintf('Failed: %s\n', join(failedDemoNames, ", "));
+        if ~isempty(failedDemoNames)
+            fprintf('Failed:  %s\n', join(failedDemoNames, ", "));
+        end
+        if ~isempty(skippedDemoNames)
+            fprintf('Skipped: %s\n', join(skippedDemoNames, ", "));
+        end
+        fprintf('Completed %d of %d.\n', ...
+                7 - numel(failedDemoNames) - numel(skippedDemoNames), 7);
     end
     fprintf('Asset: %s\n', assetName);
 

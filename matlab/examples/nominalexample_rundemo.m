@@ -20,7 +20,9 @@ function results = nominalexample_rundemo(assetName)
 
     client = nominalexample_connect();
     asset = client.getOrCreateAsset(assetName);
-    dataset = asset.getOrCreateDataset("telemetry", "tlm");
+    % AttachExisting=false: a throwaway demo asset should not adopt some
+    % other team's "telemetry". See nominal.Asset.getOrCreateDataset.
+    dataset = asset.getOrCreateDataset("telemetry", "tlm", AttachExisting=false);
     fprintf('Asset %s / dataset %s\n', asset.Name, dataset.Name);
 
     % --- create -------------------------------------------------------

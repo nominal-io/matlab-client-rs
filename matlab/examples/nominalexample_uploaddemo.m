@@ -98,7 +98,13 @@ function results = nominalexample_uploaddemo(assetName)
     % setChannelMetadata is an upsert, so it works on channels that do not
     % exist yet. Declaring units first means the first plot comes out right
     % rather than being relabelled later.
-    dataset = asset.getOrCreateDataset("Uploaded telemetry", "uploaded");
+    %
+    % AttachExisting=false on both getOrCreateDataset calls in this demo: it
+    % writes to whatever it gets back, so adopting a dataset someone else
+    % owns would put demo data in their asset. See
+    % nominal.Asset.getOrCreateDataset.
+    dataset = asset.getOrCreateDataset("Uploaded telemetry", "uploaded", ...
+                                       AttachExisting=false);
     fprintf('--- Channel metadata ---\n');
 
     % Units are UCUM symbols, not free text. That is why temperature is "Cel"
@@ -175,7 +181,8 @@ function results = nominalexample_uploaddemo(assetName)
     writetable(csvContents, csvFilePath);
     fprintf('Wrote %s\n', csvFilePath);
 
-    ingestTarget = asset.getOrCreateDataset("Ingested telemetry", "ingested");
+    ingestTarget = asset.getOrCreateDataset("Ingested telemetry", "ingested", ...
+                                            AttachExisting=false);
     results.IngestedDatasetRid = ingestTarget.Rid;
 
     % Epoch seconds rather than the ISO 8601 default, because that is what

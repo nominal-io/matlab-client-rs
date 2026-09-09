@@ -156,9 +156,23 @@ so you rarely construct anything directly.
 | Identity and metadata | `a.Rid`, `a.Name`, `a.Description`, `a.Url`, `a.Labels` |
 | Read one property | `a.property("phase")` |
 | Everything attached to it | `a.datasources()` |
-| Get a dataset under it, creating if absent | `a.getOrCreateDataset(name, refName)` |
+| A dataset already on it, by name | `a.getAttachedDataset(name)` |
+| Ensure it has a dataset of that name | `a.getOrCreateDataset(name, refName)` |
+| …without adopting an existing one | `a.getOrCreateDataset(name, refName, AttachExisting=false)` |
 | Start a run on it | `a.run(name)`, `a.run(name, startTime)` |
 | Change metadata | `a.update(Name=…, Description=…, Labels=…, Properties=…)` |
+
+A bare name is not unique in Nominal, so `getOrCreateDataset` resolves in three
+steps and prints which one it took: a dataset of that name already on the asset
+is returned untouched; otherwise one of that exact name elsewhere in the
+workspace is **attached** to the asset; otherwise one is created. That middle
+step is what makes "the dataset for serial 12345678" find the one a colleague
+already made — and because it changes your asset on the strength of a name
+match, it announces itself and can be switched off with `AttachExisting=false`.
+
+If several datasets share the name, it errors and lists their RIDs rather than
+picking one. `refName` is used only when attaching, never to decide which
+dataset you meant.
 
 ### Dataset — `ds = a.getOrCreateDataset("telemetry", "tlm")`
 

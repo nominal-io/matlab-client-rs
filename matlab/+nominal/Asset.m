@@ -77,27 +77,85 @@ classdef Asset < nominal.Resource
                                ["RefName" "Rid" "Type"]);
         end
 
-        function d = getOrCreateDataset(obj, name, refName)
-            %GETORCREATEDATASET  Fetch a dataset by name, creating it if absent.
+        function d = getAttachedDataset(obj, name)
+            %GETATTACHEDDATASET  A dataset already on this asset, by name.
             %
-            %   Creates and attaches the dataset to this asset when no dataset
-            %   of that name exists. Named for what it does, since a typo
-            %   produces a new empty dataset rather than an error.
+            %   d = a.getAttachedDataset("telemetry");
             %
-            %   refName is how the dataset is addressed within this asset and
-            %   must be unique among its data sources. An existing dataset is
-            %   returned as-is and is not re-attached.
+            %   Read-only: it never creates or attaches anything. Use it when
+            %   the dataset is expected to be there and its absence is a
+            %   problem; getOrCreateDataset is for making sure it is.
             %
-            %   See also NOMINAL.ASSET/DATASOURCES, NOMINAL.CLIENT/DATASETBYRID
+            %   Errors when no dataset of that name is attached, and when more
+            %   than one is — a name is not unique in Nominal, so there is
+            %   nothing sensible to return. a.datasources() lists everything
+            %   without erroring.
+            %
+            %   See also NOMINAL.ASSET/GETORCREATEDATASET, NOMINAL.ASSET/DATASOURCES
+            arguments
+                obj (1,1) nominal.Asset
+                name (1,1) string
+            end
+            obj.assertLive();
+            d = nominal.Dataset(obj.Client, ...
+                nominalmex('asset_attached_dataset', obj.Client.Handle, ...
+                           obj.Handle, char(name)));
+        end
+
+        function d = getOrCreateDataset(obj, name, refName, options)
+            %GETORCREATEDATASET  Ensure this asset has a dataset of that name.
+            %
+            %   d = a.getOrCreateDataset("telemetry", "tlm");
+            %   d = a.getOrCreateDataset("telemetry", "tlm", AttachExisting=false);
+            %
+            %   A bare name is not unique in Nominal, so this resolves in three
+            %   steps and says which one it took:
+            %
+            %     1. A dataset of that name already attached to this asset is
+            %        returned as-is.
+            %     2. Otherwise a dataset of that exact name elsewhere in the
+            %        workspace is attached to this asset and returned.
+            %     3. Otherwise one is created and attached.
+            %
+            %   Step 2 is what makes "the dataset for serial 12345678" resolve
+            %   to the one a colleague already made. It is also a change to
+            %   your asset driven by a name match, so it announces itself and
+            %   can be switched off with AttachExisting=false, which goes
+            %   straight from step 1 to step 3.
+            %
+            %   Errors rather than guessing when several datasets share the
+            %   name, naming the RIDs so you can pick one with
+            %   client.datasetByRid.
+            %
+            %   refName addresses the dataset within this asset and must be
+            %   unique among its data sources. It is used only when attaching
+            %   — never to decide which dataset you meant.
+            %
+            %   See also NOMINAL.ASSET/GETATTACHEDDATASET, NOMINAL.CLIENT/DATASETBYRID
             arguments
                 obj (1,1) nominal.Asset
                 name (1,1) string
                 refName (1,1) string
+                options.AttachExisting (1,1) logical = true
             end
             obj.assertLive();
-            d = nominal.Dataset(obj.Client, ...
-                nominalmex('dataset_get_or_create', obj.Client.Handle, obj.Handle, ...
-                           char(name), char(refName)));
+
+            [handle, outcome] = nominalmex('dataset_get_or_create', ...
+                obj.Client.Handle, obj.Handle, char(name), char(refName), ...
+                int32(options.AttachExisting));
+            d = nominal.Dataset(obj.Client, handle);
+
+            % Announced, not silent: two of the three branches change the
+            % asset. Only the outcome is printed, never the intermediate
+            % lookups — this is an interactive client, not a log source.
+            switch outcome
+                case 1
+                    fprintf('Attached existing dataset "%s" to asset "%s" as %s\n', ...
+                            name, obj.Name, refName);
+                case 2
+                    fprintf('Created dataset "%s" on asset "%s" as %s\n', ...
+                            name, obj.Name, refName);
+            end
         end
 
         function r = run(obj, name, startTime)

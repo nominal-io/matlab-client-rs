@@ -24,9 +24,13 @@ function results = nominalexample_datasetdemo(assetName)
     % --- get or create a dataset under the asset ----------------------
     %
     % refName is how this dataset is addressed within the asset, and must be
-    % unique among its data sources. An existing dataset is returned as-is
-    % rather than re-attached.
-    dataset = asset.getOrCreateDataset("telemetry", "tlm");
+    % unique among its data sources.
+    %
+    % AttachExisting=false because this demo wants its own data. Left on, a
+    % dataset called "telemetry" belonging to someone else would be adopted
+    % onto this throwaway asset — sensible for real work, wrong for a demo
+    % that then writes to it. See nominal.Asset.getOrCreateDataset.
+    dataset = asset.getOrCreateDataset("telemetry", "tlm", AttachExisting=false);
     fprintf('Dataset "%s"\n  rid %s\n', dataset.Name, dataset.Rid);
 
     % --- fetch the same dataset by RID --------------------------------
