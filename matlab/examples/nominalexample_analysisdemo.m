@@ -98,6 +98,12 @@ function results = nominalexample_analysisdemo(datasetRid)
     results.Samples = dataset.fetch(firstChannelName, results.StartTime, results.StopTime);
     fprintf('%d samples\n', height(results.Samples));
 
+    % The window to use for anything bucketed, narrowed below once the samples
+    % show where the data actually is. Declared out here so the synchronize
+    % block can use it too, and defaulted so it is always defined.
+    bucketStart = results.StartTime;
+    bucketStop = results.StopTime;
+
     if height(results.Samples) > 0
         sampleValues = results.Samples.(1);
         fprintf('  first %s = %g\n', string(results.Samples.Time(1)), sampleValues(1));
@@ -106,11 +112,31 @@ function results = nominalexample_analysisdemo(datasetRid)
         % A timetable is the point of returning one: this all works directly.
         fprintf('  mean %g, std %g\n', mean(sampleValues), std(sampleValues));
 
+        % Narrow to what the data actually spans before decimating.
+        %
+        % Buckets divide the *requested* window, not the returned samples. The
+        % search window above is a day wide because the demo cannot know when
+        % the data was written; asking for 200 buckets across it puts a
+        % half-second of samples in one bucket and returns a single point —
+        % correct, and useless. Now that the samples are in hand, their own
+        % extent is the right window.
+        bucketStart = results.Samples.Time(1);
+        bucketStop = results.Samples.Time(end);
+
         % Decimated. Ask the server for roughly this many points rather than
         % moving every sample — for a plot the difference is invisible.
+        requestedBuckets = 200;
         results.Decimated = dataset.fetch(firstChannelName, ...
-            results.StartTime, results.StopTime, Buckets=200);
-        fprintf('  decimated to %d points\n', height(results.Decimated));
+            bucketStart, bucketStop, Buckets=requestedBuckets);
+        fprintf('  decimated to %d point(s) over %s\n', ...
+                height(results.Decimated), string(bucketStop - bucketStart));
+
+        % Fewer points than buckets is normal: empty buckets are dropped, so
+        % asking for more buckets than there are samples cannot invent data.
+        if height(results.Decimated) < requestedBuckets
+            fprintf('    (asked for %d; empty buckets are not returned)\n', ...
+                    requestedBuckets);
+        end
     end
 
     % 3 ------------------------------------------- two channels together
@@ -123,10 +149,12 @@ function results = nominalexample_analysisdemo(datasetRid)
         fprintf('\n--- Synchronize ---\n');
         secondChannelName = results.Channels.Name(2);
 
+        % The narrowed window again — bucketing across the full day-wide search
+        % window would collapse both channels to a single row each.
         firstSamples = dataset.fetch(firstChannelName, ...
-            results.StartTime, results.StopTime, Buckets=100);
+            bucketStart, bucketStop, Buckets=100);
         secondSamples = dataset.fetch(secondChannelName, ...
-            results.StartTime, results.StopTime, Buckets=100);
+            bucketStart, bucketStop, Buckets=100);
 
         results.Aligned = synchronize(firstSamples, secondSamples);
         fprintf('%s + %s -> %d rows, %d variables\n', ...

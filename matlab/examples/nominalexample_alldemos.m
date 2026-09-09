@@ -47,12 +47,26 @@ function nominalexample_alldemos()
         client = nominalexample_connect();
         asset = client.getOrCreateAsset(assetName);
 
+        % Refresh=true because this handle was fetched after the write demos
+        % ran, but an asset handle is a snapshot — and the demos above
+        % attached three datasets between them.
+        %
         % datasources() lists videos and connections too, and only a dataset
         % RID can open a stream.
-        dataSources = asset.datasources();
+        dataSources = asset.datasources(Refresh=true);
         attachedDatasets = dataSources(dataSources.Type == "dataset", :);
+
+        % Prefer "tlm", the dataset the dataset demo made and declared units
+        % on. Data sources come back sorted by reference name, so taking the
+        % first would pick "ingested" — which works, but then the analysis
+        % demo reports channels with no units and the run reads as though the
+        % unit step never happened.
         if ~isempty(attachedDatasets)
-            sharedDatasetRid = attachedDatasets.Rid(1);
+            preferred = attachedDatasets(attachedDatasets.RefName == "tlm", :);
+            if isempty(preferred)
+                preferred = attachedDatasets;
+            end
+            sharedDatasetRid = preferred.Rid(1);
         end
 
         delete(asset);

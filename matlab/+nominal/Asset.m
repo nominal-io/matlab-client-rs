@@ -60,8 +60,11 @@ classdef Asset < nominal.Resource
             value = string(nominalmex('asset_property', obj.Handle, char(key)));
         end
 
-        function t = datasources(obj)
+        function t = datasources(obj, options)
             %DATASOURCES  Everything attached to this asset, as a table.
+            %
+            %   s = a.datasources();                % what this handle knows
+            %   s = a.datasources(Refresh=true);    % ask the server
             %
             %   Variables: RefName, Rid, Type. Type is "dataset", "video", or
             %   "connection" — which matters because the RID alone does not
@@ -72,7 +75,41 @@ classdef Asset < nominal.Resource
             %
             %       s = a.datasources();
             %       tlm = s(s.Type == "dataset", :);
+            %
+            %   **Reads this handle's snapshot by default**, taken when the
+            %   asset was fetched. So a dataset attached since — by
+            %   getOrCreateDataset, by another process, or from the web app —
+            %   is not listed until you ask for it:
+            %
+            %       a.getOrCreateDataset("telemetry", "tlm");
+            %       height(a.datasources())              % unchanged
+            %       height(a.datasources(Refresh=true))  % +1
+            %
+            %   That is the same rule every other accessor follows — a handle
+            %   is a snapshot, which is why update() hands back a new object
+            %   rather than changing this one. Refresh=true costs one request
+            %   and does *not* alter this object: it reads a fresh handle and
+            %   discards it, so a.Name and the rest still report what they
+            %   always did.
+            %
+            %   See also NOMINAL.CLIENT/ASSETBYRID
+            arguments
+                obj (1,1) nominal.Asset
+                options.Refresh (1,1) logical = false
+            end
             obj.assertLive();
+
+            if options.Refresh
+                % A throwaway handle on the same asset. The table is plain
+                % data by the time it comes back, so releasing the handle
+                % straight away is safe — and an exception on the way would
+                % release it anyway, when the local goes out of scope.
+                fresh = obj.Client.assetByRid(obj.Rid);
+                t = fresh.datasources();
+                delete(fresh);
+                return
+            end
+
             t = structsToTable(nominalmex('asset_datasources', obj.Handle), ...
                                ["RefName" "Rid" "Type"]);
         end
