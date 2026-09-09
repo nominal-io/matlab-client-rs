@@ -81,6 +81,24 @@ function results = nominalexample_analysisdemo(datasetRid)
     end
     disp(head(results.Channels, 10));
 
+    % Only numeric channels can be fetched or exported. The compute service
+    % rejects anything else with Compute:ChannelHasWrongType, naming DOUBLE,
+    % INT64 and UINT64 as the types it will take — so a dataset carrying a
+    % string channel breaks any code that picks channels positionally.
+    numericChannels = results.Channels( ...
+        ismember(results.Channels.DataType, ["double" "int64" "uint64"]), :);
+
+    if isempty(numericChannels)
+        fprintf('\nNo numeric channels — nothing here can be fetched.\n');
+        nominalexample_publish(results, "nominalAnalysis");
+        delete(dataset); delete(client);
+        return
+    end
+    if height(numericChannels) < height(results.Channels)
+        fprintf('%d of %d channels are numeric; the rest cannot be fetched.\n', ...
+                height(numericChannels), height(results.Channels));
+    end
+
     % 2 ----------------------------------------------------------- fetch
     %
     % A window wide enough to catch whatever the write demos left behind. The
@@ -89,14 +107,31 @@ function results = nominalexample_analysisdemo(datasetRid)
     results.StopTime  = datetime("now", TimeZone="UTC") + seconds(1);
     results.StartTime = results.StopTime - days(1);
 
-    firstChannelName = results.Channels.Name(1);
-    fprintf('\n--- Fetch: %s ---\n', firstChannelName);
-
+    % A declared channel need not have any data: setChannelMetadata is an
+    % upsert, so units can be attached to a channel nothing has written yet.
+    % Take the first numeric channel that actually returns samples rather than
+    % the first one alphabetically, so the rest of the demo has something to
+    % work with.
+    %
     % The timetable has exactly one variable, named after the channel. It is
     % addressed positionally below — .(1) — because the channel name is only
     % known at run time.
-    results.Samples = dataset.fetch(firstChannelName, results.StartTime, results.StopTime);
+    firstChannelName = numericChannels.Name(1);
+    for candidate = numericChannels.Name'
+        samples = dataset.fetch(candidate, results.StartTime, results.StopTime);
+        if height(samples) > 0
+            firstChannelName = candidate;
+            results.Samples = samples;
+            break
+        end
+    end
+
+    fprintf('\n--- Fetch: %s ---\n', firstChannelName);
     fprintf('%d samples\n', height(results.Samples));
+    if height(results.Samples) == 0
+        fprintf('  (no numeric channel has data in this window yet — streamed\n');
+        fprintf('   points take a moment to land)\n');
+    end
 
     % The window to use for anything bucketed, narrowed below once the samples
     % show where the data actually is. Declared out here so the synchronize
@@ -128,8 +163,11 @@ function results = nominalexample_analysisdemo(datasetRid)
         requestedBuckets = 200;
         results.Decimated = dataset.fetch(firstChannelName, ...
             bucketStart, bucketStop, Buckets=requestedBuckets);
-        fprintf('  decimated to %d point(s) over %s\n', ...
-                height(results.Decimated), string(bucketStop - bucketStart));
+        % Printed as seconds rather than string(duration): the default
+        % hh:mm:ss format shows a sub-second span, which this usually is, as
+        % a flat 00:00:00.
+        fprintf('  decimated to %d point(s) over %.3f s\n', ...
+                height(results.Decimated), seconds(bucketStop - bucketStart));
 
         % Fewer points than buckets is normal: empty buckets are dropped, so
         % asking for more buckets than there are samples cannot invent data.
@@ -145,9 +183,14 @@ function results = nominalexample_analysisdemo(datasetRid)
     % aligning two channels on independent clocks is one call. It unions the
     % row times and fills the gaps, so the result has one row per distinct
     % instant across both inputs.
-    if height(results.Channels) >= 2
+    % Numeric channels only, and a different one from the first — picking
+    % positionally out of the full channel list is what made this step fail
+    % against a dataset carrying a string channel.
+    otherChannels = numericChannels.Name(numericChannels.Name ~= firstChannelName);
+
+    if ~isempty(otherChannels) && height(results.Samples) > 0
         fprintf('\n--- Synchronize ---\n');
-        secondChannelName = results.Channels.Name(2);
+        secondChannelName = otherChannels(1);
 
         % The narrowed window again — bucketing across the full day-wide search
         % window would collapse both channels to a single row each.
@@ -169,9 +212,12 @@ function results = nominalexample_analysisdemo(datasetRid)
     fprintf('\n--- Export ---\n');
     results.ExportFile = string(fullfile(pwd, "nominalexample_analysisdemo.mat"));
 
-    % Transposed: Channels.Name is a column out of the table, and export takes
-    % a 1-by-C row of names.
-    dataset.export(results.ExportFile, results.Channels.Name', ...
+    % Numeric channels only — export goes through the same compute service as
+    % fetch, so a string channel in the list fails the whole request.
+    %
+    % Transposed: Name is a column out of the table, and export takes a 1-by-C
+    % row of names.
+    dataset.export(results.ExportFile, numericChannels.Name', ...
                    results.StartTime, results.StopTime);
 
     exportFileInfo = dir(results.ExportFile);

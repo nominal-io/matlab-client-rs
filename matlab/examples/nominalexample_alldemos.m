@@ -56,17 +56,28 @@ function nominalexample_alldemos()
         dataSources = asset.datasources(Refresh=true);
         attachedDatasets = dataSources(dataSources.Type == "dataset", :);
 
-        % Prefer "tlm", the dataset the dataset demo made and declared units
-        % on. Data sources come back sorted by reference name, so taking the
-        % first would pick "ingested" — which works, but then the analysis
-        % demo reports channels with no units and the run reads as though the
-        % unit step never happened.
-        if ~isempty(attachedDatasets)
-            preferred = attachedDatasets(attachedDatasets.RefName == "tlm", :);
-            if isempty(preferred)
-                preferred = attachedDatasets;
+        % Preference order, best story first. Data sources come back sorted by
+        % reference name, so without this the choice is just alphabetical.
+        %
+        %   uploaded  500 rows written by the upload demo, with units declared
+        %             on every channel, and all of them numeric
+        %   ingested  the CSV — real data, but no units
+        %   tlm       units declared but nothing written to those channels;
+        %             the streamed demo.* points land here eventually, though
+        %             not reliably before this runs. It also carries a string
+        %             channel, which nothing downstream can fetch
+        %
+        % Both of the later two have shown up as an empty or failed analysis
+        % run, which is why the order is explicit rather than incidental.
+        for refName = ["uploaded" "ingested" "tlm"]
+            match = attachedDatasets(attachedDatasets.RefName == refName, :);
+            if ~isempty(match)
+                sharedDatasetRid = match.Rid(1);
+                break
             end
-            sharedDatasetRid = preferred.Rid(1);
+        end
+        if sharedDatasetRid == "" && ~isempty(attachedDatasets)
+            sharedDatasetRid = attachedDatasets.Rid(1);
         end
 
         delete(asset);
