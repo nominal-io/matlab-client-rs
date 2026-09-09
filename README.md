@@ -114,10 +114,9 @@ are R2019b, but [toNanos.m](matlab/+nominal/toNanos.m) and
 which is newer — going below R2021a needs that checked against a real install
 rather than assumed.
 
-**Windows x86-64 is the only platform verified end to end.** `build.m` picks
-its cargo target and linker flags from the host, and there are `just` recipes
-for Apple silicon and Linux x86-64 — but only the Windows link has actually
-been run. Intel macOS is not supported. See [BUILDING.md](BUILDING.md).
+**Windows x86-64, Apple silicon and Linux x86-64 have all been built and
+linked** on real hardware. `build.m` picks its cargo target and linker flags
+from the host. Intel macOS is not supported. See [BUILDING.md](BUILDING.md).
 
 ## Known gaps
 
@@ -158,5 +157,8 @@ listings, `datasetByRid`, channel metadata, `write`, streaming, `ingest`,
 `just lint` runs clippy and MATLAB's `checkcode`; `just test` runs the Rust
 suite; `just mex-test` runs the offline MATLAB smoke test.
 
-Not yet exercised: any platform other than Windows x86-64, and any MATLAB
-release below R2026a.
+The gateway also builds and passes the offline smoke test on Linux x86-64
+(gcc), and builds on Apple silicon (clang).
+
+Not yet exercised: the live API surface on any platform other than Windows
+x86-64, and any MATLAB release below R2026a.

@@ -129,12 +129,7 @@ function platform = platformSettings()
         platform.Triple = 'x86_64-unknown-linux-gnu';
         platform.LibName = 'libnominal_ffi.a';
         platform.Recipe = 'build-linux-x64';
-        % Verified against `just native-libs` on Fedora 44 / rustc 1.98.1,
-        % which reports: -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc.
-        % -lc is omitted because the compiler driver links it last anyway;
-        % naming it here only risks disturbing that ordering. -lgcc_s (unwind
-        % tables) and -lutil (forkpty, reached through std::process) were both
-        % missing from the earlier guessed list.
+        % From `just native-libs`, minus -lc which the driver links itself.
         platform.ExtraLibs = {'-lgcc_s', '-lutil', '-lrt', '-lpthread', '-lm', '-ldl'};
     end
 end

@@ -86,8 +86,7 @@ Windows x86-64, Apple silicon and Linux x86-64. Intel macOS is not a target —
 linked.
 
 **All three platforms have been verified end to end** — Windows x86-64, Apple
-silicon and Linux x86-64, each through the static library, the MEX link and the
-offline smoke test. The system-library lists in `platformSettings()` are
+silicon and Linux x86-64. The system-library lists in `platformSettings()` are
 therefore observed rather than guessed. They are still per-host and still hand
 maintained, so on a new host — or after a dependency bump changes the graph —
 get the authoritative list and reconcile:

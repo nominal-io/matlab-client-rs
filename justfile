@@ -1,26 +1,9 @@
 #!/usr/bin/env just --justfile
 
-# MATLAB is often not on PATH. Two environment variables are read, and an
-# explicit `just matlab=...` still overrides both:
-#
-#   MATLAB_ROOT  the installation directory — what $MATLAB means nearly
-#                everywhere else. The executable is derived from it.
-#                  export MATLAB_ROOT=/usr/local/MATLAB/R2026a
-#   MATLAB_BIN   the executable itself, for an install that does not follow the
-#                usual <root>/bin/matlab layout.
-#                  export MATLAB_BIN='C:/Program Files/MATLAB/R2026a/bin/matlab.exe'
-#
-# Recipes run through bash, so use forward slashes in either — backslashes are
-# eaten as escapes before the path ever reaches the executable.
-#
-# $MATLAB itself is deliberately *not* read. This file used to take it as the
-# path to the executable, which collides with the near-universal convention
-# that $MATLAB is the install root: setting it the conventional way made just
-# try to execute a directory, and the resulting error named neither cause.
+# Not on PATH? Set MATLAB_ROOT to the install dir, or MATLAB_BIN to the exe.
+# Forward slashes only. See BUILDING.md.
 matlab_root := env_var_or_default("MATLAB_ROOT", "")
 matlab_bin := env_var_or_default("MATLAB_BIN", "")
-
-# os() is how a recipe stays one recipe across platforms rather than three.
 matlab_exe := if os() == "windows" { "matlab.exe" } else { "matlab" }
 
 matlab := if matlab_bin != "" {
@@ -40,61 +23,70 @@ matlab := if matlab_bin != "" {
 # after a MATLAB upgrade; MathWorks moves it between releases.
 macos_target := "13.3"
 
-# Default target: the thing you actually load in MATLAB.
-default: help
+# `just` with no arguments lists every recipe
+[private]
+default:
+    @just --list
 
 
 
 # Generate C header from Rust code
+[group('gateway')]
 header:
     cbindgen crates/ffi --output crates/ffi/include/nominal_ffi.h
 
-# A static library on its own is not a deliverable — nothing loads it until a
-# MEX gateway links it in — so every build- recipe here has a matching arm in
-# build.m. Add the two together or not at all.
-#
-# Windows x86-64, macOS arm64 and Linux x86-64 have all been verified end to
-# end, so the system-library lists in build.m are observed rather than guessed.
-# They are still hand maintained: run `just native-libs` on the host and
-# reconcile whenever a MEX link reports an unresolved symbol.
+# Every build- recipe here needs a matching arm in build.m. Add both or neither.
 
-# Build the static library the MEX gateway links in
+# Static library for Windows x86-64
+[group('library')]
 build-win64:
     cargo build --release --target x86_64-pc-windows-msvc -p nominal-ffi
 
 # Same, without LTO (fast edit-build loop)
+[group('library')]
 build-win64-fast:
     cargo build --profile fast --target x86_64-pc-windows-msvc -p nominal-ffi
 
-# macOS, Apple silicon
+# Static library for Apple silicon
+[group('library')]
 build-macos-arm64:
     MACOSX_DEPLOYMENT_TARGET={{macos_target}} cargo build --release --target aarch64-apple-darwin -p nominal-ffi
 
 # Same, without LTO
+[group('library')]
 build-macos-arm64-fast:
     MACOSX_DEPLOYMENT_TARGET={{macos_target}} cargo build --profile fast --target aarch64-apple-darwin -p nominal-ffi
 
-# Linux x86_64
+# Static library for Linux x86-64
+[group('library')]
 build-linux-x64:
     cargo build --release --target x86_64-unknown-linux-gnu -p nominal-ffi
 
 # build.m picks the target and linker flags from the host it runs on, so the
 # mex- recipes differ only in which static library they build first.
 
-# Build the MATLAB MEX gateway
+# Build the MATLAB MEX gateway, Windows x86-64
+[group('gateway')]
 mex-win64: build-win64 header
     "{{matlab}}" -batch "cd matlab; build"
 
 # Same, against the no-LTO library build
+[group('gateway')]
 mex-win64-fast: build-win64-fast header
     "{{matlab}}" -batch "cd matlab; build(Profile='fast')"
 
+# Gateway on Apple silicon
+[group('gateway')]
 mex-macos-arm64: build-macos-arm64 header
     "{{matlab}}" -batch "cd matlab; build"
 
+# Same, against the no-LTO library build
+[group('gateway')]
 mex-macos-arm64-fast: build-macos-arm64-fast header
     "{{matlab}}" -batch "cd matlab; build(Profile='fast')"
 
+# Gateway on Linux x86-64
+[group('gateway')]
 mex-linux-x64: build-linux-x64 header
     "{{matlab}}" -batch "cd matlab; build"
 
@@ -109,39 +101,46 @@ mex-linux-x64: build-linux-x64 header
 # platforms with a binary present are claimed. See PACKAGING.md.
 
 # Build a Windows .mltbx into dist/
+[group('package')]
 package: mex-win64
     "{{matlab}}" -batch "run('tools/package.m')"
 
 # Package the gateways already in +nominal/private/, building none
+[group('package')]
 package-only:
     "{{matlab}}" -batch "run('tools/package.m')"
 
-# Exercise the MATLAB layer (no network required). Host-independent.
+# Offline MATLAB smoke test
+[group('check')]
 mex-test:
     "{{matlab}}" -batch "cd matlab; addpath(pwd); addpath(fullfile(pwd,'tests')); nominaltest_smoketest"
 
-# Kept as an alias: the old name is in the README and in muscle memory.
+# Alias for mex-test
+[group('check')]
 mex-test-win64: mex-test
 
-# Run tests
+# Run the Rust tests
+[group('check')]
 test:
     cargo test --workspace
 
 # Lint everything: Rust and MATLAB
+[group('check')]
 lint: lint-rust lint-matlab
 
-# Formatter and clippy. Separate from lint-matlab because it is fast enough to
-# run constantly, where starting MATLAB is not.
+# Formatter and clippy (fast)
+[group('check')]
 lint-rust:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
 
-# MATLAB's static analyser — the counterpart to clippy for the other half.
-# Catches syntax errors, unset outputs, and names shadowing builtins.
+# MATLAB's static analyser
+[group('check')]
 lint-matlab:
     "{{matlab}}" -batch "run('tools/lintmatlab.m')"
 
 # Format code
+[group('check')]
 fmt:
     cargo fmt --all
 
@@ -169,6 +168,7 @@ fmt:
 # needs Xcode proper, but a tool that shells out to xcodebuild still will.
 
 # Satisfy MATLAB's Xcode-license check on a Command Line Tools-only macOS host
+[group('tools')]
 accept-xcode-license:
     @echo "This records agreement to the Xcode and Apple SDKs Agreement:"
     @echo "    https://www.apple.com/legal/sla/docs/xcode.pdf"
@@ -177,6 +177,7 @@ accept-xcode-license:
     @echo "Recorded. Verify with: just mex-setup"
 
 # Undo accept-xcode-license
+[group('tools')]
 revoke-xcode-accept:
     @if defaults read com.apple.dt.Xcode IDEXcodeVersionForAgreedToGMLicense >/dev/null 2>&1; then \
         defaults delete com.apple.dt.Xcode IDEXcodeVersionForAgreedToGMLicense; \
@@ -186,6 +187,7 @@ revoke-xcode-accept:
     fi
 
 # Report which compiler mex is configured to use
+[group('tools')]
 mex-setup:
     "{{matlab}}" -batch "mex -setup C"
 
@@ -196,34 +198,19 @@ mex-setup:
 # a MEX link reports an unresolved symbol. No --target: it reports for the host.
 
 # Print the system libraries this host's MEX link needs
+[group('tools')]
 native-libs:
     cargo rustc --release -p nominal-ffi --crate-type staticlib -- --print native-static-libs
 
+# Header, library and gateway in one go, no LTO
+[group('gateway')]
 dev-build-win-fast: header build-win64-fast mex-win64-fast
+
+# Header, library and gateway in one go
+[group('gateway')]
 dev-build-win: header build-win64 mex-win64
 
 # Clean build artifacts
+[group('tools')]
 clean:
     cargo clean
-
-# Show help
-help:
-    echo "Available targets:"
-    echo "  just mex-win64         - Build the MATLAB gateway"
-    echo "  just mex-win64-fast    - Same, against the no-LTO library build"
-    echo "  just mex-macos-arm64   - Gateway on Apple silicon"
-    echo "  just mex-linux-x64     - Gateway on Linux x86_64"
-    echo "  just build-win64       - Just the static library, without the gateway"
-    echo "  just package           - Build a Windows .mltbx into dist/"
-    echo "  just package-only      - Package existing gateways, build none"
-    echo "  just mex-test          - Run the MATLAB smoke test"
-    echo "  just native-libs       - Print the system libraries the MEX link needs"
-    echo "  just mex-setup         - Report which compiler mex is configured to use"
-    echo "  just accept-xcode-license - Clear MATLAB's Xcode-license check on macOS"
-    echo "                              (undo with just revoke-xcode-accept)"
-    echo "  just test              - Run tests"
-    echo "  just lint              - Lint Rust and MATLAB"
-    echo "  just lint-rust         - Just fmt + clippy (fast)"
-    echo "  just lint-matlab       - Just MATLAB checkcode"
-    echo "  just fmt               - Format code"
-    echo "  just clean             - Clean build artifacts"

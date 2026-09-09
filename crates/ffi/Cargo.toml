@@ -44,12 +44,7 @@ futures = "0.3"
 # pulls reqwest 0.13, so two versions compile either way, and picking 0.13 here
 # would not change that. Follow whichever version `nominal` moves to.
 #
-# `default-features = false` is load-bearing, not tidiness. reqwest's default
-# feature set includes `default-tls`, which pulls native-tls — and features
-# unify, so leaving defaults on re-enables it for the whole graph even though
-# `nominal` carefully turns it off. On Windows native-tls binds to schannel and
-# nobody notices; on Linux it binds to OpenSSL, and the build dies in
-# openssl-sys looking for a system `openssl.pc`. TLS here is rustls throughout.
+# Keep default-features = false — it stops native-tls/OpenSSL entering the graph.
 reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls-native-roots",
 ] }
