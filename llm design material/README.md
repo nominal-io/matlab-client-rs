@@ -25,5 +25,6 @@ directory and the code carries at most a pointer.
 | [tls-and-openssl.md](tls-and-openssl.md) | Why the build must not pull OpenSSL, and how it did |
 | [platform-link-lists.md](platform-link-lists.md) | The hand-maintained system-library lists in `build.m` |
 | [matlab-install-linux.md](matlab-install-linux.md) | Installing MATLAB on a minimal Linux/WSL host |
+| [binary-size.md](binary-size.md) | Why the gateway was 3x too big, and why cargo can't fix it |
 | [justfile-design.md](justfile-design.md) | `just` behaviours this repo depends on |
 | [verification-status.md](verification-status.md) | What has actually been run, per platform |

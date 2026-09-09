@@ -65,11 +65,45 @@ function build(options)
         '-outdir', outDir, ...
         '-output', 'nominalmex');
 
-    fprintf('Built %s\n', fullfile(outDir, ['nominalmex.' mexext]));
+    built = fullfile(outDir, ['nominalmex.' mexext]);
+
+    % Cargo's profile strip cannot do this: a staticlib has to keep its symbols
+    % or nothing could link against it. Halves the gateway on ELF/Mach-O.
+    if options.Profile == "release" && ~ispc
+        stripSymbols(built);
+    end
+
+    fprintf('Built %s\n', built);
     fprintf('\nAdd this folder to the path, then:\n');
     fprintf('    addpath(''%s'')\n', here);
     fprintf('    c = nominal.Client.fromProfile();\n');
     fprintf('    disp(c.whoAmI())\n');
+end
+
+function stripSymbols(target)
+%STRIPSYMBOLS  Drop the static symbol table from a linked gateway.
+%
+%   The dynamic symbol table is left alone, so mexFunction stays exported.
+%   A failure here costs size, not correctness, so it warns rather than errors.
+
+    before = dir(target);
+
+    if ismac
+        % -x keeps global symbols, which is what the loader needs.
+        cmd = sprintf('strip -S -x ''%s''', target);
+    else
+        cmd = sprintf('strip --strip-all ''%s''', target);
+    end
+
+    [status, output] = system(cmd);
+    if status ~= 0
+        warning('nominal:stripFailed', 'strip failed: %s', strtrim(output));
+        return;
+    end
+
+    after = dir(target);
+    fprintf('Stripped %.0f MB -> %.0f MB\n', ...
+            before.bytes / 1e6, after.bytes / 1e6);
 end
 
 function platform = platformSettings()
