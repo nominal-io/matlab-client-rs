@@ -149,16 +149,8 @@ classdef Asset < nominal.Resource
                 nominalmex('asset_add_dataset', obj.Client.Handle, obj.Handle, ...
                            char(refName), dataset.Handle);
             catch attachError
-                % The server rejects a reference name already in use on this
-                % asset. Said plainly, because the raw error names an internal
-                % concept ("data scope") that appears nowhere in this API.
-                if contains(attachError.message, "DuplicateDataScopeNames")
-                    error('nominal:refNameInUse', ...
-                          ['asset "%s" already has a data source called "%s".\n' ...
-                           'Pass a different reference name to tell them apart:\n' ...
-                           '    a.addDataset(ds, "can")'], obj.Name, refName);
-                end
-                rethrow(attachError);
+                obj.rethrowAttachError(attachError, refName, ...
+                                       "a.addDataset(ds, ""can"")");
             end
         end
 
@@ -227,9 +219,14 @@ classdef Asset < nominal.Resource
             end
             obj.assertLive();
 
-            [handle, outcome] = nominalmex('dataset_get_or_create', ...
-                obj.Client.Handle, obj.Handle, char(name), char(refName), ...
-                int32(options.AttachExisting));
+            try
+                [handle, outcome] = nominalmex('dataset_get_or_create', ...
+                    obj.Client.Handle, obj.Handle, char(name), char(refName), ...
+                    int32(options.AttachExisting));
+            catch createError
+                obj.rethrowAttachError(createError, refName, ...
+                    sprintf('a.getOrCreateDataset("%s", "demo")', name));
+            end
             d = nominal.Dataset(obj.Client, handle);
 
             % Announced, not silent: two of the three branches change the
@@ -296,6 +293,30 @@ classdef Asset < nominal.Resource
             cleanup = onCleanup(@() nominalmex('update_free', u));
             updated = nominal.Asset(obj.Client, ...
                 nominalmex('asset_update_commit', obj.Client.Handle, obj.Handle, u));
+        end
+    end
+
+    methods (Access = private)
+        function rethrowAttachError(obj, cause, refName, suggestion)
+            %RETHROWATTACHERROR  Translate a refName collision, rethrow the rest.
+            %
+            %   Both routes that attach a data source hit the same rejection,
+            %   so both translate it here. The raw error is a wall of Conjure
+            %   naming "data scope" — an internal concept that appears nowhere
+            %   in this API — which tells the caller nothing about what to do.
+            %
+            %   suggestion is the call to show, since the two entry points take
+            %   the reference name in different positions.
+
+            if contains(cause.message, "DuplicateDataScopeNames")
+                error('nominal:refNameInUse', ...
+                      ['asset "%s" already has a data source called "%s".\n' ...
+                       'Reference names must be unique on an asset, so pass a ' ...
+                       'different one:\n    %s\n' ...
+                       'a.datasources(Refresh=true) lists the names in use.'], ...
+                      obj.Name, refName, suggestion);
+            end
+            rethrow(cause);
         end
     end
 
