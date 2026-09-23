@@ -182,12 +182,12 @@ If several datasets share the name, it errors and lists their RIDs rather than
 picking one — at which point `a.addDataset(c.datasetByRid(rid))` attaches the
 one you meant.
 
-`refName` defaults to `"default"` and is used only when attaching, never to
-decide which dataset you meant. It exists for an asset carrying two sources
-that measure the same thing — a flight controller logging over CAN and a test
-rig probing the unit, both reporting `engine temp` — and is what tells them
-apart. Supply one when there is a second data source; the server's only rule
-is that it be unique on the asset.
+`refName` is used only when attaching, never to decide which dataset you meant,
+and **you can leave it out** — a free one is chosen (`"default"` on an asset
+with none, otherwise the dataset's own name). It exists for an asset carrying
+two sources that measure the same thing — a flight controller logging over CAN
+and a test rig probing the unit, both reporting `engine temp` — and is what
+tells them apart. Supply one only when you care what the sources are called.
 
 ### Dataset — `ds = a.getOrCreateDataset("telemetry", "tlm")`
 

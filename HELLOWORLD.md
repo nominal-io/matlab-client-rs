@@ -119,9 +119,7 @@ client = nominal.Client.connect();
 asset = client.getOrCreateAsset("engine-3");
 
 % --- a dataset under it -------------------------------------------------
-% The second argument is the reference name, unique among the asset's
-% data sources.
-dataset = asset.getOrCreateDataset("Bench run 7", "bench7");
+dataset = asset.getOrCreateDataset("Bench run 7");
 
 % --- declare units before any data exists -------------------------------
 % Optional, but it means the first plot comes out labelled. Units are UCUM

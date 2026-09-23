@@ -131,8 +131,16 @@ classdef Asset < nominal.Resource
             %   It exists for the case where one asset carries two sources
             %   measuring the same thing — a flight controller logging over
             %   CAN and a test rig probing the unit directly, both reporting
-            %   "engine temp" — and it is what tells those apart. Omit it and
-            %   you get "default", which is right until there are two.
+            %   "engine temp" — and it is what tells those apart.
+            %
+            %   **Omit it and one is chosen for you**: "default" on an asset
+            %   that has none, otherwise the dataset's own name, otherwise
+            %   that with a number. You only need to supply one when you care
+            %   what the sources are called.
+            %
+            %   Attaching a dataset already on this asset *moves* it to the
+            %   new reference name rather than adding a second entry — a
+            %   dataset appears at most once per asset.
             %
             %   This asset handle is a snapshot and will not show the new data
             %   source. Use a.datasources(Refresh=true) to see it.
@@ -141,16 +149,27 @@ classdef Asset < nominal.Resource
             arguments
                 obj (1,1) nominal.Asset
                 dataset (1,1) nominal.Dataset
-                refName (1,1) string = "default"
+                refName (1,1) string = ""
             end
             obj.assertLive();
+
+            explicit = refName ~= "";
+            if ~explicit
+                refName = obj.freeRefName(dataset.Name);
+            end
 
             try
                 nominalmex('asset_add_dataset', obj.Client.Handle, obj.Handle, ...
                            char(refName), dataset.Handle);
             catch attachError
-                obj.rethrowAttachError(attachError, refName, ...
-                                       "a.addDataset(ds, ""can"")");
+                % Only a name the caller chose can collide — one we picked was
+                % free a moment ago, and a collision there means someone else
+                % took it in between, which rethrow reports honestly.
+                if explicit
+                    obj.rethrowAttachError(attachError, refName, ...
+                                           "a.addDataset(ds, ""can"")");
+                end
+                rethrow(attachError);
             end
         end
 
@@ -205,27 +224,35 @@ classdef Asset < nominal.Resource
             %   name, naming the RIDs so you can pick one with
             %   client.datasetByRid.
             %
-            %   refName defaults to "default" and is used only when attaching
-            %   — never to decide which dataset you meant. Supply one when the
-            %   asset carries more than one data source; see
-            %   nominal.Asset.addDataset for what it is actually for.
+            %   refName is used only when attaching — never to decide which
+            %   dataset you meant. Omit it and a free one is chosen; you only
+            %   need to supply one when you care what the asset's sources are
+            %   called. See nominal.Asset.addDataset for what it is for.
             %
             %   See also NOMINAL.ASSET/ADDDATASET, NOMINAL.ASSET/GETATTACHEDDATASET
             arguments
                 obj (1,1) nominal.Asset
                 name (1,1) string
-                refName (1,1) string = "default"
+                refName (1,1) string = ""
                 options.AttachExisting (1,1) logical = true
             end
             obj.assertLive();
+
+            explicit = refName ~= "";
+            if ~explicit
+                refName = obj.freeRefName(name);
+            end
 
             try
                 [handle, outcome] = nominalmex('dataset_get_or_create', ...
                     obj.Client.Handle, obj.Handle, char(name), char(refName), ...
                     int32(options.AttachExisting));
             catch createError
-                obj.rethrowAttachError(createError, refName, ...
-                    sprintf('a.getOrCreateDataset("%s", "demo")', name));
+                if explicit
+                    obj.rethrowAttachError(createError, refName, ...
+                        sprintf('a.getOrCreateDataset("%s", "demo")', name));
+                end
+                rethrow(createError);
             end
             d = nominal.Dataset(obj.Client, handle);
 
@@ -297,6 +324,47 @@ classdef Asset < nominal.Resource
     end
 
     methods (Access = private)
+        function refName = freeRefName(obj, preferred)
+            %FREEREFNAME  A reference name not already used on this asset.
+            %
+            %   Reference names must be unique per asset, and the caller
+            %   should not have to know that. A name is a namespace for the
+            %   source's channels — it matters when one asset carries two
+            %   sources reporting the same channel, and is noise otherwise —
+            %   so when nobody chose one, choose a free one rather than
+            %   failing on a detail the caller never asked about.
+            %
+            %   "default" first, so the common single-source asset reads the
+            %   way you would expect. Then the dataset's own name, which is
+            %   at least descriptive. Then numbered.
+            %
+            %   Costs one request, and only when no name was supplied.
+
+            attached = obj.datasources(Refresh=true);
+            if isempty(attached)
+                inUse = strings(0, 1);
+            else
+                inUse = attached.RefName;
+            end
+
+            for candidate = ["default", preferred]
+                if ~ismember(candidate, inUse)
+                    refName = candidate;
+                    return
+                end
+            end
+
+            suffix = 2;
+            while true
+                candidate = preferred + "-" + suffix;
+                if ~ismember(candidate, inUse)
+                    refName = candidate;
+                    return
+                end
+                suffix = suffix + 1;
+            end
+        end
+
         function rethrowAttachError(obj, cause, refName, suggestion)
             %RETHROWATTACHERROR  Translate a refName collision, rethrow the rest.
             %
