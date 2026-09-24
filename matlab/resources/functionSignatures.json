@@ -1,0 +1,353 @@
+{
+  "_schemaVersion": "1.0.0",
+
+  "_comment": [
+    "Tab completion and argument hints for the nominal namespace.",
+    "",
+    "MATLAB finds this file in a 'resources' folder in the parent of the",
+    "outermost namespace folder, which is why it sits in matlab/ beside",
+    "+nominal rather than inside it.",
+    "",
+    "These signatures are hand-maintained and MATLAB does not check them",
+    "against the code: a rename here is silent, and the only symptom is a",
+    "completion that no longer appears. tools/lintmatlab.m runs",
+    "validateFunctionSignaturesJSON over this file, which catches malformed",
+    "JSON and bad field names but cannot know whether a method still exists.",
+    "",
+    "Choices mirror the mustBeMember lists in the arguments blocks. Keep them",
+    "in step; a stale choice list is worse than none, because it suggests a",
+    "value the validator will reject."
+  ],
+
+  "nominal.Client.connect": {
+    "inputs": [
+      {"name": "profile", "kind": "ordered", "type": ["string"], "purpose": "Profile name (default \"default\")"}
+    ],
+    "outputs": [{"name": "client", "type": "nominal.Client"}]
+  },
+
+  "nominal.Client.fromProfile": {
+    "inputs": [
+      {"name": "profile", "kind": "ordered", "type": ["string"], "purpose": "Profile name"},
+      {"name": "ConfigPath", "kind": "namevalue", "type": ["file=*.yml"], "purpose": "Config file to read instead of the default"}
+    ],
+    "outputs": [{"name": "client", "type": "nominal.Client"}]
+  },
+
+  "nominal.Client.fromToken": {
+    "inputs": [
+      {"name": "token", "kind": "required", "type": ["string"], "purpose": "API token"},
+      {"name": "Workspace", "kind": "namevalue", "type": ["string"], "purpose": "Workspace RID"},
+      {"name": "BaseUrl", "kind": "namevalue", "type": ["string"], "purpose": "API base URL"}
+    ],
+    "outputs": [{"name": "client", "type": "nominal.Client"}]
+  },
+
+  "nominal.Client.whoAmI": {
+    "inputs": [{"name": "obj", "kind": "required", "type": ["nominal.Client"]}],
+    "outputs": [{"name": "name", "type": "string"}]
+  },
+
+  "nominal.Client.assets": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "filter", "kind": "ordered", "type": ["string"], "purpose": "Name substring; omit to list every asset"}
+    ],
+    "outputs": [{"name": "t", "type": "table"}]
+  },
+
+  "nominal.Client.datasets": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "filter", "kind": "ordered", "type": ["string"], "purpose": "Name substring; omit to list every dataset"}
+    ],
+    "outputs": [{"name": "t", "type": "table"}]
+  },
+
+  "nominal.Client.getOrCreateAsset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Asset name"}
+    ],
+    "outputs": [{"name": "asset", "type": "nominal.Asset"}]
+  },
+
+  "nominal.Client.assetByRid": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "rid", "kind": "required", "type": ["string"], "purpose": "Asset RID"}
+    ],
+    "outputs": [{"name": "asset", "type": "nominal.Asset"}]
+  },
+
+  "nominal.Client.datasetByRid": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "rid", "kind": "required", "type": ["string"], "purpose": "Dataset RID"}
+    ],
+    "outputs": [{"name": "dataset", "type": "nominal.Dataset"}]
+  },
+
+  "nominal.Client.runByRid": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "rid", "kind": "required", "type": ["string"], "purpose": "Run RID"}
+    ],
+    "outputs": [{"name": "run", "type": "nominal.Run"}]
+  },
+
+  "nominal.Client.createEvent": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "assetRids", "kind": "required", "type": ["string"], "purpose": "Asset RID, or several"},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Event name"},
+      {"name": "Type", "kind": "namevalue", "type": ["choices={'info','flag','error','success'}"]},
+      {"name": "Timestamp", "kind": "namevalue", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "Duration", "kind": "namevalue", "purpose": "duration; zero marks an instant"}
+    ],
+    "outputs": [{"name": "event", "type": "nominal.Event"}]
+  },
+
+  "nominal.Client.ingest": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "path", "kind": "required", "type": ["file=*.csv,*.parquet"], "purpose": "File to ingest"},
+      {"name": "TimestampColumn", "kind": "namevalue", "type": ["string"], "purpose": "Column holding the timestamps"},
+      {"name": "Dataset", "kind": "namevalue", "type": ["nominal.Dataset"], "purpose": "Existing dataset to land in"},
+      {"name": "NewDataset", "kind": "namevalue", "type": ["string"], "purpose": "Name for a new, unattached dataset"},
+      {"name": "Kind", "kind": "namevalue", "type": ["choices={'iso8601','epoch','relative'}"]},
+      {"name": "Unit", "kind": "namevalue", "type": ["choices={'nanoseconds','microseconds','milliseconds','seconds','minutes','hours'}"]}
+    ],
+    "outputs": [{"name": "job", "type": "nominal.IngestJob"}]
+  },
+
+  "nominal.Client.query": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "sql", "kind": "required", "type": ["string"], "purpose": "SQL against the warehouse"},
+      {"name": "Workspace", "kind": "namevalue", "type": ["string"]}
+    ],
+    "outputs": [{"name": "t", "type": "table"}]
+  },
+
+  "nominal.Client.queryExportUrl": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "sql", "kind": "required", "type": ["string"], "purpose": "SQL against the warehouse"},
+      {"name": "Workspace", "kind": "namevalue", "type": ["string"]}
+    ],
+    "outputs": [{"name": "url", "type": "string"}]
+  },
+
+  "nominal.Asset.getOrCreateDataset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Dataset name"},
+      {"name": "refName", "kind": "ordered", "type": ["string"], "purpose": "Reference name; omit and a free one is chosen"},
+      {"name": "AttachExisting", "kind": "namevalue", "type": ["logical"], "purpose": "Adopt a same-named dataset from the workspace (default true)"}
+    ],
+    "outputs": [{"name": "dataset", "type": "nominal.Dataset"}]
+  },
+
+  "nominal.Asset.getAttachedDataset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Dataset name, as attached"}
+    ],
+    "outputs": [{"name": "dataset", "type": "nominal.Dataset"}]
+  },
+
+  "nominal.Asset.addDataset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "dataset", "kind": "required", "type": ["nominal.Dataset"], "purpose": "Dataset to attach"},
+      {"name": "refName", "kind": "ordered", "type": ["string"], "purpose": "Reference name; omit and a free one is chosen"}
+    ]
+  },
+
+  "nominal.Asset.datasources": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "Refresh", "kind": "namevalue", "type": ["logical"], "purpose": "Re-read from the server rather than this handle's snapshot"}
+    ],
+    "outputs": [{"name": "t", "type": "table"}]
+  },
+
+  "nominal.Asset.run": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Run name"},
+      {"name": "startTime", "kind": "ordered", "purpose": "datetime or int64 nanoseconds; 0 means now"}
+    ],
+    "outputs": [{"name": "run", "type": "nominal.Run"}]
+  },
+
+  "nominal.Asset.property": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "key", "kind": "required", "type": ["string"]}
+    ],
+    "outputs": [{"name": "value", "type": "string"}]
+  },
+
+  "nominal.Asset.update": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "Name", "kind": "namevalue", "type": ["string"]},
+      {"name": "Description", "kind": "namevalue", "type": ["string"]},
+      {"name": "Labels", "kind": "namevalue", "type": ["string"], "purpose": "Replaces, does not merge"},
+      {"name": "Properties", "kind": "namevalue", "type": ["struct"], "purpose": "Replaces, does not merge"}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Asset"}]
+  },
+
+  "nominal.Dataset.fetch": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "channel", "kind": "required", "type": ["string"], "purpose": "Channel name"},
+      {"name": "startTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "endTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "Buckets", "kind": "namevalue", "type": ["numeric"], "purpose": "Decimate to roughly this many points"}
+    ],
+    "outputs": [{"name": "tt", "type": "timetable"}]
+  },
+
+  "nominal.Dataset.write": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "channels", "kind": "required", "type": ["string"], "purpose": "One name per column of values"},
+      {"name": "timestamps", "kind": "required", "purpose": "datetime column or int64 nanoseconds"},
+      {"name": "values", "kind": "required", "type": ["numeric"], "purpose": "Rows by channels"}
+    ]
+  },
+
+  "nominal.Dataset.channels": {
+    "inputs": [{"name": "obj", "kind": "required", "type": ["nominal.Dataset"]}],
+    "outputs": [{"name": "t", "type": "table"}]
+  },
+
+  "nominal.Dataset.channelMetadata": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Channel name"}
+    ],
+    "outputs": [{"name": "m", "type": "nominal.ChannelMetadata"}]
+  },
+
+  "nominal.Dataset.setChannelMetadata": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Channel name"},
+      {"name": "dataType", "kind": "required", "type": ["choices={'double','int','uint','string','log','doubleArray','stringArray','struct','video','spatial'}"]},
+      {"name": "Unit", "kind": "namevalue", "type": ["string"], "purpose": "UCUM symbol, e.g. \"Cel\" or \"1/min\""},
+      {"name": "Description", "kind": "namevalue", "type": ["string"]}
+    ],
+    "outputs": [{"name": "m", "type": "nominal.ChannelMetadata"}]
+  },
+
+  "nominal.Dataset.export": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "path", "kind": "required", "type": ["file=*.mat,*.csv,*.arrow"], "purpose": "File to write"},
+      {"name": "channels", "kind": "required", "type": ["string"]},
+      {"name": "startTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "endTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "Format", "kind": "namevalue", "type": ["choices={'matfile','csv','arrow'}"]},
+      {"name": "Resolution", "kind": "namevalue", "type": ["choices={'full','buckets','interval'}"]},
+      {"name": "ResolutionValue", "kind": "namevalue", "type": ["numeric"]}
+    ]
+  },
+
+  "nominal.Dataset.exportUrl": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "channels", "kind": "required", "type": ["string"]},
+      {"name": "startTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "endTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "Format", "kind": "namevalue", "type": ["choices={'matfile','csv','arrow'}"]},
+      {"name": "Resolution", "kind": "namevalue", "type": ["choices={'full','buckets','interval'}"]},
+      {"name": "ResolutionValue", "kind": "namevalue", "type": ["numeric"]}
+    ],
+    "outputs": [{"name": "url", "type": "string"}]
+  },
+
+  "nominal.Dataset.stream": {
+    "inputs": [{"name": "obj", "kind": "required", "type": ["nominal.Dataset"]}],
+    "outputs": [{"name": "s", "type": "nominal.Stream"}]
+  },
+
+  "nominal.Dataset.property": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "key", "kind": "required", "type": ["string"]}
+    ],
+    "outputs": [{"name": "value", "type": "string"}]
+  },
+
+  "nominal.Dataset.update": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "Name", "kind": "namevalue", "type": ["string"]},
+      {"name": "Description", "kind": "namevalue", "type": ["string"]},
+      {"name": "Labels", "kind": "namevalue", "type": ["string"], "purpose": "Replaces, does not merge"},
+      {"name": "Properties", "kind": "namevalue", "type": ["struct"], "purpose": "Replaces, does not merge"}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Dataset"}]
+  },
+
+  "nominal.Stream.channel": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Stream"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Channel name"}
+    ],
+    "outputs": [{"name": "c", "type": "nominal.Channel"}]
+  },
+
+  "nominal.Stream.push": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Stream"]},
+      {"name": "channels", "kind": "required", "type": ["nominal.Channel"], "purpose": "One channel, or one per column"},
+      {"name": "timestamps", "kind": "required", "type": ["int64"], "purpose": "Nanoseconds"},
+      {"name": "values", "kind": "required", "type": ["numeric"], "purpose": "Rows by channels"}
+    ]
+  },
+
+  "nominal.Run.finish": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Run"]},
+      {"name": "endTime", "kind": "ordered", "purpose": "datetime or int64 nanoseconds; omit for now"}
+    ],
+    "outputs": [{"name": "finished", "type": "nominal.Run"}]
+  },
+
+  "nominal.Run.property": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Run"]},
+      {"name": "key", "kind": "required", "type": ["string"]}
+    ],
+    "outputs": [{"name": "value", "type": "string"}]
+  },
+
+  "nominal.Run.update": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Run"]},
+      {"name": "Name", "kind": "namevalue", "type": ["string"]},
+      {"name": "Description", "kind": "namevalue", "type": ["string"]},
+      {"name": "Labels", "kind": "namevalue", "type": ["string"], "purpose": "Replaces, does not merge"},
+      {"name": "Properties", "kind": "namevalue", "type": ["struct"], "purpose": "Replaces, does not merge"},
+      {"name": "StartTime", "kind": "namevalue"},
+      {"name": "EndTime", "kind": "namevalue"}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Run"}]
+  },
+
+  "nominal.toNanos": {
+    "inputs": [{"name": "t", "kind": "required", "purpose": "datetime or int64 nanoseconds"}],
+    "outputs": [{"name": "nanos", "type": "int64"}]
+  },
+
+  "nominal.fromNanos": {
+    "inputs": [{"name": "nanos", "kind": "required", "type": ["int64"]}],
+    "outputs": [{"name": "t", "type": "datetime"}]
+  }
+}

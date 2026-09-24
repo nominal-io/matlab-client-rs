@@ -40,6 +40,28 @@ function package()
         "wrapped in a C ABI and linked into a single MEX gateway, so MATLAB"
         "talks to native code rather than shelling out to Python."], " ");
 
+    % Shown in the Add-On Manager. AuthorEmail is left unset on purpose: the
+    % .mltbx is handed to other people, and a personal address in it is not
+    % something to add without asking.
+    opts.AuthorName    = "Daniel Smith";
+    opts.AuthorCompany = "Nominal";
+
+    % Icon and Getting Started guide. Both must live inside the toolbox
+    % folder, or ToolboxOptions rejects them as missing from ToolboxFiles.
+    %
+    % The guide is what the Add-Ons panel opens, which is otherwise empty.
+    % Regenerate it with `just gettingstarted` after editing the .m beside it.
+    opts.ToolboxImageFile = fullfile(matlabRoot, 'resources', 'toolbox-icon.png');
+
+    gettingStarted = fullfile(matlabRoot, 'doc', 'GettingStarted.mlx');
+    if isfile(gettingStarted)
+        opts.ToolboxGettingStartedGuide = gettingStarted;
+    else
+        warning('nominal:noGettingStarted', ...
+                ['%s is missing, so the Add-Ons panel will have nothing to ' ...
+                 'open. Generate it with: just gettingstarted'], gettingStarted);
+    end
+
     % A claim, not something the packager can check. See the Requirements
     % section of README.md for what has actually been run.
     opts.MinimumMatlabRelease = "R2021a";

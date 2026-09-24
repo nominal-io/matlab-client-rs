@@ -110,6 +110,11 @@ package: mex-win64
 package-only:
     "{{matlab}}" -batch "run('tools/package.m')"
 
+# Regenerate matlab/doc/GettingStarted.mlx from the .m beside it
+[group('package')]
+gettingstarted:
+    "{{matlab}}" -batch "run('tools/makegettingstarted.m')"
+
 # Offline MATLAB smoke test
 [group('check')]
 mex-test:

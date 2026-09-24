@@ -63,10 +63,42 @@ function lintmatlab()
         issueCount = issueCount + numel(issues);
     end
 
+    issueCount = issueCount + checkSignatures(root, matlabRoot);
+
     fprintf('\n%d issue(s) across %d file(s)\n', issueCount, numel(files));
     if issueCount > 0
         % Non-zero exit, so `just lint` fails rather than printing warnings
         % into a passing build.
         exit(1);
     end
+end
+
+function issueCount = checkSignatures(root, matlabRoot)
+%CHECKSIGNATURES  Validate the tab-completion signatures, if present.
+%
+%   functionSignatures.json drives argument hints and tab completion. It is
+%   hand-maintained and MATLAB loads it silently, so a malformed file simply
+%   stops working with no error anywhere — which is exactly the kind of thing
+%   a lint gate is for.
+%
+%   This checks the file's own grammar. It cannot tell whether the methods it
+%   names still exist; a rename in the class is still a silent break.
+
+    issueCount = 0;
+    signatures = fullfile(matlabRoot, 'resources', 'functionSignatures.json');
+    if ~isfile(signatures)
+        return
+    end
+
+    problems = validateFunctionSignaturesJSON(signatures);
+    if isempty(problems)
+        return
+    end
+
+    relative = erase(signatures, [root filesep]);
+    for k = 1:numel(problems)
+        fprintf('%s:%d: [signatures] %s\n', relative, ...
+                problems(k).LineNumber, problems(k).Message);
+    end
+    issueCount = numel(problems);
 end
