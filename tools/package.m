@@ -40,10 +40,10 @@ function package()
         "wrapped in a C ABI and linked into a single MEX gateway, so MATLAB"
         "talks to native code rather than shelling out to Python."], " ");
 
-    % Shown in the Add-On Manager. AuthorEmail is left unset on purpose: the
-    % .mltbx is handed to other people, and a personal address in it is not
-    % something to add without asking.
-    opts.AuthorName    = "Daniel Smith";
+    % Shown in the Add-On Manager. AuthorEmail is left unset: the .mltbx is
+    % handed to other people, and a personal address in it is not something
+    % to add without asking.
+    opts.AuthorName    = "Nominal";
     opts.AuthorCompany = "Nominal";
 
     % Icon and Getting Started guide. Both must live inside the toolbox
