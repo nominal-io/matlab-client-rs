@@ -1,14 +1,14 @@
 classdef Event < nominal.Resource
     % EVENT  A time-based annotation on one or more assets.
     %
-    %   Events flag a moment or interval worth looking at — a fault, a phase
-    %   boundary, an anomaly. Created from a client:
+    %   Events flag a moment or interval: a fault, a phase boundary, an
+    %   anomaly. Created from a client:
     %
     %       e = c.createEvent(["ri.scout...asset..."], "overspeed", ...
     %                         Type="error", Duration=seconds(10));
     %
     %   Events attach to **assets**, not to runs or datasets. A run shows the
-    %   events whose time falls within it; there is no separate association.
+    %   events whose time falls within it.
     %
     %   See also NOMINAL.CLIENT, NOMINAL.ASSET
 

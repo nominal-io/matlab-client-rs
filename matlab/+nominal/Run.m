@@ -101,19 +101,13 @@ classdef Run < nominal.Resource
         function updated = addDataset(obj, refName, dataset)
             %ADDDATASET  Attach a dataset under a reference name.
             %
-            %   The reference name addresses the dataset within this run and
-            %   must be unique among its data sources.
-            %
             %   **This cannot succeed for a run made with nominal.Asset.run,
-            %   which is the only kind this client can create.** A run's data
-            %   sources are its asset's, live — a dataset added to the asset
-            %   after the run was created is already on the run. So every
-            %   reference name the asset uses comes back as
-            %   Scout:RefNamesAlreadyUsed, and every other name as
-            %   Default:InvalidArgument. There is no argument that works.
+            %   which is the only kind this client creates.** A run's data
+            %   sources are its asset's, live: a dataset added to the asset is
+            %   already on the run. Every reference name the asset uses errors
+            %   as Scout:RefNamesAlreadyUsed, and every other name as
+            %   Default:InvalidArgument.
             %
-            %   Kept because it is the C ABI's surface and presumably serves
-            %   runs created without an asset, which this client cannot make.
             %   Nothing needs calling to get an asset's data onto its run.
             arguments
                 obj (1,1) nominal.Run
@@ -129,8 +123,10 @@ classdef Run < nominal.Resource
         function updated = update(obj, options)
             %UPDATE  Apply metadata changes, returning the updated run.
             %
-            %   Honours start and end times as well as the shared fields.
-            %   Collections REPLACE rather than merge — see nominal.Asset.update.
+            %   Takes StartTime and EndTime as well as the shared fields.
+            %   Labels and Properties REPLACE rather than merge. Fields not
+            %   passed are left alone. The original object still shows the
+            %   pre-update state.
             arguments
                 obj (1,1) nominal.Run
                 % No defaults on the shared fields, so stageUpdate can tell

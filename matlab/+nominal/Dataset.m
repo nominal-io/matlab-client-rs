@@ -60,10 +60,9 @@ classdef Dataset < nominal.Resource
         function s = stream(obj)
             %STREAM  Open a stream that writes into this dataset.
             %
-            %   Data is buffered and shipped in the background; nothing is
-            %   durable until it reaches Nominal. The stream flushes when it is
-            %   released, which happens automatically when it goes out of
-            %   scope — but see nominal.Stream for why you may want to force it.
+            %   Data is buffered and sent in the background. The stream flushes
+            %   when released; call delete(s) to make that happen at a known
+            %   point. See nominal.Stream.
             obj.assertLive();
             s = nominal.Stream(nominalmex('stream_create', obj.Client.Handle, obj.Handle));
         end
@@ -77,14 +76,12 @@ classdef Dataset < nominal.Resource
             %   timestamps N-by-1 int64 nanoseconds, or a datetime vector
             %   values     N-by-C double, one column per channel
             %
-            %   Returns once the write has been accepted, so there is nothing
-            %   to flush and no stream to close. Use this for data already in
-            %   memory; use stream() for continuous acquisition, where the
-            %   background batching and backpressure earn their keep.
+            %   Returns once the write has been accepted; nothing to flush or
+            %   close. Use this for data already in memory, and stream() for
+            %   continuous acquisition.
             %
             %   Keep a call to roughly 50,000 points and at most 10 channels.
-            %   The server splits larger requests, but a stream is the better
-            %   tool past that point.
+            %   Past that, use a stream.
             %
             %   Timestamps are literal, including zero.
             %
@@ -150,16 +147,13 @@ classdef Dataset < nominal.Resource
             %       retime(tt, "regular", "linear", TimeStep=seconds(1))
             %
             %   Buckets asks the server to decimate to roughly that many
-            %   points, capped at 10,000. Use it for plotting, where full
-            %   resolution is wasted — a few thousand points is usually
-            %   indistinguishable on screen and vastly cheaper. Without it the
-            %   whole window is fetched, which pages internally and can be many
-            %   round trips over a wide window; export is the better tool when
-            %   the destination is a file.
+            %   points (bucket means), capped at 10,000. Use it for plotting.
+            %   Without it the whole window is fetched, which can be many round
+            %   trips over a wide window; use export when the destination is a
+            %   file.
             %
-            %   Note that timetable row times are datetimes, whose resolution
-            %   does not reach nanoseconds. Use export if you need the exact
-            %   instants.
+            %   Timetable row times are datetimes, which do not resolve to
+            %   nanoseconds. Use export if you need the exact instants.
             %
             %   See also NOMINAL.DATASET/EXPORT, RETIME, SYNCHRONIZE
             arguments
@@ -212,13 +206,11 @@ classdef Dataset < nominal.Resource
             %   ds.export("run12.csv", ch, t0, t1, Format="csv")
             %
             %   Format is matfile (the default), csv, or arrow. The file is
-            %   replaced if it exists, and the call blocks until the whole
-            %   export has been received.
+            %   replaced if it exists. Blocks until the export is complete.
             %
-            %   This moves the same data as fetch but in one request rather
-            %   than many, so it is the right tool for a wide window. Use fetch
-            %   when you want the samples in the workspace; use this when you
-            %   want them on disk.
+            %   Same data as fetch, but in one request, so better for a wide
+            %   window. Use fetch for samples in the workspace, export for
+            %   samples on disk.
             %
             %   Resolution is full (every sample, the default), buckets, or
             %   interval. The latter two read ResolutionValue as a point count
@@ -246,12 +238,9 @@ classdef Dataset < nominal.Resource
         end
 
         function url = exportUrl(obj, channels, startTime, endTime, options)
-            %EXPORTURL  A time-limited download link instead of the bytes.
+            %EXPORTURL  A time-limited download link instead of a file.
             %
-            %   The server renders the file to object storage and returns a
-            %   presigned URL. Useful when the link is more use than the data —
-            %   handing it to a browser, or to something that is not MATLAB.
-            %
+            %   For handing to a browser or something that is not MATLAB.
             %   Arguments match export, minus the path.
             %
             %   See also NOMINAL.DATASET/EXPORT
@@ -279,20 +268,18 @@ classdef Dataset < nominal.Resource
             %   ds.setChannelMetadata("rpm", "double", Unit="1/min")
             %   ds.setChannelMetadata("rpm", "double", Unit="")     % clear
             %
-            %   dataType is required and always sent — the underlying API has
-            %   no way to leave it alone, so naming the wrong one re-declares
-            %   the channel as something it is not. One of: double, int, uint,
-            %   string, log, doubleArray, stringArray, struct, video, spatial.
+            %   dataType is required and always sent, so naming the wrong one
+            %   re-declares the channel. One of: double, int, uint, string,
+            %   log, doubleArray, stringArray, struct, video, spatial.
             %
             %   Units are UCUM symbols such as "1/min", "Cel", "m/s2". A symbol
-            %   UCUM cannot parse is stored as display-only and will not
-            %   support conversions.
+            %   UCUM cannot parse is stored display-only, with no conversions.
             %
-            %   This is an upsert, so it works before any data exists — which
-            %   is how you attach units ahead of a stream or upload.
+            %   This is an upsert and works before any data exists, so you can
+            %   declare units ahead of a stream or upload.
             %
-            %   The returned object reflects what you sent rather than what the
-            %   server now holds; re-fetch with channelMetadata for truth.
+            %   The returned object reflects what you sent, not what the server
+            %   holds. Re-fetch with channelMetadata to check.
             arguments
                 obj (1,1) nominal.Dataset
                 name (1,1) string
@@ -321,7 +308,9 @@ classdef Dataset < nominal.Resource
         function updated = update(obj, options)
             %UPDATE  Apply metadata changes, returning the updated dataset.
             %
-            %   Collections REPLACE rather than merge — see nominal.Asset.update.
+            %   Labels and Properties REPLACE rather than merge. Fields not
+            %   passed are left alone. The original object still shows the
+            %   pre-update state.
             arguments
                 obj (1,1) nominal.Dataset
                 % No defaults, so stageUpdate can tell "passed empty" (clear)

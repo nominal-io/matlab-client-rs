@@ -4,11 +4,9 @@ function results = nominalexample_datasetdemo(assetName)
 %   nominalexample_datasetdemo               % throwaway asset and dataset
 %   nominalexample_datasetdemo("engine-3")   % under an existing asset
 %
-%   Needs credentials. Creates a dataset under the asset, attaches units to
-%   channels before any data exists, then lists what the dataset holds.
-%
-%   Covers: get-or-create under an asset, get by RID, update, channel metadata
-%   read and write, and listing every channel.
+%   Needs credentials. Creates a dataset under the asset, sets channel units
+%   before any data exists, then lists the channels. Publishes results as
+%   nominalDataset.
 %
 %   See also NOMINAL.DATASET, NOMINAL.CHANNELMETADATA,
 %   NOMINALEXAMPLE_ASSETDEMO, NOMINALEXAMPLE_CONNECT
@@ -23,13 +21,12 @@ function results = nominalexample_datasetdemo(assetName)
 
     % --- get or create a dataset under the asset ----------------------
     %
-    % refName is how this dataset is addressed within the asset, and must be
-    % unique among its data sources.
+    % refName addresses the dataset within the asset and must be unique among
+    % its data sources.
     %
-    % AttachExisting=false because this demo wants its own data. Left on, a
-    % dataset called "telemetry" belonging to someone else would be adopted
-    % onto this throwaway asset — sensible for real work, wrong for a demo
-    % that then writes to it. See nominal.Asset.getOrCreateDataset.
+    % AttachExisting=false: this demo writes data, so it must not adopt an
+    % existing "telemetry" dataset belonging to someone else. Leave it on for
+    % real work. See nominal.Asset.getOrCreateDataset.
     dataset = asset.getOrCreateDataset("telemetry", "tlm", AttachExisting=false);
     fprintf('Dataset "%s"\n  rid %s\n', dataset.Name, dataset.Rid);
 
@@ -40,8 +37,7 @@ function results = nominalexample_datasetdemo(assetName)
 
     % --- update -------------------------------------------------------
     %
-    % update returns a new object rather than mutating in place, so everything
-    % after this point works against updatedDataset.
+    % update returns a new object; everything below uses updatedDataset.
     updatedDataset = dataset.update( ...
         Description = "Created by the Nominal MATLAB demo", ...
         Labels      = "matlab-demo");
@@ -49,17 +45,11 @@ function results = nominalexample_datasetdemo(assetName)
 
     % --- channel metadata, before any data exists ---------------------
     %
-    % This is an upsert, so units can be attached ahead of a stream or upload
-    % ever writing a point. That is the usual reason to call it: a downstream
-    % workbook wants units on day one.
-    %
-    % The data type is required and always sent — the API has no way to leave
-    % it alone, so naming the wrong one re-declares the channel.
+    % setChannelMetadata is an upsert and works before any data exists. The
+    % data type is always sent, so a wrong one re-declares the channel.
     fprintf('Attaching units...\n');
 
-    % A struct keyed by channel name, so the loop below stays a single pass.
-    % Units are UCUM symbols: "Cel" rather than "C", which UCUM reserves for
-    % coulomb, and "1/min" rather than "rpm", which UCUM does not define.
+    % Units are UCUM symbols: "Cel" not "C", "1/min" not "rpm".
     unitByChannelName = struct( ...
         rpm = "1/min", ...
         egt = "Cel", ...
@@ -77,8 +67,7 @@ function results = nominalexample_datasetdemo(assetName)
         delete(channelMetadata);
     end
 
-    % A string channel, to show a non-numeric data type. Units make no sense
-    % here, so none is set.
+    % A string channel; no unit.
     modeMetadata = updatedDataset.setChannelMetadata("mode", "string", ...
                                                      Description = "vehicle mode");
     fprintf('  %-6s %-6s %s\n', modeMetadata.Name, "(none)", ...
@@ -87,9 +76,8 @@ function results = nominalexample_datasetdemo(assetName)
 
     % --- read one back ------------------------------------------------
     %
-    % Worth doing rather than trusting what setChannelMetadata returned: that
-    % object is built from what you sent, not from what the server holds, so
-    % it omits fields you did not set.
+    % The object setChannelMetadata returns reflects what you sent, not what
+    % the server holds. Read back to see the server's view.
     refetchedMetadata = updatedDataset.channelMetadata("rpm");
     fprintf('Read back "rpm": unit=%s type=%s\n', ...
             refetchedMetadata.Unit, refetchedMetadata.DataType);

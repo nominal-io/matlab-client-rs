@@ -1,18 +1,13 @@
 classdef IngestJob < nominal.Resource
     % INGESTJOB  A file upload that Nominal is still working through.
     %
-    %   Returned by nominal.Client.ingest. The upload itself has already
-    %   finished by the time you hold one of these — what is outstanding is the
-    %   server-side ingest, which continues after the request returns.
+    %   Returned by nominal.Client.ingest. The upload has finished by the time
+    %   you hold one of these; the server-side ingest is still running.
     %
     %       job = c.ingest("flight12.csv", TimestampColumn="time", ...
     %                      NewDataset="Flight 12");
     %       ds  = c.datasetByRid(job.DatasetRid);   % usable straight away
     %       job.wait();                             % block until ingest ends
-    %
-    %   Status is a method rather than a property because reading it costs a
-    %   round trip: a property that quietly hits the network would fire on
-    %   every display and every tab-complete.
     %
     %   See also NOMINAL.CLIENT/INGEST
 
@@ -21,9 +16,8 @@ classdef IngestJob < nominal.Resource
     end
 
     properties (SetAccess = immutable)
-        % RID of the dataset the data is landing in. This is how you find a
-        % dataset that the ingest call just created, so it is captured at
-        % construction rather than fetched.
+        % RID of the dataset the data is landing in, including one the
+        % ingest call just created.
         DatasetRid string
     end
 
@@ -50,13 +44,10 @@ classdef IngestJob < nominal.Resource
         end
 
         function s = status(obj)
-            %STATUS  Re-read the job's state from the server.
+            %STATUS  Read the job's current state from the server.
             %
             %   One of submitted, queued, inProgress, completed, failed, or
-            %   cancelled. The first three mean it is still moving.
-            %
-            %   The handle holds the state as of when it was created, so this
-            %   fetches a fresh one rather than reporting something stale.
+            %   cancelled. The first three mean it is still running.
             obj.assertLive();
             s = string(nominalmex('ingest_status', obj.Client.Handle, obj.Handle));
         end
@@ -65,19 +56,16 @@ classdef IngestJob < nominal.Resource
             %WAIT  Block until the job finishes.
             %
             %   Returns "completed" when the ingest succeeds, and RAISES
-            %   nominal:nominalError when it fails. A failed ingest does not
-            %   come back as a status, so the call needs wrapping:
+            %   nominal:nominalError when it fails. Wrap it if a failure is
+            %   something you want to report rather than throw:
             %
             %       try
             %           job.wait();
             %       catch e
-            %           % the ingest itself failed; e.message says why
+            %           % the ingest failed; e.message says why
             %       end
             %
-            %   Poll status() in a loop instead if you would rather have a
-            %   terminal status than an exception.
-            %
-            %   Polls server-side with no timeout, so a wedged job blocks
+            %   Or poll status() in a loop. No timeout, so a stuck job blocks
             %   indefinitely.
             obj.assertLive();
             s = string(nominalmex('ingest_wait', obj.Client.Handle, obj.Handle));

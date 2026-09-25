@@ -8,16 +8,14 @@ function results = nominalexample_analysisdemo(datasetRid)
 %   folder, so it is safe to point at real data.
 %
 %   Everything fetched is returned as a struct, and also left in the base
-%   workspace as `nominalAnalysis` so there is something to poke at afterwards
-%   even when the demo is run as a bare statement:
+%   workspace as `nominalAnalysis`:
 %
 %       nominalexample_analysisdemo(rid)
 %       plot(nominalAnalysis.Samples.Time, nominalAnalysis.Samples.(1))
 %       head(nominalAnalysis.Points)
 %
 %   Fields: Dataset, Channels, Samples, Decimated, Aligned, Points,
-%   ExportFile, StartTime, StopTime. Anything a step could not produce stays
-%   empty rather than missing, so indexing into it never errors.
+%   ExportFile, StartTime, StopTime. A field a step could not fill is empty.
 %
 %   To find a dataset RID:
 %
@@ -25,19 +23,12 @@ function results = nominalexample_analysisdemo(datasetRid)
 %       rid = c.datasets("telemetry").Rid(1);
 %       nominalexample_analysisdemo(rid)
 %
-%   The other demos put data in. This one takes it back out, which is the half
-%   most MATLAB users care about:
+%   The other demos put data in. This one takes it back out:
 %
-%     Discovery   — find an asset, a dataset, and its channels without knowing
-%                   a RID. Everything comes back as a table.
-%
-%     Fetch       — one channel into a timetable, which plots and resamples
-%                   with no conversion. Decimated for wide windows.
-%
-%     Export      — the whole window straight to a .mat file, in one request
-%                   rather than paging.
-%
-%     SQL         — a query against the warehouse, returned as a table.
+%     Discovery   - a dataset and its channels, as tables.
+%     Fetch       - one channel into a timetable; decimated for wide windows.
+%     Export      - the whole window to a .mat file in one request.
+%     SQL         - a query against the warehouse, returned as a table.
 %
 %   See also NOMINAL.DATASET/FETCH, NOMINAL.CLIENT/QUERY,
 %   NOMINALEXAMPLE_CONNECT
@@ -46,8 +37,7 @@ function results = nominalexample_analysisdemo(datasetRid)
         datasetRid (1,1) string
     end
 
-    % Everything starts empty, so a step that fails or is skipped leaves a
-    % field that still indexes cleanly rather than one that is absent.
+    % Every field starts empty; a failed or skipped step leaves it that way.
     results = struct( ...
         'Dataset',    "", ...
         'Channels',   table(), ...
@@ -64,8 +54,7 @@ function results = nominalexample_analysisdemo(datasetRid)
 
     % 1 ------------------------------------------------------- discovery
     %
-    % Listings are tables, so they display legibly and filter with ordinary
-    % logical indexing. This is the entry point when you have no RID.
+    % Listings are tables, so they filter with ordinary logical indexing.
     fprintf('--- Discovery ---\n');
 
     dataset = client.datasetByRid(datasetRid);
@@ -81,10 +70,8 @@ function results = nominalexample_analysisdemo(datasetRid)
     end
     disp(head(results.Channels, 10));
 
-    % Only numeric channels can be fetched or exported. The compute service
-    % rejects anything else with Compute:ChannelHasWrongType, naming DOUBLE,
-    % INT64 and UINT64 as the types it will take — so a dataset carrying a
-    % string channel breaks any code that picks channels positionally.
+    % Only numeric channels (double, int64, uint64) can be fetched or exported.
+    % Anything else is rejected with Compute:ChannelHasWrongType.
     numericChannels = results.Channels( ...
         ismember(results.Channels.DataType, ["double" "int64" "uint64"]), :);
 
@@ -101,21 +88,17 @@ function results = nominalexample_analysisdemo(datasetRid)
 
     % 2 ----------------------------------------------------------- fetch
     %
-    % A window wide enough to catch whatever the write demos left behind. The
-    % window is inclusive at both ends, and a second of slack past "now" keeps
-    % a sample written moments ago from falling outside it.
+    % A day-wide window to catch whatever the write demos left. The window is
+    % inclusive at both ends; a second of slack past now catches a sample
+    % written moments ago.
     results.StopTime  = datetime("now", TimeZone="UTC") + seconds(1);
     results.StartTime = results.StopTime - days(1);
 
-    % A declared channel need not have any data: setChannelMetadata is an
-    % upsert, so units can be attached to a channel nothing has written yet.
-    % Take the first numeric channel that actually returns samples rather than
-    % the first one alphabetically, so the rest of the demo has something to
-    % work with.
+    % A declared channel need not have data (setChannelMetadata is an upsert),
+    % so take the first numeric channel that returns samples.
     %
-    % The timetable has exactly one variable, named after the channel. It is
-    % addressed positionally below — .(1) — because the channel name is only
-    % known at run time.
+    % The timetable has one variable, named after the channel; .(1) addresses
+    % it without knowing the name.
     firstChannelName = numericChannels.Name(1);
     for candidate = numericChannels.Name'
         samples = dataset.fetch(candidate, results.StartTime, results.StopTime);
@@ -133,9 +116,8 @@ function results = nominalexample_analysisdemo(datasetRid)
         fprintf('   points take a moment to land)\n');
     end
 
-    % The window to use for anything bucketed, narrowed below once the samples
-    % show where the data actually is. Declared out here so the synchronize
-    % block can use it too, and defaulted so it is always defined.
+    % Window for anything bucketed; narrowed below once the samples show where
+    % the data is. Also used by the synchronize step.
     bucketStart = results.StartTime;
     bucketStop = results.StopTime;
 
@@ -144,33 +126,25 @@ function results = nominalexample_analysisdemo(datasetRid)
         fprintf('  first %s = %g\n', string(results.Samples.Time(1)), sampleValues(1));
         fprintf('  last  %s = %g\n', string(results.Samples.Time(end)), sampleValues(end));
 
-        % A timetable is the point of returning one: this all works directly.
+        % Ordinary statistics work directly on the timetable variable.
         fprintf('  mean %g, std %g\n', mean(sampleValues), std(sampleValues));
 
-        % Narrow to what the data actually spans before decimating.
-        %
-        % Buckets divide the *requested* window, not the returned samples. The
-        % search window above is a day wide because the demo cannot know when
-        % the data was written; asking for 200 buckets across it puts a
-        % half-second of samples in one bucket and returns a single point —
-        % correct, and useless. Now that the samples are in hand, their own
-        % extent is the right window.
+        % Narrow the window to the data before decimating. Buckets divide the
+        % requested window, not the returned samples: 200 buckets across a day
+        % would put half a second of samples in one bucket and return one point.
         bucketStart = results.Samples.Time(1);
         bucketStop = results.Samples.Time(end);
 
-        % Decimated. Ask the server for roughly this many points rather than
-        % moving every sample — for a plot the difference is invisible.
+        % Ask the server for roughly this many points instead of every sample.
         requestedBuckets = 200;
         results.Decimated = dataset.fetch(firstChannelName, ...
             bucketStart, bucketStop, Buckets=requestedBuckets);
-        % Printed as seconds rather than string(duration): the default
-        % hh:mm:ss format shows a sub-second span, which this usually is, as
-        % a flat 00:00:00.
+        % Printed as seconds: string(duration) shows a sub-second span as
+        % 00:00:00.
         fprintf('  decimated to %d point(s) over %.3f s\n', ...
                 height(results.Decimated), seconds(bucketStop - bucketStart));
 
-        % Fewer points than buckets is normal: empty buckets are dropped, so
-        % asking for more buckets than there are samples cannot invent data.
+        % Fewer points than buckets is normal: empty buckets are dropped.
         if height(results.Decimated) < requestedBuckets
             fprintf('    (asked for %d; empty buckets are not returned)\n', ...
                     requestedBuckets);
@@ -179,21 +153,16 @@ function results = nominalexample_analysisdemo(datasetRid)
 
     % 3 ------------------------------------------- two channels together
     %
-    % synchronize is why fetch returns timetables rather than raw arrays:
-    % aligning two channels on independent clocks is one call. It unions the
-    % row times and fills the gaps, so the result has one row per distinct
-    % instant across both inputs.
-    % Numeric channels only, and a different one from the first — picking
-    % positionally out of the full channel list is what made this step fail
-    % against a dataset carrying a string channel.
+    % synchronize unions the row times across channels, so the result has one
+    % row per distinct instant. Pick a second numeric channel, different from
+    % the first.
     otherChannels = numericChannels.Name(numericChannels.Name ~= firstChannelName);
 
     if ~isempty(otherChannels) && height(results.Samples) > 0
         fprintf('\n--- Synchronize ---\n');
         secondChannelName = otherChannels(1);
 
-        % The narrowed window again — bucketing across the full day-wide search
-        % window would collapse both channels to a single row each.
+        % The narrowed window again, for the same reason as above.
         firstSamples = dataset.fetch(firstChannelName, ...
             bucketStart, bucketStop, Buckets=100);
         secondSamples = dataset.fetch(secondChannelName, ...
@@ -207,23 +176,20 @@ function results = nominalexample_analysisdemo(datasetRid)
 
     % 4 ---------------------------------------------------------- export
     %
-    % Same data as fetch, but one request and straight to disk. This is the
-    % right tool for a wide window, and matfile is the default format.
+    % Same data as fetch, but one request straight to disk. Use it for wide
+    % windows. matfile is the default format.
     fprintf('\n--- Export ---\n');
     results.ExportFile = string(fullfile(pwd, "nominalexample_analysisdemo.mat"));
 
-    % Numeric channels only — export goes through the same compute service as
-    % fetch, so a string channel in the list fails the whole request.
-    %
-    % Transposed: Name is a column out of the table, and export takes a 1-by-C
-    % row of names.
+    % Numeric channels only: a string channel in the list fails the whole
+    % request. Transposed because export takes a 1-by-C row of names.
     dataset.export(results.ExportFile, numericChannels.Name', ...
                    results.StartTime, results.StopTime);
 
     exportFileInfo = dir(results.ExportFile);
     fprintf('Wrote %s (%.1f KB)\n', results.ExportFile, exportFileInfo.bytes / 1024);
 
-    % A link instead of the bytes, for handing to something that is not MATLAB.
+    % A download link instead of the bytes.
     try
         downloadUrl = dataset.exportUrl(firstChannelName, ...
             results.StartTime, results.StopTime, Format="csv");
@@ -236,19 +202,29 @@ function results = nominalexample_analysisdemo(datasetRid)
 
     % 5 ------------------------------------------------------------- SQL
     %
-    % Telemetry lives in points_double, keyed by dataset_rid and channel. The
-    % SQL surface is the warehouse's own tables rather than the object model,
-    % so the columns are not the ones these classes expose — and a telemetry
-    % table must filter on dataset_rid or the query is rejected before it runs.
+    % The tables are the warehouse's own, not the object model. Telemetry lives
+    % in points_double, and a telemetry table must filter on dataset_rid or the
+    % query is rejected.
+    %
+    % Bound the query to the window above as well. points_double holds every
+    % point the dataset has ever taken, so without a time filter ORDER BY ts
+    % returns the oldest rows in it, which on a re-used dataset is whatever an
+    % earlier run wrote. ts is a timestamp column in the warehouse, not the
+    % int64 nanoseconds it comes back as, so the bounds go in as literals. The
+    % millisecond of slack covers the format truncating rather than rounding.
+    lo = string(bucketStart - milliseconds(1), "yyyy-MM-dd HH:mm:ss.SSS");
+    hi = string(bucketStop  + milliseconds(1), "yyyy-MM-dd HH:mm:ss.SSS");
+    timeFilter = "AND ts BETWEEN TIMESTAMP '" + lo + "' " + ...
+                 "AND TIMESTAMP '" + hi + "' ";
+
     fprintf('\n--- SQL ---\n');
     try
         results.Points = client.query( ...
             "SELECT ts, channel, value FROM points_double " + ...
-            "WHERE dataset_rid = '" + datasetRid + "' " + ...
+            "WHERE dataset_rid = '" + datasetRid + "' " + timeFilter + ...
             "ORDER BY ts LIMIT 100");
 
-        % ts arrives as int64 nanoseconds. Converting in place turns the column
-        % into datetimes without disturbing the rest of the table.
+        % ts arrives as int64 nanoseconds; convert in place with nominal.fromNanos.
         if height(results.Points) > 0
             results.Points.ts = nominal.fromNanos(results.Points.ts);
         end
@@ -258,13 +234,13 @@ function results = nominalexample_analysisdemo(datasetRid)
         fprintf('query failed: %s\n  %s\n', queryError.identifier, queryError.message);
     end
 
-    % For a result too large to hold in memory, ask for a CSV download link
-    % instead of the rows. Telemetry tables only, and some deployments have no
-    % export bucket configured.
+    % For a result too large for memory, ask for a CSV download link instead.
+    % Telemetry tables only; some deployments have no export bucket.
     try
         csvDownloadUrl = client.queryExportUrl( ...
             "SELECT ts, channel, value FROM points_double " + ...
-            "WHERE dataset_rid = '" + datasetRid + "' LIMIT 1000");
+            "WHERE dataset_rid = '" + datasetRid + "' " + timeFilter + ...
+            "LIMIT 1000");
         fprintf('CSV export URL: %s...\n', ...
                 extractBefore(csvDownloadUrl, min(60, strlength(csvDownloadUrl))));
     catch exportUrlError

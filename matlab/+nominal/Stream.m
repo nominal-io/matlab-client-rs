@@ -5,8 +5,7 @@ classdef Stream < nominal.Resource
     %
     %       s = ds.stream();
     %
-    %   Writing a block of synchronised samples — the usual shape for data
-    %   acquisition, and the fastest path from MATLAB:
+    %   The fastest path is a block of samples sharing one clock:
     %
     %       chans = [s.channel("rpm"), s.channel("egt"), s.channel("psi")];
     %       t = zeros(1000, 1, 'int64');
@@ -14,18 +13,16 @@ classdef Stream < nominal.Resource
     %       ... fill in a loop ...
     %       s.push(chans, t, v);
     %
-    %   MATLAB stores v column-major, so each channel's samples are already
-    %   contiguous in memory and go to the library with no copy or transpose.
-    %   Filling a preallocated matrix and pushing it is therefore both the
-    %   idiomatic MATLAB pattern and the efficient one.
+    %   Preallocate the matrix, fill it, push it. It reaches the library with
+    %   no copy.
     %
-    %   Releasing the stream flushes whatever is still buffered, and blocks
-    %   until that completes. That happens automatically, but MATLAB does not
-    %   promise exactly when a variable is collected, so call delete(s)
-    %   explicitly if you need the data to have landed before moving on.
+    %   Releasing the stream flushes what is still buffered and blocks until
+    %   that completes. MATLAB does not promise when a variable is collected,
+    %   so call delete(s) if you need the data to have landed before moving
+    %   on.
     %
-    %   Writing blocks when the stream saturates: if points arrive faster than
-    %   the network drains them, push waits rather than queueing without bound.
+    %   push blocks when the stream saturates: if points arrive faster than
+    %   the network drains them, it waits instead of queueing without bound.
     %
     %   See also NOMINAL.CHANNEL, NOMINAL.DATASET
 
@@ -58,13 +55,11 @@ classdef Stream < nominal.Resource
             %   timestamps N-by-1 int64 nanoseconds, or a datetime vector
             %   values     N-by-C double, one column per channel
             %
-            %   All channels share the timestamp column, which is the DAQ case:
-            %   one sample per channel per tick against a common clock. For
-            %   channels on independent clocks, push each separately.
+            %   All channels share the timestamp column. For channels on
+            %   independent clocks, push each separately with Channel.push.
             %
-            %   Timestamps are literal here, including zero — unlike run times,
-            %   0 does not mean "now", since a stream may carry timestamps
-            %   relative to an epoch you chose.
+            %   Timestamps are literal, including zero. Unlike run times, 0
+            %   does not mean "now".
             arguments
                 obj (1,1) nominal.Stream
                 channels (1,:) nominal.Channel

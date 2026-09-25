@@ -67,30 +67,21 @@ classdef Asset < nominal.Resource
             %   s = a.datasources(Refresh=true);    % ask the server
             %
             %   Variables: RefName, Rid, Type. Type is "dataset", "video", or
-            %   "connection" — which matters because the RID alone does not
-            %   tell you what an endpoint will accept. Only a dataset RID can
-            %   open a stream, for instance.
-            %
-            %   Ordered by reference name, so the result is reproducible.
+            %   "connection". Only a dataset RID can open a stream. Ordered by
+            %   reference name.
             %
             %       s = a.datasources();
             %       tlm = s(s.Type == "dataset", :);
             %
-            %   **Reads this handle's snapshot by default**, taken when the
-            %   asset was fetched. So a dataset attached since — by
-            %   getOrCreateDataset, by another process, or from the web app —
-            %   is not listed until you ask for it:
+            %   **By default this reads the snapshot taken when the asset was
+            %   fetched.** A dataset attached since then, by getOrCreateDataset
+            %   or from the web app, is not listed until you pass Refresh=true:
             %
             %       a.getOrCreateDataset("telemetry", "tlm");
             %       height(a.datasources())              % unchanged
             %       height(a.datasources(Refresh=true))  % +1
             %
-            %   That is the same rule every other accessor follows — a handle
-            %   is a snapshot, which is why update() hands back a new object
-            %   rather than changing this one. Refresh=true costs one request
-            %   and does *not* alter this object: it reads a fresh handle and
-            %   discards it, so a.Name and the rest still report what they
-            %   always did.
+            %   Refresh=true costs one request and does not change this object.
             %
             %   See also NOMINAL.CLIENT/ASSETBYRID
             arguments
@@ -120,27 +111,21 @@ classdef Asset < nominal.Resource
             %   a.addDataset(ds);
             %   a.addDataset(ds, "can");
             %
-            %   Takes the dataset itself, so a handle obtained any way at all
-            %   — by RID, from a search, from an ingest — can be put on an
-            %   asset. getOrCreateDataset only reaches datasets it can find by
-            %   name, which is no help when you are already holding one.
+            %   Takes any dataset handle: one fetched by RID, from a search, or
+            %   from an ingest.
             %
-            %   refName addresses the dataset within this asset and must be
-            %   unique among its data sources; that is the only rule the
-            %   server enforces, so spaces, dots and mixed case are all fine.
-            %   It exists for the case where one asset carries two sources
-            %   measuring the same thing — a flight controller logging over
-            %   CAN and a test rig probing the unit directly, both reporting
-            %   "engine temp" — and it is what tells those apart.
+            %   refName is the dataset's name within this asset and must be
+            %   unique among its data sources. Spaces, dots and mixed case are
+            %   fine. It matters when one asset carries two sources measuring
+            %   the same thing, say a CAN log and a test rig both reporting
+            %   "engine temp", and you need to tell them apart.
             %
             %   **Omit it and one is chosen for you**: "default" on an asset
-            %   that has none, otherwise the dataset's own name, otherwise
-            %   that with a number. You only need to supply one when you care
-            %   what the sources are called.
+            %   with none, otherwise the dataset's own name, otherwise that
+            %   with a number.
             %
-            %   Attaching a dataset already on this asset *moves* it to the
-            %   new reference name rather than adding a second entry — a
-            %   dataset appears at most once per asset.
+            %   Attaching a dataset already on this asset *moves* it to the new
+            %   reference name. A dataset appears at most once per asset.
             %
             %   This asset handle is a snapshot and will not show the new data
             %   source. Use a.datasources(Refresh=true) to see it.
@@ -178,14 +163,10 @@ classdef Asset < nominal.Resource
             %
             %   d = a.getAttachedDataset("telemetry");
             %
-            %   Read-only: it never creates or attaches anything. Use it when
-            %   the dataset is expected to be there and its absence is a
-            %   problem; getOrCreateDataset is for making sure it is.
+            %   Read-only: it never creates or attaches anything.
             %
             %   Errors when no dataset of that name is attached, and when more
-            %   than one is — a name is not unique in Nominal, so there is
-            %   nothing sensible to return. a.datasources() lists everything
-            %   without erroring.
+            %   than one is. a.datasources() lists everything without erroring.
             %
             %   See also NOMINAL.ASSET/GETORCREATEDATASET, NOMINAL.ASSET/DATASOURCES
             arguments
@@ -205,8 +186,8 @@ classdef Asset < nominal.Resource
             %   d = a.getOrCreateDataset("telemetry", "tlm");
             %   d = a.getOrCreateDataset("telemetry", AttachExisting=false);
             %
-            %   A bare name is not unique in Nominal, so this resolves in three
-            %   steps and says which one it took:
+            %   Dataset names are not unique in Nominal, so this resolves in
+            %   three steps and prints which one it took:
             %
             %     1. A dataset of that name already attached to this asset is
             %        returned as-is.
@@ -214,20 +195,15 @@ classdef Asset < nominal.Resource
             %        workspace is attached to this asset and returned.
             %     3. Otherwise one is created and attached.
             %
-            %   Step 2 is what makes "the dataset for serial 12345678" resolve
-            %   to the one a colleague already made. It is also a change to
-            %   your asset driven by a name match, so it announces itself and
-            %   can be switched off with AttachExisting=false, which goes
-            %   straight from step 1 to step 3.
+            %   Step 2 finds the dataset a colleague already made. Since it
+            %   changes your asset based on a name match, AttachExisting=false
+            %   switches it off.
             %
-            %   Errors rather than guessing when several datasets share the
-            %   name, naming the RIDs so you can pick one with
-            %   client.datasetByRid.
+            %   Errors when several datasets share the name, listing their RIDs
+            %   so you can pick one with client.datasetByRid.
             %
-            %   refName is used only when attaching — never to decide which
-            %   dataset you meant. Omit it and a free one is chosen; you only
-            %   need to supply one when you care what the asset's sources are
-            %   called. See nominal.Asset.addDataset for what it is for.
+            %   refName is the dataset's name within this asset, used only when
+            %   attaching. Omit it and a free one is chosen. See addDataset.
             %
             %   See also NOMINAL.ASSET/ADDDATASET, NOMINAL.ASSET/GETATTACHEDDATASET
             arguments
@@ -293,12 +269,12 @@ classdef Asset < nominal.Resource
             %                 Properties=struct(phase="burn"), ...
             %                 Labels=["a" "b"]);
             %
-            %   Collections REPLACE rather than merge: passing Labels at all
-            %   discards whatever the asset had. Read a.Labels first and
+            %   Labels and Properties REPLACE rather than merge: passing Labels
+            %   discards whatever the asset had, so read a.Labels first and
             %   concatenate if you mean to add. Fields not passed are left
-            %   alone; pass Labels=string.empty to clear them.
+            %   alone. Labels=string.empty clears them.
             %
-            %   The original object still reflects the pre-update state.
+            %   The original object still shows the pre-update state.
             arguments
                 obj (1,1) nominal.Asset
                 % Deliberately no defaults: stageUpdate reads field presence

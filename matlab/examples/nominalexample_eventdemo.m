@@ -4,12 +4,12 @@ function results = nominalexample_eventdemo(assetName)
 %   nominalexample_eventdemo                 % throwaway asset
 %   nominalexample_eventdemo("engine-3")     % on an existing asset
 %
-%   Needs credentials. Creates one event of each type on the asset — an
-%   instantaneous one and a spanning one.
+%   Needs credentials. Creates one event of each type on the asset, including
+%   an instantaneous one and a spanning one.
 %
-%   Events attach to **assets**, not to runs or datasets. A run displays the
-%   events whose time falls inside its window; there is no separate link to
-%   make. So to see these on a run, create a run covering the same period.
+%   Events attach to assets, not to runs or datasets. A run shows the events
+%   whose time falls inside its window, so to see these on a run, create a run
+%   covering the same period.
 %
 %   See also NOMINAL.EVENT, NOMINALEXAMPLE_ASSETDEMO,
 %   NOMINALEXAMPLE_RUNDEMO, NOMINALEXAMPLE_CONNECT
@@ -22,18 +22,13 @@ function results = nominalexample_eventdemo(assetName)
     asset = client.getOrCreateAsset(assetName);
     fprintf('Asset %s\n  %s\n', asset.Name, asset.Rid);
 
-    % Named referenceTime because "now" is taken twice over: MATLAB's builtin
-    % now returns a datenum, and nominal.now() returns int64 nanoseconds. This
-    % is neither — it is a zoned datetime.
-    %
-    % Every event below is placed relative to this one instant, so their order
-    % on a chart is predictable however long the demo takes to run.
+    % Every event below is placed relative to this instant, so their order on
+    % a chart is predictable.
     referenceTime = datetime("now", TimeZone="UTC");
 
     % --- an instantaneous event ---------------------------------------
     %
-    % Duration defaults to zero, which is what marks a single moment rather
-    % than an interval.
+    % Duration defaults to zero: a single instant.
     ignitionEvent = client.createEvent(asset.Rid, "ignition", ...
                                        Type = "info", ...
                                        Timestamp = referenceTime - minutes(5));
@@ -42,7 +37,7 @@ function results = nominalexample_eventdemo(assetName)
 
     % --- a spanning event ---------------------------------------------
     %
-    % Duration accepts a MATLAB duration, so seconds/minutes read naturally.
+    % Duration accepts a MATLAB duration.
     overspeedEvent = client.createEvent(asset.Rid, "overspeed", ...
                                         Type = "error", ...
                                         Timestamp = referenceTime - minutes(3), ...
@@ -52,8 +47,7 @@ function results = nominalexample_eventdemo(assetName)
 
     % --- one of each remaining type -----------------------------------
     %
-    % Type drives how the event is presented; there is no behavioural
-    % difference between them.
+    % Type only affects how the event is presented.
     remainingTypes = ["flag" "success"];
     otherEvents = nominal.Event.empty(1, 0);
     for typeIndex = 1:numel(remainingTypes)
@@ -68,9 +62,8 @@ function results = nominalexample_eventdemo(assetName)
 
     % --- results ------------------------------------------------------
     %
-    % One row per event, read while the handles are still live. There is no
-    % list-events endpoint in this client, so this table is the only record of
-    % what was created — worth keeping rather than reconstructing from the RIDs.
+    % One row per event. There is no list-events endpoint in this client, so
+    % this table is the only record of what was created.
     allEvents = [ignitionEvent, overspeedEvent, otherEvents];
     results = struct('Events', table( ...
         arrayfun(@(e) e.Rid, allEvents)', ...
@@ -82,8 +75,7 @@ function results = nominalexample_eventdemo(assetName)
 
     % --- teardown -----------------------------------------------------
     %
-    % Releasing an event handle does not delete the event in Nominal; it only
-    % drops this process's reference to it.
+    % Releasing an event handle does not delete the event in Nominal.
     delete(otherEvents);
     delete(overspeedEvent);
     delete(ignitionEvent);
@@ -96,8 +88,8 @@ function results = nominalexample_eventdemo(assetName)
 end
 
 function describe(event)
-    % Timestamp and Duration are a datetime and a duration; string() converts
-    % them for %s, which otherwise sees a non-char argument.
+    % Timestamp is a datetime and Duration a duration; string() converts them
+    % for %s.
     fprintf('Event "%s" [%s]\n', event.Name, event.Type);
     fprintf('  rid      %s\n', event.Rid);
     fprintf('  at       %s\n', string(event.Timestamp));

@@ -1,14 +1,13 @@
 # Using the Nominal MATLAB client
 
-Authenticating, what the objects are, and the workflows they add up to. For
-building the gateway and installing it, see [BUILDING.md](BUILDING.md).
+Authenticating, the objects, and the common workflows. For building and
+installing, see [BUILDING.md](BUILDING.md).
 
 ## Quick start
 
-Assuming the gateway is built and a profile is set up — see
-[BUILDING.md](BUILDING.md) and [Authenticating](#authenticating) — this is the
-whole loop: connect, find an asset, add a dataset under it, push a matrix, read
-it back, shut down.
+With the gateway built and a profile set up (see
+[Authenticating](#authenticating)), this is the whole loop: connect, find an
+asset, add a dataset, push a matrix, read it back.
 
 ```matlab
 addpath('C:\sw\nominal-matlab\matlab')
@@ -17,8 +16,8 @@ client = nominal.Client.connect();
 fprintf('Connected as %s\n', client.whoAmI());
 
 % --- find an asset ------------------------------------------------------
-% Search by name. With no filter this fetches every asset in the workspace,
-% which on a real deployment is tens of thousands of rows.
+% Always pass a name filter. With none, this fetches every asset in the
+% workspace.
 found = client.assets("engine");
 asset = client.assetByRid(found.Rid(1));
 
@@ -37,7 +36,6 @@ v = [1500 + 10*sin(linspace(0, 6*pi, rows))', ...   % rpm
 dataset.write(["rpm" "egt" "psi"], t, v);
 
 % --- read it back -------------------------------------------------------
-% fetch returns a timetable, so it plots and resamples with no conversion.
 back = dataset.fetch("rpm", t(1) - seconds(1), t(end) + seconds(1));
 plot(back.Time, back.("rpm"))
 
@@ -47,26 +45,19 @@ delete(asset);
 delete(client);
 ```
 
-`connect` tries the stored profile first and falls back to `NOMINAL_TOKEN`,
-which is what makes the same script run on a workstation and in CI. Reach for
-`fromProfile` or `fromToken` when you know which you have — see
-[Authenticating](#authenticating) for why the fallback warns.
-
 The demos in [matlab/examples/](matlab/examples/) run all of this for real:
-`nominalexample_uploaddemo` for the write half,
-`nominalexample_analysisdemo` for the read half, and
-`nominalexample_alldemos` for everything. Each leaves its results in the base
-workspace, so there is something to inspect afterwards.
+`nominalexample_uploaddemo` writes, `nominalexample_analysisdemo` reads, and
+`nominalexample_alldemos` runs everything. Each leaves its results in the base
+workspace.
 
-The `nominalexample_` prefix is deliberate. That folder is not on the installed
-toolbox's path, so adding it is a decision you make — and when you do, every
-filename in it becomes a global function name. Prefixing keeps the demos from
-claiming names like `rundemo` or `connect` in your session.
+The demo folder is not on the installed toolbox's path. Add it yourself if you
+want to run them. The `nominalexample_` prefix keeps the demos from taking
+names like `connect` in your session.
 
 ## Authenticating
 
-Credentials come from a profile on disk — the same
-`~/.config/nominal/config.yml` the `nom` CLI and the
+Credentials come from a profile on disk, the same `~/.config/nominal/config.yml`
+the `nom` CLI and the
 [Python client](https://docs.nominal.io/core/sdk/python-client/authentication)
 use. Set it up once, in a terminal:
 
@@ -77,44 +68,39 @@ nom config profile add default -t <api-token>
 python -m nominal.cli config profile add default
 ```
 
-Then the MATLAB call is the counterpart of the Python one:
+Then:
 
 ```matlab
 c = nominal.Client.fromProfile();          % Python: NominalClient.from_profile("default")
 c = nominal.Client.fromProfile("staging"); % any named profile
 ```
 
-A profile carries the base URL, the token, and optionally a workspace RID, so
-nothing else needs passing — and a self-hosted stack or a staging environment
-is a profile name rather than a code change. If you already use the Python
-client or the CLI on this machine, MATLAB is already set up.
+A profile carries the base URL, the token, and optionally a workspace RID. If
+you already use the Python client or the CLI on this machine, MATLAB is already
+set up.
 
-Failing that, a token directly:
+Or pass a token directly. Prefer the profile: a token in a script ends up in
+version control.
 
 ```matlab
 c = nominal.Client.fromToken("<api-token>");   % Python: NominalClient.from_token(...)
 ```
 
-Prefer the profile. A token in a script is a token in version control
-eventually.
-
-Or let it pick, for code that has to run in both places:
+For code that runs both on a workstation and in CI:
 
 ```matlab
 c = nominal.Client.connect();              % profile, else NOMINAL_TOKEN
 ```
 
-The profile wins. It carries a base URL and a workspace; `NOMINAL_TOKEN`
-carries neither, so falling back to it means **Nominal production with no
-workspace scope**, whatever the profile said. A staging profile that fails to
-load would otherwise send you somewhere else without a word, so the fallback
-raises a `nominal:profileFallback` warning when it happens.
+The profile wins. `NOMINAL_TOKEN` carries no base URL or workspace, so the
+fallback means **Nominal production with no workspace scope**, whatever the
+profile said. It raises a `nominal:profileFallback` warning when that happens.
 
 <details>
 <summary>Migrating from the old config file</summary>
 
-If this machine predates profiles it may still have `~/.nominal.yml` with an
-`environments:` block. `fromProfile` detects that and tells you to run:
+If this machine still has `~/.nominal.yml` with an `environments:` block,
+`fromProfile` detects it and tells you to run:
 
 ```shell
 nom config migrate
@@ -124,8 +110,8 @@ nom config migrate
 
 ## Objects and methods
 
-Everything is reached from a `nominal.Client`. Objects hand you other objects,
-so you rarely construct anything directly.
+Everything starts from a `nominal.Client`. Objects hand you other objects, so
+you rarely construct anything directly.
 
 ### Client — `c = nominal.Client.fromProfile()`
 
@@ -137,8 +123,8 @@ so you rarely construct anything directly.
 | Who am I (also a credential check) | `c.whoAmI()` |
 | Search assets by name | `c.assets("engine")` |
 | Search datasets by name | `c.datasets("telemetry")` |
-| List *every* asset — slow, unpaginated | `c.assets()` |
-| List *every* dataset — slow, unpaginated | `c.datasets()` |
+| List *every* asset (slow, unpaginated) | `c.assets()` |
+| List *every* dataset (slow, unpaginated) | `c.datasets()` |
 | Get an asset by RID | `c.assetByRid(rid)` |
 | Get an asset by name, creating if absent | `c.getOrCreateAsset(name)` |
 | Get a dataset by RID | `c.datasetByRid(rid)` |
@@ -164,30 +150,29 @@ so you rarely construct anything directly.
 | Start a run on it | `a.run(name)`, `a.run(name, startTime)` |
 | Change metadata | `a.update(Name=…, Description=…, Labels=…, Properties=…)` |
 
-An asset handle is a **snapshot**, taken when it was fetched — which is why
-`update()` returns a new object rather than changing the one you have. That
-applies to `datasources()` too, so a dataset attached since the fetch is not
-listed until you pass `Refresh=true`, which costs one request and leaves the
-handle itself untouched.
+An asset handle is a **snapshot** taken when it was fetched. `update()` returns
+a new object instead of changing the one you have, and `datasources()` does not
+show a dataset attached since the fetch until you pass `Refresh=true`.
 
-A bare name is not unique in Nominal, so `getOrCreateDataset` resolves in three
-steps and prints which one it took: a dataset of that name already on the asset
-is returned untouched; otherwise one of that exact name elsewhere in the
-workspace is **attached** to the asset; otherwise one is created. That middle
-step is what makes "the dataset for serial 12345678" find the one a colleague
-already made — and because it changes your asset on the strength of a name
-match, it announces itself and can be switched off with `AttachExisting=false`.
+Dataset names are not unique in Nominal, so `getOrCreateDataset` resolves in
+three steps and prints which one it took:
 
-If several datasets share the name, it errors and lists their RIDs rather than
-picking one — at which point `a.addDataset(c.datasetByRid(rid))` attaches the
-one you meant.
+1. A dataset of that name already on the asset is returned.
+2. Otherwise a dataset of that exact name elsewhere in the workspace is
+   **attached** to the asset and returned.
+3. Otherwise one is created.
 
-`refName` is used only when attaching, never to decide which dataset you meant,
-and **you can leave it out** — a free one is chosen (`"default"` on an asset
-with none, otherwise the dataset's own name). It exists for an asset carrying
-two sources that measure the same thing — a flight controller logging over CAN
-and a test rig probing the unit, both reporting `engine temp` — and is what
-tells them apart. Supply one only when you care what the sources are called.
+Step 2 is how "the dataset for serial 12345678" finds the one a colleague
+already made. Because it changes your asset based on a name match, you can turn
+it off with `AttachExisting=false`. If several datasets share the name, it
+errors and lists their RIDs. Attach the one you meant with
+`a.addDataset(c.datasetByRid(rid))`.
+
+`refName` is the dataset's name within the asset. It is only used when
+attaching, and you can leave it out: a free one is chosen (`"default"` on an
+asset with none, otherwise the dataset's own name). Supply one when an asset
+has two sources measuring the same thing, such as a CAN log and a test rig both
+reporting `engine temp`, and you want to tell them apart.
 
 ### Dataset — `ds = a.getOrCreateDataset("telemetry", "tlm")`
 
@@ -213,7 +198,7 @@ tells them apart. Supply one only when you care what the sources are called.
 | Identity and metadata | `r.Rid`, `r.Name`, `r.Description`, `r.Url`, `r.Number`, `r.Labels` |
 | Timing | `r.StartTime`, `r.EndTime` |
 | Read one property | `r.property("operator")` |
-| Attach a dataset — *see Known gaps* | `r.addDataset(refName, ds)` |
+| Attach a dataset (*see Known gaps*) | `r.addDataset(refName, ds)` |
 | Close it | `r.finish()`, `r.finish(endTime)` |
 | Change metadata | `r.update(Name=…, Labels=…, Properties=…)` |
 
@@ -254,7 +239,7 @@ tells them apart. Supply one only when you care what the sources are called.
 
 ### Getting data in
 
-**I have a `.mat` file I want in Nominal.** Load it and push the matrix — no
+**I have a `.mat` file I want in Nominal.** Load it and push the matrix. No
 intermediate file, no ingest job.
 
 ```matlab
@@ -265,8 +250,8 @@ ds = a.getOrCreateDataset("Flight 12", "flight12");
 ds.write(["rpm" "egt" "psi"], t, V);
 ```
 
-**I have a CSV or Parquet file on disk.** Hand Nominal the path and let it do
-the parsing.
+**I have a CSV or Parquet file on disk.** Hand Nominal the path and let it
+parse.
 
 ```matlab
 a  = c.getOrCreateAsset("airframe-7");
@@ -277,12 +262,12 @@ job.wait();                                % raises if the ingest fails
 ```
 
 Create the dataset under the asset first and pass `Dataset=`. `NewDataset=`
-also works, but the dataset it creates is attached to no asset — and this
-client cannot attach one afterwards, because the C ABI exposes no
-add-datasource call. `job.wait()` **raises** when the ingest itself fails, so
-wrap it if a failure is an outcome you want to report rather than throw.
+also works but creates a dataset attached to no asset; attach it afterwards
+with `a.addDataset(c.datasetByRid(job.DatasetRid))`. `job.wait()` **raises**
+when the ingest fails, so wrap it in `try` if you want to report the failure
+instead.
 
-Timestamps default to ISO 8601. For a numeric column say so:
+Timestamps default to ISO 8601. For a numeric column:
 `c.ingest(path, TimestampColumn="t", Kind="epoch", Unit="milliseconds", …)`.
 
 **I want to stream live from a test loop.** Open a stream once, push blocks as
@@ -299,7 +284,7 @@ delete(s);                                 % flushes; blocks until it lands
 ```
 
 **I want to know which script produced this data.** Properties and labels are
-arbitrary text, so record the provenance alongside the channels.
+free text, so record the provenance on the dataset.
 
 ```matlab
 ds.update(Properties=struct(script="reduce_flight.m", ...
@@ -309,26 +294,20 @@ ds.update(Properties=struct(script="reduce_flight.m", ...
           Labels=["flight-test" "reduced"]);
 ```
 
-`c.whoAmI()` is the authenticated Nominal user, which is more useful here than
-the OS login — it identifies who the data belongs to in the system you are
-reading it back from.
-
-**I want the channels to carry units.** This is an upsert, so it works before
-any data exists — declare units ahead of a stream and the plots come out right
-the first time.
+**I want the channels to carry units.** This is an upsert and works before any
+data exists, so declare units ahead of a stream and the first plot comes out
+labelled.
 
 ```matlab
 ds.setChannelMetadata("rpm", "double", Unit="1/min");
 ds.setChannelMetadata("egt", "double", Unit="Cel", Description="Exhaust gas temp");
 ```
 
-Units are UCUM symbols, not free text: `Cel` rather than `C` (UCUM reserves
-that for coulomb), `1/min` rather than `rpm`, `[psi]` in brackets because UCUM
-brackets the customary units it names. A symbol UCUM cannot parse is still
-accepted, but is stored display-only and supports no conversions.
+Units are UCUM symbols, not free text: `Cel` not `C` (which is coulomb), `1/min`
+not `rpm`, `[psi]` in brackets. A symbol UCUM cannot parse is accepted but
+stored display-only, with no conversions.
 
-**I want this test bracketed as a run.** A run is a time window over an asset,
-with datasets attached.
+**I want this test bracketed as a run.** A run is a time window over an asset.
 
 ```matlab
 r = a.run("burn-12", datetime("now", TimeZone="UTC"));
@@ -336,12 +315,13 @@ r = a.run("burn-12", datetime("now", TimeZone="UTC"));
 r = r.finish();
 ```
 
-Nothing attaches the data: a run's data sources **are** its asset's, live. A
+Nothing attaches the data. A run's data sources **are** its asset's, live, so a
 dataset added to the asset after the run was created is already on the run.
-`r.addDataset(...)` exists but cannot succeed for a run made this way — see
+`r.addDataset(...)` exists but cannot succeed for a run made this way; see
 [Known gaps](README.md#known-gaps).
 
-**I want to flag something that happened.** Events mark a moment or an interval.
+**I want to flag something that happened.** Events mark a moment or an
+interval on an asset.
 
 ```matlab
 c.createEvent(a.Rid, "overspeed", Type="error", ...
@@ -350,8 +330,7 @@ c.createEvent(a.Rid, "overspeed", Type="error", ...
 
 ### Getting data out
 
-**I do not know the RID of anything.** Search by name; both come back as
-tables.
+**I do not know the RID of anything.** Search by name. Both return tables.
 
 ```matlab
 c.assets("engine")                         % name contains "engine"
@@ -359,13 +338,12 @@ ds = c.datasetByRid(c.datasets("telemetry").Rid(1));
 ds.channels()                              % what is inside it
 ```
 
-Pass a filter. `c.assets()` and `c.datasets()` with no argument fetch every
-asset or dataset in the workspace in a single unpaginated call — tens of
-thousands of rows on a real deployment, and there is no limit or page size to
-pass.
+Always pass a filter. With no argument, `c.assets()` and `c.datasets()` fetch
+every asset or dataset in the workspace in one call, and there is no page size
+to pass.
 
-**I want a channel in my workspace to work on.** `fetch` gives a timetable, so
-it plots and resamples with no conversion.
+**I want a channel in my workspace to work on.** `fetch` returns a timetable,
+so it plots and resamples directly.
 
 ```matlab
 t1 = datetime("now", TimeZone="UTC");
@@ -377,15 +355,14 @@ plot(tt.Time, tt.("rpm"))
 hourly = retime(tt, "regular", "mean", TimeStep=minutes(1));
 ```
 
-For plotting a wide window, ask the server to decimate rather than moving
-every sample:
+For plotting a wide window, let the server decimate:
 
 ```matlab
 tt = ds.fetch("rpm", t0, t1, Buckets=2000);
 ```
 
-Decimated points are bucket **means** — bucketing has already discarded the
-extremes, so reach for the undecimated fetch if you need them.
+Decimated points are bucket **means**, so the extremes are gone. Use the
+undecimated fetch if you need them.
 
 Several channels line up with `synchronize`:
 
@@ -396,19 +373,20 @@ both = synchronize(rpm, egt);
 ```
 
 **I want everything under this run in a `.mat` file.** Export moves the whole
-window in one request rather than paging.
+window in one request. A run's data sources are its asset's, so get the dataset
+from the asset.
 
 ```matlab
 r  = c.runByRid(runRid);
-ds = c.datasetByRid(r.datasources().Rid(1));
+a  = c.assetByRid(assetRid);
+ds = c.datasetByRid(a.datasources().Rid(1));
 
 ds.export("burn12.mat", ds.channels().Name', r.StartTime, r.EndTime);
 ```
 
-CSV and Arrow are the other two formats: `Format="csv"`. If the file is more
-useful as a link than as bytes — handing it to a browser, or to something that
-is not MATLAB — `ds.exportUrl(...)` returns a time-limited download URL
-instead.
+CSV and Arrow are the other formats: `Format="csv"`. `ds.exportUrl(...)`
+returns a time-limited download URL instead of a file, for handing to a browser
+or something that is not MATLAB.
 
 **I have a SQL query.** Results come back as a table.
 
@@ -418,42 +396,36 @@ t = c.query("SELECT ts, channel, value FROM points_double " + ...
 t.ts = nominal.fromNanos(t.ts);          % timestamps arrive as int64 ns
 ```
 
-The SQL surface is the warehouse's own tables, not the object model, so the
-column names are not the ones the MATLAB classes use.
+The SQL tables are the warehouse's own, so the column names differ from the
+MATLAB classes.
 
-**Telemetry tables** — `points_double`, `points_int`, `points_string`,
-`points_struct`, `logs`, `channels` — *must* filter on `dataset_rid`, or the
-query is rejected before it runs. `points_double` carries `ts`, `channel`,
-`value` and `dataset_rid`.
+**Telemetry tables** (`points_double`, `points_int`, `points_string`,
+`points_struct`, `logs`, `channels`) *must* filter on `dataset_rid` or the
+query is rejected. `points_double` has `ts`, `channel`, `value` and
+`dataset_rid`.
 
-**Metadata tables** — `assets`, `runs`, `run_assets`, `datasets`, `events` —
-have no such requirement, which makes `datasets` a way to find a RID when you
-have none. They are capped at 10,000 rows.
+**Metadata tables** (`assets`, `runs`, `run_assets`, `datasets`, `events`) have
+no such requirement, so `datasets` is another way to find a RID. They are
+capped at 10,000 rows.
 
-Anything over 1 GiB needs `c.queryExportUrl(sql)`, which returns a CSV download
+Results over 1 GiB need `c.queryExportUrl(sql)`, which returns a CSV download
 link with no size cap.
 
 ## Streaming: prefer the matrix push
 
-`nominal.Stream.push` takes an N-by-C matrix, one column per channel, sharing a
-timestamp column. MATLAB stores matrices column-major, so each channel's samples
-are already contiguous and go to the library with no copy or transpose.
+`nominal.Stream.push` takes an N-by-C matrix, one column per channel, with one
+shared timestamp column. MATLAB stores matrices column-major, so the data goes
+to the library with no copy. Preallocate a matrix, fill it in a loop, push it.
 
-That means MATLAB's natural pattern — preallocate a matrix, fill it in a loop,
-push it — is already the efficient one.
-
-Pushing blocks when the stream saturates. If points arrive faster than the
-network drains them, `push` waits rather than queueing without bound. Produce on
-a separate thread if your acquisition loop cannot stall.
+`push` blocks when the stream saturates. If points arrive faster than the
+network drains them, it waits instead of queueing without bound. Produce on a
+separate thread if your acquisition loop cannot stall.
 
 ## Shutdown
 
-`clear mex`, `clear all`, and quitting MATLAB all unload the gateway. The
-library owns worker threads that would outlive an unloaded module and take
-MATLAB down with them, so the gateway registers a `mexAtExit` hook that shuts it
-down first.
+You do not need to call `nominal.shutdown()`. `clear mex`, `clear all` and
+quitting MATLAB all shut the library down cleanly first.
 
-You therefore do not need to call `nominal.shutdown()`. Do so when you want the
-teardown at a known point — before a `clear mex` during development, or at the
-end of a long script. It invalidates every outstanding handle but is not a
-one-way door: the next call builds a fresh runtime.
+Call it when you want the teardown at a known point, such as the end of a long
+script. It invalidates every outstanding handle. The next call builds a fresh
+runtime, so the library is usable again immediately.

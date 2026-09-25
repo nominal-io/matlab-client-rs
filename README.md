@@ -1,10 +1,8 @@
 # Nominal for MATLAB
 
-An object-oriented MATLAB client for [Nominal](https://nominal.io).
-
-The Nominal Rust SDK is wrapped in a C ABI (`crates/ffi`) and linked into a
-single MEX gateway, so MATLAB talks to native code rather than shelling out to
-Python. One binary, no runtime dependencies, no interpreter in the middle.
+A MATLAB client for [Nominal](https://nominal.io). The Nominal Rust SDK is
+compiled into a single MEX file, so there is no Python, no DLL and no runtime
+to install.
 
 ```matlab
 addpath('matlab')
@@ -13,27 +11,25 @@ c  = nominal.Client.fromProfile();
 a  = c.getOrCreateAsset("engine-3");
 ds = a.getOrCreateDataset("telemetry", "tlm");
 
-ds.write(["rpm" "egt" "psi"], t, V);       % a matrix straight up
-tt = ds.fetch("rpm", t0, t1);              % a timetable straight back
+ds.write(["rpm" "egt" "psi"], t, V);       % push a matrix
+tt = ds.fetch("rpm", t0, t1);              % get a timetable back
 ```
 
 | | |
 |---|---|
-| **[HELLOWORLD.md](HELLOWORLD.md)** | Handed a `.mltbx`? Install it, connect, run something — no repo needed |
-| **[USAGE.md](USAGE.md)** | Quick start, authenticating, every object and method, and the common workflows |
+| **[HELLOWORLD.md](HELLOWORLD.md)** | Handed a `.mltbx`? Install it, connect, run something. No repo needed. |
+| **[USAGE.md](USAGE.md)** | Quick start, authenticating, every object and method, common workflows |
 | **[BUILDING.md](BUILDING.md)** | Prerequisites, building the gateway, installing it, packaging a `.mltbx` |
 | **[PACKAGING.md](PACKAGING.md)** | Building on Windows, macOS and Linux and shipping one multi-platform `.mltbx` |
-| **[matlab/examples/](matlab/examples/)** | Runnable demos — `nominalexample_alldemos` exercises the whole surface |
+| **[matlab/examples/](matlab/examples/)** | Runnable demos. `nominalexample_alldemos` runs them all. |
 
-## What it gives you over the raw C API
+## How it behaves
 
-**Handles free themselves.** Every class derives from a `handle` base with a
-destructor, so `delete()` runs when a variable goes out of scope. There are no
-`_free` calls to forget. Objects alias rather than copy, so passing one to a
-function does not create a second owner of the same handle.
+**Objects free themselves.** Every object is a handle that releases its native
+resource when it goes out of scope. Copies alias the same resource.
 
-**Errors are exceptions.** Status codes become `MException`s carrying the
-library's own message, with identifiers you can catch selectively:
+**Errors are exceptions.** Failures raise `MException`s with the library's
+message and an identifier you can catch on:
 
 ```matlab
 try
@@ -46,27 +42,21 @@ catch e
 end
 ```
 
-**Wrong-type arguments fail immediately.** `arguments` blocks declare the
-expected class, so passing a `Dataset` where a `Stream` belongs is an error at
-the call site naming both — rather than an integer quietly going somewhere it
-should not.
+**Wrong-type arguments fail at the call site.** Passing a `Dataset` where a
+`Stream` belongs is an immediate error naming both.
 
-**Results are tables and timetables.** Listings come back as `table`, and
-`fetch` as a `timetable` — so `sortrows`, logical indexing, `retime` and
-`synchronize` work with no conversion step.
-
-**Strings and string handles are invisible.** Getters return MATLAB `string`;
-the allocate/length/copy/free dance stays in the gateway.
+**Results are tables and timetables.** Listings return a `table`; `fetch`
+returns a `timetable`, so `sortrows`, `retime` and `synchronize` work directly.
 
 **Times are `datetime`.** Anything taking an instant accepts a zoned `datetime`
-or an `int64` nanosecond count, and times coming back are UTC `datetime`. Note
+or an `int64` nanosecond count. Times coming back are UTC `datetime`.
 `datetime` does not resolve to nanoseconds, so use `nominal.now()` and raw
-`int64` when full precision matters — a round trip through `datetime` is lossy.
+`int64` when full precision matters.
 
-Plain doubles are refused for timestamps. A double holds integers exactly only
-to 2^53, which in nanoseconds runs out about 104 days after 1970, so any real
-timestamp passed as a double would be silently rounded. `0` is accepted, since
-it is the "now" sentinel for run times.
+Plain doubles are refused for timestamps: they lose integer precision past
+2^53 nanoseconds, which is 1970 plus 104 days, so a present-day timestamp
+would be silently rounded. `0` is accepted as the "now" sentinel for run and
+event times.
 
 ## Layout
 
@@ -94,69 +84,46 @@ matlab/
         └── structsToTable.m    listing -> table, shared by the classes
 ```
 
-One gateway rather than one MEX per function: `mexAtExit` must be registered
-exactly once, and a binary per command would mean dozens of files each carrying
-a copy of the shutdown plumbing.
-
-`nominalmex` lives in `private/` deliberately. It does no argument checking of
-its own and calling it directly bypasses every guarantee the classes make.
+`nominalmex` is private on purpose. It does no argument checking, so call the
+classes, not the gateway.
 
 ## Requirements
 
-**MATLAB R2021a or newer.** The floor is the `Name=Value` call syntax used
-throughout — `c.assets()` and friends are fine much further back, but
-`ds.fetch("rpm", t0, t1, Buckets=2000)` is not. The older `'Buckets', 2000`
-form works everywhere and is a drop-in substitute if you need it.
+**MATLAB R2021a or newer.** The floor is the `Name=Value` call syntax, as in
+`ds.fetch("rpm", t0, t1, Buckets=2000)`. The older `'Buckets', 2000` form works
+in any release if you need it. Nothing below R2026a has actually been tested.
 
-This has not been tested below R2026a. The `arguments` blocks the classes use
-are R2019b, but [toNanos.m](matlab/+nominal/toNanos.m) and
-[fromNanos.m](matlab/+nominal/fromNanos.m) rely on `convertTo(..., 'epochtime', ...)`,
-which is newer — going below R2021a needs that checked against a real install
-rather than assumed.
-
-**Windows x86-64, Apple silicon and Linux x86-64 have all been built and
-linked** on real hardware. `build.m` picks its cargo target and linker flags
-from the host. Intel macOS is not supported. See [BUILDING.md](BUILDING.md).
+**Windows x86-64, Apple silicon and Linux x86-64** have all been built and
+linked. Intel macOS is not supported. See [BUILDING.md](BUILDING.md).
 
 ## Known gaps
 
-- **String channels.** `nominal_streamchannel_push_strings` exists in the C ABI
-  but has no MEX command, so streams carry doubles only.
-- **Events cannot be listed or searched**, only created and read back from the
-  object you get at creation. The C ABI has no list endpoint to expose.
-- **`Run` exposes no `datasources()`.** An asset's are listed with
-  `a.datasources()`; a run has no equivalent, though its data sources are its
-  asset's anyway.
-- **`Run.addDataset` cannot succeed.** A run's data sources are its asset's,
-  live — a dataset added to the asset after the run exists is already on the
-  run. So every reference name the asset uses returns
-  `Scout:RefNamesAlreadyUsed` and every other name `Default:InvalidArgument`;
-  there is no argument that works. Verified against a live deployment. It
-  presumably serves runs created without an asset, which `asset.run()` — the
-  only constructor here — cannot produce. Nothing needs calling to get an
-  asset's data onto its run.
-- **Video and connection data sources** appear in `a.datasources()` with the
-  right `Type`, but there is nothing to do with one from here.
-- **Listings cannot be limited or paged.** `nominal_asset_list` and
-  `nominal_dataset_list` take a client and nothing else, so `c.assets()` and
-  `c.datasets()` are all-or-nothing — on a large workspace that is tens of
-  thousands of rows and several seconds. Search by name instead. Adding a
-  limit means a parameter on the C ABI, not just a MATLAB change.
-- **`count(*)` and other unmapped SQL types** land in the `Unsupported` column
-  bucket and read back as empty strings. `ColumnType` covers the float, integer,
-  boolean, string and timestamp Arrow types the warehouse usually emits.
+- **String channels.** Streams carry doubles only.
+- **Events cannot be listed or searched.** You can create one and read back
+  the object you got.
+- **`Run` has no `datasources()`.** A run's data sources are its asset's, so
+  use `a.datasources()`.
+- **`Run.addDataset` cannot succeed** for a run made with `asset.run()`, which
+  is the only kind this client creates. A run's data sources are its asset's,
+  live, so there is nothing to attach. Every argument returns an error.
+- **Video and connection data sources** show up in `a.datasources()` with the
+  right `Type`, but nothing here can act on one.
+- **Listings cannot be limited or paged.** `c.assets()` and `c.datasets()`
+  with no filter return everything, which on a large workspace is tens of
+  thousands of rows and several seconds. Pass a name filter instead.
+- **`count(*)` and other unmapped SQL types** come back as empty strings.
+  Float, integer, boolean, string and timestamp columns are supported.
 
 ## Status
 
-Built on R2026a with MSVC, and verified against a live deployment: auth,
+Built on R2026a with MSVC and verified against a live deployment: auth,
 listings, `datasetByRid`, channel metadata, `write`, streaming, `ingest`,
 `fetch` in both modes, `export`, and SQL query and export.
 
 `just lint` runs clippy and MATLAB's `checkcode`; `just test` runs the Rust
 suite; `just mex-test` runs the offline MATLAB smoke test.
 
-The gateway also builds and passes the offline smoke test on Linux x86-64
-(gcc), and builds on Apple silicon (clang).
+All three platforms have run the full demo suite against a live deployment:
+Windows x86-64 (MSVC), Apple silicon (clang) and Linux x86-64 (gcc).
 
-Not yet exercised: the live API surface on any platform other than Windows
-x86-64, and any MATLAB release below R2026a.
+No MATLAB release below R2026a has been tested.

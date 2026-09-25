@@ -5,11 +5,10 @@ function results = nominalexample_assetdemo(assetName)
 %   nominalexample_assetdemo("engine-3")     % an existing asset
 %
 %   Needs credentials. With no argument this creates a new asset named
-%   nominal-matlab-demo-<timestamp>, so it is safe to run repeatedly; pass a
-%   name to work against something that already exists.
+%   nominal-matlab-demo-<timestamp>; pass a name to use an existing asset.
 %
-%   Covers: get-or-create, get by RID, metadata update, all accessors, and
-%   listing attached data sources.
+%   Covers: get-or-create, get by RID, metadata update, accessors, and
+%   listing attached data sources. Publishes results as nominalAsset.
 %
 %   See also NOMINAL.ASSET, NOMINALEXAMPLE_DATASETDEMO,
 %   NOMINALEXAMPLE_RUNDEMO, NOMINALEXAMPLE_EVENTDEMO, NOMINALEXAMPLE_CONNECT
@@ -22,8 +21,8 @@ function results = nominalexample_assetdemo(assetName)
 
     % --- get or create ------------------------------------------------
     %
-    % Name is not unique in Nominal, so this returns the first exact match and
-    % only creates when there is none.
+    % Name is not unique in Nominal. This returns the first exact match and
+    % creates only when there is none.
     fprintf('Asset "%s"\n', assetName);
     asset = client.getOrCreateAsset(assetName);
     fprintf('  rid  %s\n', asset.Rid);
@@ -31,16 +30,15 @@ function results = nominalexample_assetdemo(assetName)
 
     % --- fetch the same asset by RID ----------------------------------
     %
-    % Two handles onto the same asset. They are independent objects; releasing
-    % one does not affect the other.
+    % Two handles on the same asset are independent objects.
     sameAssetByRid = client.assetByRid(asset.Rid);
     fprintf('  refetched by rid, name matches: %d\n', ...
             sameAssetByRid.Name == asset.Name);
 
     % --- update -------------------------------------------------------
     %
-    % Collections replace rather than merge. Passing Labels at all discards
-    % whatever the asset had, so read them first if you mean to add.
+    % Labels and Properties replace, not merge. Read them first if you mean
+    % to add.
     labelsBefore = asset.Labels;
     if isempty(labelsBefore)
         fprintf('  labels before: (none)\n');
@@ -57,14 +55,15 @@ function results = nominalexample_assetdemo(assetName)
     fprintf('  description:   %s\n', updatedAsset.Description);
     fprintf('  property source = %s\n', updatedAsset.property("source"));
 
-    % The original handle still shows the pre-update state — update returns a
-    % new object rather than mutating in place.
+    % update returns a new object; the original handle still shows the old
+    % state.
     fprintf('  original handle still shows: "%s"\n', asset.Description);
 
     % --- attached data sources ----------------------------------------
     %
-    % Type matters: only a dataset RID can open a stream, so the kind tells
-    % you what an endpoint will accept.
+    % Check the Type column: only a dataset RID can open a stream. Use
+    % datasources(Refresh=true) to see datasets attached after the handle
+    % was fetched.
     dataSources = updatedAsset.datasources();
     fprintf('  %d data source(s) attached\n', height(dataSources));
     if ~isempty(dataSources)
@@ -73,8 +72,7 @@ function results = nominalexample_assetdemo(assetName)
 
     % --- results ------------------------------------------------------
     %
-    % Read off the updated handle while it is still live: the objects are
-    % released below, and a released one reports nothing.
+    % Copy out before the handles are released below.
     results = struct( ...
         'Rid',         updatedAsset.Rid, ...
         'Name',        updatedAsset.Name, ...

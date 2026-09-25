@@ -1,12 +1,10 @@
 function nanos = toNanosVector(value)
 %TONANOSVECTOR  Convert a vector of times to int64 nanoseconds.
 %
-%   The batch counterpart of nominal.toNanos, used by the streaming push
-%   methods. Accepts an int64 vector or a zoned datetime vector.
+%   The vector counterpart of nominal.toNanos, used by the push methods.
+%   Accepts an int64 vector or a zoned datetime vector.
 %
-%   Unlike nominal.toNanos there is no zero-means-now sentinel here: streaming
-%   timestamps are literal, since a stream may legitimately carry times
-%   relative to an epoch the caller chose.
+%   No zero-means-now sentinel here: streaming timestamps are literal.
 %
 %   See also NOMINAL.TONANOS, NOMINAL.STREAM
 

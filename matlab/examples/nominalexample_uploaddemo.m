@@ -9,8 +9,7 @@ function results = nominalexample_uploaddemo(assetName)
 %   tempdir, so point it at something disposable.
 %
 %   The RIDs it creates and the data it sent are returned, and left in the
-%   base workspace as `nominalUpload` — so the next demo can be pointed at
-%   them without copying anything out of the console:
+%   base workspace as `nominalUpload`, so the next demo can be pointed at them:
 %
 %       nominalexample_uploaddemo("engine-3")
 %       nominalexample_analysisdemo(nominalUpload.WrittenDatasetRid)
@@ -18,17 +17,17 @@ function results = nominalexample_uploaddemo(assetName)
 %   Fields: AssetRid, AssetName, WrittenDatasetRid, IngestedDatasetRid,
 %   ChannelNames, SampleTimes, SampleValues, IngestStatus, MatFile, CsvFile.
 %
-%   nominalexample_streamdemo covers the live path, where samples arrive as a
-%   test runs. This covers the other two, where the data already exists:
+%   nominalexample_streamdemo covers live data. This covers data that already
+%   exists:
 %
-%     write    — a matrix already in the workspace, or loaded from a .mat.
-%                One call, no stream, returns when the data has landed.
+%     write    - a matrix in the workspace, or loaded from a .mat. One call,
+%                no stream, returns when the data has landed.
 %
-%     ingest   — a CSV or Parquet file on disk. Nominal does the parsing;
-%                you get a job to wait on.
+%     ingest   - a CSV or Parquet file on disk. Nominal parses it; you get a
+%                job to wait on.
 %
-%   Also shows the two things worth doing alongside an upload: declaring units
-%   before any data exists, and recording which script produced the data.
+%   Also shows declaring units before any data exists, and recording which
+%   script produced the data.
 %
 %   See also NOMINAL.DATASET/WRITE, NOMINAL.CLIENT/INGEST,
 %   NOMINALEXAMPLE_STREAMDEMO, NOMINALEXAMPLE_CONNECT
@@ -37,8 +36,7 @@ function results = nominalexample_uploaddemo(assetName)
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    % Filled in as the demo goes, so a step that fails still leaves a struct
-    % that indexes cleanly.
+    % Filled in as the demo goes; a failed step still leaves every field.
     results = struct( ...
         'AssetRid',           "", ...
         'AssetName',          "", ...
@@ -57,20 +55,9 @@ function results = nominalexample_uploaddemo(assetName)
     results.AssetName = asset.Name;
     fprintf('Asset: %s\n\n', asset.Name);
 
-    % Synthetic engine telemetry, standing in for whatever your acquisition
-    % system produced: half a second of data at 1 kHz across three channels.
-    %
-    % The timestamps end at "now" rather than starting there, so the data
-    % lands in the past and is immediately visible in a default time window.
-    %
-    % The three signals are shaped only so the charts are legible:
-    %
-    %   rpm  1490-1510 1/min, three sine cycles — an engine holding idle
-    %   egt   700-750  Cel,   a slow linear climb
-    %   psi    30-55   psi,   a faster linear climb
-    %
-    % Nothing reads these values back and checks them; they exist to be
-    % plausible on a chart.
+    % Synthetic engine telemetry: half a second at 1 kHz across three channels,
+    % shaped to look plausible on a chart. The timestamps end at now, so the
+    % data is visible in a default time window.
     sampleCount = 500;
     sampleRate = 1000;                                  % Hz
     endTime = datetime("now", TimeZone="UTC");
@@ -83,9 +70,7 @@ function results = nominalexample_uploaddemo(assetName)
     egtValues = 700 + sampleIndex * 0.1;
     psiValues = 30 + sampleIndex * 0.05;
 
-    % One column per channel, in the same order as the channel names passed
-    % to write() below. Getting that order wrong would misalign every series,
-    % which is why the two are kept next to each other.
+    % One column per channel. Column order must match the channel names order.
     channelNames = ["matrpm" "mategt" "matpsi"];
     sampleValues = [rpmValues, egtValues, psiValues];
 
@@ -96,22 +81,17 @@ function results = nominalexample_uploaddemo(assetName)
     % 1 ------------------------------------------- units before any data
     %
     % setChannelMetadata is an upsert, so it works on channels that do not
-    % exist yet. Declaring units first means the first plot comes out right
-    % rather than being relabelled later.
+    % exist yet, and the first plot comes out with the right units.
     %
-    % AttachExisting=false on both getOrCreateDataset calls in this demo: it
-    % writes to whatever it gets back, so adopting a dataset someone else
-    % owns would put demo data in their asset. See
-    % nominal.Asset.getOrCreateDataset.
+    % AttachExisting=false on both getOrCreateDataset calls: the demo writes to
+    % whatever it gets back, and should not adopt a dataset someone else owns.
     dataset = asset.getOrCreateDataset("Uploaded telemetry", "uploaded", ...
                                        AttachExisting=false);
     fprintf('--- Channel metadata ---\n');
 
-    % Units are UCUM symbols, not free text. That is why temperature is "Cel"
-    % rather than "C" (UCUM reserves C for coulomb), speed is "1/min" rather
-    % than "rpm", and pressure is "[psi]" — UCUM brackets the customary units
-    % it defines by name. A symbol UCUM cannot parse is still accepted, but is
-    % stored as display-only and will not support conversions.
+    % Units are UCUM symbols: "Cel" not "C" (C is coulomb), "1/min" not "rpm",
+    % and "[psi]" in brackets. A symbol UCUM cannot parse is accepted but stored
+    % display-only, with no conversions.
     dataset.setChannelMetadata("matrpm", "double", Unit="1/min");
     dataset.setChannelMetadata("mategt", "double", Unit="Cel", ...
                                Description="Exhaust gas temperature");
@@ -120,17 +100,15 @@ function results = nominalexample_uploaddemo(assetName)
 
     % 2 ----------------------------------------------- upload from a .mat
     %
-    % The round trip through a file is the point: this is what a user with an
-    % existing .mat actually does. There is no .mat ingest endpoint and none
-    % is needed — MATLAB already has the data in memory, so write it directly.
+    % There is no .mat ingest endpoint: load the file and write the data
+    % directly.
     fprintf('--- Upload from a .mat file ---\n');
     matFilePath = fullfile(tempdir, "nominal-uploaddemo.mat");
     results.MatFile = string(matFilePath);
     save(matFilePath, "sampleTimes", "sampleValues");
     fprintf('Saved %s\n', matFilePath);
 
-    % load() into a struct rather than straight into the workspace, so it is
-    % obvious below which values came off disk.
+    % load() into a struct so it is clear which values came off disk.
     fromDisk = load(matFilePath);
     dataset.write(channelNames, fromDisk.sampleTimes, fromDisk.sampleValues);
     fprintf('Wrote %d rows x %d channels via dataset.write\n\n', ...
@@ -138,13 +116,11 @@ function results = nominalexample_uploaddemo(assetName)
 
     % 3 ---------------------------------------------------- provenance
     %
-    % Properties and labels are arbitrary text. Recording what produced the
-    % data is what makes two runs comparable six months later — the model or
-    % script version is the thing you always wish you had written down.
+    % Properties and labels are arbitrary text. Record the script and version
+    % that produced the data.
     fprintf('--- Provenance ---\n');
 
-    % update returns a new object rather than changing this one, so the result
-    % gets its own name — the original dataset handle still reports the
+    % update returns a new object; the original handle still reports the
     % pre-update state.
     annotatedDataset = dataset.update( ...
         Properties=struct(script="nominalexample_uploaddemo.m", ...
@@ -160,21 +136,18 @@ function results = nominalexample_uploaddemo(assetName)
 
     % 4 ------------------------------------------------ ingest a CSV file
     %
-    % The other direction: hand Nominal a path and let it parse. This lands in
-    % its own dataset rather than the one above, so the two paths stay legible
-    % in the UI.
+    % Hand Nominal a path and let it parse. This lands in its own dataset so
+    % the two paths are easy to tell apart in the UI.
     %
-    % The dataset is created under the asset *first*, then handed to ingest as
-    % Dataset=. Passing NewDataset= instead would work, but the dataset it
-    % creates is not attached to any asset, and the only way to attach one
-    % afterwards is to ask for it by name — there is no attach-by-RID call.
-    % Creating it under the asset keeps that unambiguous.
+    % The dataset is created under the asset first and passed as Dataset=,
+    % which is the simpler path. NewDataset= instead creates an unattached
+    % dataset; attach it afterwards with
+    % asset.addDataset(client.datasetByRid(job.DatasetRid)).
     fprintf('--- Ingest a CSV ---\n');
     csvFilePath = fullfile(tempdir, "nominal-uploaddemo.csv");
     results.CsvFile = string(csvFilePath);
 
-    % Two of the three channels, to show that an ingested file decides its own
-    % schema — it need not match what was written above.
+    % Two of the three channels: an ingested file decides its own schema.
     csvContents = table(posixtime(sampleTimes), rpmValues, egtValues, ...
                         VariableNames=["time" "csvrpm" "csvegt"]);
     writetable(csvContents, csvFilePath);
@@ -184,8 +157,8 @@ function results = nominalexample_uploaddemo(assetName)
                                             AttachExisting=false);
     results.IngestedDatasetRid = ingestTarget.Rid;
 
-    % Epoch seconds rather than the ISO 8601 default, because that is what
-    % posixtime produces and what most logger CSVs carry.
+    % Kind="epoch", Unit="seconds" for a posixtime column. ISO 8601 is the
+    % default.
     ingestJob = client.ingest(csvFilePath, TimestampColumn="time", ...
                               Dataset=ingestTarget, ...
                               Kind="epoch", Unit="seconds");
@@ -193,10 +166,9 @@ function results = nominalexample_uploaddemo(assetName)
     fprintf('  landing in %s\n', ingestJob.DatasetRid);
     fprintf('  status now: %s\n', ingestJob.status());
 
-    % The upload finished when ingest returned; this waits for the server-side
-    % processing. wait() raises if the ingest itself fails, so it is wrapped —
-    % a failed ingest is a normal outcome to report, not a reason to abandon
-    % the rest of the demo.
+    % The upload finished when ingest returned; wait() waits for server-side
+    % processing. It raises on a failed ingest, so wrap it to report instead
+    % of throwing.
     finalStatus = "failed";
     try
         finalStatus = ingestJob.wait();
@@ -213,12 +185,8 @@ function results = nominalexample_uploaddemo(assetName)
 
     % 5 -------------------------------------------------------- teardown
     %
-    % Both datasets hang off the asset, so this lists them and the asset page
-    % in Nominal shows both.
-    %
-    % Refresh=true is required here, not decorative: this asset handle was
-    % fetched before either dataset existed, and a handle is a snapshot. The
-    % default read would list only what was attached when it was fetched.
+    % Both datasets hang off the asset. The asset handle is a snapshot fetched
+    % before either dataset existed, so Refresh=true is needed to see them.
     fprintf('\n--- Result ---\n');
     attached = asset.datasources(Refresh=true);
     fprintf('asset %s has %d data source(s):\n', asset.Name, height(attached));

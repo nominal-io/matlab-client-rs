@@ -6,17 +6,13 @@ classdef Client < nominal.Resource
     %       c = nominal.Client.fromProfile();          % credentials on disk
     %       c = nominal.Client.fromToken("<api-key>"); % token in hand
     %
-    %   fromProfile is the recommended one. It reads the same
-    %   ~/.config/nominal/config.yml that the `nom` CLI and the Python client
-    %   use, so a machine set up for either already works here — and no key
-    %   ends up pasted into a script.
+    %   Prefer fromProfile. It reads the same ~/.config/nominal/config.yml
+    %   that the `nom` CLI and the Python client use, and no key ends up in a
+    %   script.
     %
     %   nominal.Client(token, Workspace=rid, BaseUrl=url) is the underlying
-    %   constructor. Both options are optional; the API does not require a
-    %   workspace, and an unset base URL means Nominal production.
-    %
-    %   Surrounding whitespace is trimmed from all three, so a token pasted
-    %   with a trailing newline still authenticates.
+    %   constructor. Both options are optional; an unset base URL means
+    %   Nominal production. Surrounding whitespace is trimmed from all three.
     %
     %   Example:
     %       c  = nominal.Client.fromProfile();
@@ -24,7 +20,7 @@ classdef Client < nominal.Resource
     %       ds = a.getOrCreateDataset("telemetry", "tlm");
     %       s  = ds.stream();
     %
-    %   The connection is released automatically when c goes out of scope.
+    %   The connection is released when c goes out of scope.
     %
     %   See also NOMINAL.ASSET, NOMINAL.DATASET, NOMINAL.RUN, NOMINAL.SHUTDOWN
 
@@ -59,29 +55,26 @@ classdef Client < nominal.Resource
         function name = whoAmI(obj)
             %WHOAMI  Display name of the authenticated user.
             %
-            %   Round-trips to the API, so it doubles as a credential check: a
-            %   bad token fails here rather than at the first real call.
+            %   Calls the API, so it doubles as a credential check.
             obj.assertLive();
             name = string(nominalmex('client_user', obj.Handle));
         end
 
         function t = assets(obj, filter)
-            %ASSETS  Every asset you can see, as a table.
+            %ASSETS  Assets you can see, as a table.
             %
             %   Variables: Name, Rid, Description. Ordered by name.
             %
-            %   With one argument, keeps only assets whose name contains it —
-            %   a case-insensitive substring match, not a pattern. This is how
-            %   you find a RID when all you have is a name:
+            %   With one argument, keeps only assets whose name contains it
+            %   (case-insensitive substring). Use this to find a RID from a
+            %   name:
             %
             %       c.assets("engine")
             %       a = c.assetByRid(c.assets("engine").Rid(1));
             %
-            %   With no argument it fetches EVERY asset in the workspace, in
-            %   one unpaginated call. That is tens of thousands of rows on a
-            %   real deployment and takes correspondingly long — there is no
-            %   limit or page size to pass, so filter unless you genuinely
-            %   want the lot.
+            %   With no argument it fetches EVERY asset in the workspace in
+            %   one call, which on a real deployment is tens of thousands of
+            %   rows. There is no page size to pass, so filter.
             %
             %   See also NOMINAL.CLIENT/DATASETS
             arguments
@@ -98,20 +91,17 @@ classdef Client < nominal.Resource
         end
 
         function t = datasets(obj, filter)
-            %DATASETS  Every dataset you can see, as a table.
+            %DATASETS  Datasets you can see, as a table.
             %
             %   Variables: Name, Rid. Ordered by name. With one argument, keeps
             %   only datasets whose name contains it.
             %
             %       ds = c.datasetByRid(c.datasets("telemetry").Rid(1));
+            %       ds.channels()                    % what is inside it
             %
-            %   With no argument it fetches EVERY dataset in the workspace, in
-            %   one unpaginated call — slow on a real deployment, and there is
-            %   no limit to pass. Filter unless you want all of them.
-            %
-            %   To see what is inside one, use its channels:
-            %
-            %       ds.channels()
+            %   With no argument it fetches EVERY dataset in the workspace in
+            %   one call. Slow on a real deployment, and there is no page size
+            %   to pass, so filter.
             %
             %   See also NOMINAL.CLIENT/ASSETS, NOMINAL.DATASET/CHANNELS
             arguments
@@ -130,14 +120,10 @@ classdef Client < nominal.Resource
         function a = getOrCreateAsset(obj, name)
             %GETORCREATEASSET  Fetch an asset by name, creating it if absent.
             %
-            %   Named for what it does. A lookup that silently creates on a
-            %   typo is worth spelling out at the call site, because the
-            %   evidence of the mistake is a new empty asset rather than an
-            %   error.
-            %
-            %   Name is not unique in Nominal; if several match, the first is
-            %   returned. Prefer assetByRid when you already know the RID, and
-            %   assets(name) when you want to look without creating.
+            %   A typo creates a new empty asset rather than erroring, so
+            %   check the name. Names are not unique in Nominal; if several
+            %   match, the first is returned. Use assetByRid when you know the
+            %   RID, and assets(name) to look without creating.
             %
             %   See also NOMINAL.CLIENT/ASSETBYRID, NOMINAL.CLIENT/ASSETS
             arguments
@@ -175,8 +161,7 @@ classdef Client < nominal.Resource
             %                     Timestamp=t, Duration=seconds(10));
             %
             %   assetRids is a string array of asset RIDs; at least one is
-            %   required, since an event with no asset is not created. Pass
-            %   asset objects' .Rid, or the RIDs directly.
+            %   required.
             %
             %   Type is one of info, flag, error, success. Timestamp accepts a
             %   zoned datetime or int64 nanoseconds, and defaults to now.
@@ -226,20 +211,18 @@ classdef Client < nominal.Resource
             %   job = c.ingest("run.parquet", TimestampColumn="t", ...
             %                  Dataset=ds, Kind="epoch", Unit="milliseconds");
             %
-            %   The format is taken from the file extension: .parquet is
-            %   Parquet, anything else is CSV.
+            %   .parquet is read as Parquet, anything else as CSV.
             %
             %   Give either Dataset (add to an existing one) or NewDataset (a
-            %   name to create). The returned job carries DatasetRid either
-            %   way, which is how you find a dataset this call just made.
+            %   name to create). NewDataset creates a dataset attached to no
+            %   asset; attach it afterwards with asset.addDataset. The returned
+            %   job carries DatasetRid either way.
             %
             %   Kind says how to read the timestamp column: iso8601 (the
-            %   default), epoch, or relative. Unit applies to the latter two
-            %   and is ignored for ISO 8601.
+            %   default), epoch, or relative. Unit applies to the latter two.
             %
-            %   Blocks while the file uploads, which for a large file is a long
-            %   time. The ingest itself continues afterwards — call job.wait()
-            %   if you need it finished before moving on.
+            %   Blocks while the file uploads. The server-side ingest continues
+            %   afterwards; call job.wait() if you need it finished.
             %
             %   See also NOMINAL.INGESTJOB, NOMINAL.DATASET/WRITE
             arguments
@@ -295,23 +278,19 @@ classdef Client < nominal.Resource
             %   t = c.query("SELECT ts, channel, value FROM points_double " + ...
             %               "WHERE dataset_rid = '" + ds.Rid + "' LIMIT 100")
             %
-            %   The tables are the warehouse's own, not the object model, so
-            %   the columns are not the ones these classes expose. Telemetry
-            %   tables (points_double, points_int, points_string, logs,
-            %   channels) must filter on dataset_rid. Metadata tables (assets,
-            %   runs, datasets, events) need not, and are capped at 10,000
-            %   rows.
+            %   The tables are the warehouse's own, so the columns differ from
+            %   these classes. Telemetry tables (points_double, points_int,
+            %   points_string, logs, channels) must filter on dataset_rid.
+            %   Metadata tables (assets, runs, datasets, events) need not, and
+            %   are capped at 10,000 rows.
             %
-            %   Timestamp columns come back as int64 nanoseconds since the
-            %   epoch, whatever resolution the warehouse sent — pass them
+            %   Timestamp columns come back as int64 nanoseconds. Pass them
             %   through nominal.fromNanos for a datetime.
             %
-            %   The SQL service always needs a workspace, even though the rest
-            %   of the API does not. The client's own workspace is used unless
-            %   Workspace= names another; if the client is unscoped, one must
-            %   be given here.
+            %   SQL always needs a workspace. The client's own is used unless
+            %   Workspace= names another; an unscoped client must give one.
             %
-            %   Bounded at 1 GiB. Use queryExportUrl for anything larger.
+            %   Results are capped at 1 GiB. Use queryExportUrl for larger.
             %
             %   See also NOMINAL.CLIENT/QUERYEXPORTURL, NOMINAL.FROMNANOS
             arguments
@@ -353,14 +332,12 @@ classdef Client < nominal.Resource
         function url = queryExportUrl(obj, sql, options)
             %QUERYEXPORTURL  Run a query and get a download link for the CSV.
             %
-            %   For results too large for query, which is capped at 1 GiB. The
-            %   export runs without that cap, writes to object storage, and
-            %   returns a time-limited presigned URL.
+            %   For results too large for query (capped at 1 GiB). Returns a
+            %   time-limited URL with no size cap.
             %
-            %   CSV only, and only for queries reading telemetry tables — one
+            %   CSV only, and only for queries on telemetry tables; one
             %   touching assets, runs, or datasets cannot be exported this way.
-            %   Some deployments have no export bucket configured, in which
-            %   case this fails.
+            %   Fails on deployments with no export bucket configured.
             %
             %   See also NOMINAL.CLIENT/QUERY
             arguments
@@ -382,24 +359,18 @@ classdef Client < nominal.Resource
             %   c = nominal.Client.connect()          % the "default" profile
             %   c = nominal.Client.connect("staging") % a named one
             %
-            %   For code that has to run both on a workstation, where a profile
-            %   is set up, and in CI, where only an environment variable is.
-            %   Prefer fromProfile or fromToken when you know which you have —
-            %   an explicit call cannot pick the wrong one.
+            %   For code that runs both on a workstation (profile) and in CI
+            %   (environment variable). Prefer fromProfile or fromToken when
+            %   you know which you have.
             %
-            %   The profile wins. It carries a base URL and a workspace;
-            %   NOMINAL_TOKEN carries neither, so falling back to it means
-            %   talking to Nominal production with no workspace scope. A
-            %   profile pointing at staging that fails to load would otherwise
-            %   send you somewhere else entirely without saying so, which is
-            %   why the fallback warns.
+            %   The profile wins. NOMINAL_TOKEN carries no base URL or
+            %   workspace, so falling back to it means Nominal production with
+            %   no workspace scope, whatever the profile said. The fallback
+            %   raises a nominal:profileFallback warning when it happens.
             %
-            %   Raises nominal:noCredentials when neither is available,
-            %   reporting the profile problem — it names the file it looked in
-            %   and the command that would fix it.
-            %
-            %   This has no counterpart in the Python client, which offers only
-            %   the two explicit constructors.
+            %   Raises nominal:noCredentials when neither is available. The
+            %   message names the config file it looked in and the command
+            %   that would fix it.
             %
             %   See also NOMINAL.CLIENT/FROMPROFILE, NOMINAL.CLIENT/FROMTOKEN
             arguments
@@ -441,19 +412,17 @@ classdef Client < nominal.Resource
             %   c = nominal.Client.fromProfile()          % the "default" profile
             %   c = nominal.Client.fromProfile("staging") % a named one
             %
-            %   Reads ~/.config/nominal/config.yml — the same file the `nom`
+            %   Reads ~/.config/nominal/config.yml, the same file the `nom`
             %   CLI and the Python client use. Set one up once with:
             %
             %       nom config profile add default -t <api-token>
             %
             %   A profile carries the base URL, the token, and optionally a
-            %   workspace RID, so nothing else needs passing and no key ends
-            %   up in a script. The MATLAB call is the counterpart of Python's
+            %   workspace RID. Python equivalent:
             %
             %       client = NominalClient.from_profile("default")
             %
-            %   ConfigPath= reads a file somewhere else, which is mainly
-            %   useful in CI where the home directory is not the user's.
+            %   ConfigPath= reads a config file from somewhere else.
             %
             %   See also NOMINAL.CLIENT/FROMTOKEN
             arguments
@@ -478,9 +447,8 @@ classdef Client < nominal.Resource
             %   c = nominal.Client.fromToken("<api-key>")
             %   c = nominal.Client.fromToken(tok, BaseUrl="https://api.nominal.test")
             %
-            %   The counterpart of Python's NominalClient.from_token. Prefer
-            %   fromProfile where you can: a token in a script is a token in
-            %   version control eventually.
+            %   Python equivalent: NominalClient.from_token. Prefer fromProfile
+            %   where you can; a token in a script ends up in version control.
             %
             %   See also NOMINAL.CLIENT/FROMPROFILE
             arguments

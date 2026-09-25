@@ -1,10 +1,9 @@
 # Hello world
 
-You have been handed a `NominalForMATLAB-<version>.mltbx` and you already have a
-Nominal profile on disk. This is everything from there to running code.
-
-Nothing here needs the source repo, a compiler, or Rust. If you want to *build*
-the toolbox rather than install one, see [BUILDING.md](BUILDING.md) instead.
+You have been handed a `NominalForMATLAB-<version>.mltbx` and you have a
+Nominal profile on disk. This gets you from there to running code. No source
+repo, compiler or Rust needed. To *build* the toolbox instead, see
+[BUILDING.md](BUILDING.md).
 
 ## 1. Install
 
@@ -12,10 +11,8 @@ the toolbox rather than install one, see [BUILDING.md](BUILDING.md) instead.
 matlab.addons.install("C:\path\to\NominalForMATLAB-0.1.0.mltbx")
 ```
 
-Double-clicking the file in Explorer or Finder does the same thing.
-
-An installed toolbox manages its own path, so there is no `addpath` to run and
-nothing to add to `startup.m`. It survives restarts.
+Double-clicking the file does the same thing. An installed toolbox manages its
+own path, so there is no `addpath` to run. It survives restarts.
 
 Check it took:
 
@@ -39,8 +36,8 @@ client use:
 | Linux, macOS | `~/.config/nominal/config.yml` |
 | Windows | `%USERPROFILE%\.config\nominal\config.yml` |
 
-`NOMINAL_TOKEN` exists only as a fallback for machines with no profile — CI,
-mostly. If it ever fires it warns, so you will know.
+`NOMINAL_TOKEN` is a fallback for machines with no profile, mostly CI. It warns
+when used.
 
 ## 3. Hello world
 
@@ -52,22 +49,18 @@ delete(client)
 
 If that prints your name, everything works. Skip to section 5.
 
-`connect` tries the profile first. To be explicit about which credential you
-are using, call `nominal.Client.fromProfile()` or `nominal.Client.fromToken()` —
-neither can silently pick the other.
+`connect` tries the profile first, then `NOMINAL_TOKEN`. To be explicit, call
+`nominal.Client.fromProfile()` or `nominal.Client.fromToken()`.
 
 ## 4. Run the bundled examples
 
-The demos ship inside the toolbox but are **not** on the path, so that filenames
-like `rundemo` do not become global function names in your session. Add them
-deliberately:
+The demos ship inside the toolbox but are **not** on the path. Add them:
 
 ```matlab
 addpath(fullfile(fileparts(fileparts(which('nominal.Client'))), 'examples'))
 ```
 
-That resolves the install folder wherever MATLAB put it, which on Windows is
-under `%APPDATA%\MathWorks\MATLAB Add-Ons\Toolboxes\`. Then:
+Then:
 
 ```matlab
 nominalexample_alldemos          % everything, against one throwaway asset
@@ -82,11 +75,10 @@ Or one at a time:
 | `nominalexample_rundemo` | runs: create, update, finish |
 | `nominalexample_eventdemo` | events on an asset |
 | `nominalexample_uploaddemo` | writing a matrix, and ingesting a CSV |
-| `nominalexample_streamdemo(rid)` | live streaming — needs a dataset RID |
-| `nominalexample_analysisdemo(rid)` | fetch, export, and SQL — needs a RID |
+| `nominalexample_streamdemo(rid)` | live streaming. Needs a dataset RID |
+| `nominalexample_analysisdemo(rid)` | fetch, export, and SQL. Needs a RID |
 
-Every demo leaves its results in the base workspace as a struct, so there are
-matrices to inspect when it finishes:
+Every demo leaves its results in the base workspace as a struct:
 
 ```matlab
 nominalexample_uploaddemo
@@ -95,9 +87,8 @@ nominalexample_analysisdemo(nominalUpload.WrittenDatasetRid)
 plot(nominalAnalysis.Samples.Time, nominalAnalysis.Samples.(1))
 ```
 
-The demos create their own throwaway assets named
-`nominal-matlab-demo-<timestamp>`, so they are safe to run repeatedly. Pass an
-asset name to point one at something that already exists:
+The demos create throwaway assets named `nominal-matlab-demo-<timestamp>`, so
+they are safe to run repeatedly. Pass an asset name to use an existing one:
 
 ```matlab
 nominalexample_assetdemo("engine-3")
@@ -105,11 +96,8 @@ nominalexample_assetdemo("engine-3")
 
 ## 5. Your own code
 
-The same loop, without the demo scaffolding: connect, find an asset, add a
-dataset, push a matrix, read it back.
-
-The same code as a live script, if you would rather run it a section at a time
-with the plots inline than paste it into the command window:
+Connect, find an asset, add a dataset, push a matrix, read it back. The same
+code as a live script, with plots inline:
 [helloworldlive.mlx](hello%20world/helloworldlive.mlx), in the repo.
 
 ```matlab
@@ -122,8 +110,8 @@ asset = client.getOrCreateAsset("engine-3");
 dataset = asset.getOrCreateDataset("Bench run 7");
 
 % --- declare units before any data exists -------------------------------
-% Optional, but it means the first plot comes out labelled. Units are UCUM
-% symbols: "Cel" not "C", "1/min" not "rpm".
+% Optional, but the first plot comes out labelled. Units are UCUM symbols:
+% "Cel" not "C", "1/min" not "rpm".
 dataset.setChannelMetadata("rpm", "double", Unit="1/min");
 
 % --- upload a matrix ----------------------------------------------------
@@ -135,24 +123,22 @@ v = [1500 + 10*sin(linspace(0, 6*pi, rows))', ...   % rpm
      700  + (1:rows)' * 0.1, ...                    % egt
      30   + (1:rows)' * 0.05];                      % psi
 
-% Eyeball it before it leaves the machine. One panel per channel, because
-% the three do not share a scale.
+% Look before it leaves the machine. One panel per channel, since they do
+% not share a scale.
 stackedplot(t, v, DisplayLabels=["rpm" "egt" "psi"])
 
 dataset.write(["rpm" "egt" "psi"], t, v);
 
 % --- read it back -------------------------------------------------------
-% fetch returns a timetable, so it plots, resamples and synchronizes with
-% no conversion.
+% fetch returns a timetable, so it plots, resamples and synchronizes directly.
 back = dataset.fetch("rpm", t(1) - seconds(1), t(end) + seconds(1));
 plot(back.Time, back.("rpm"))
 
 % --- SQL, if you want rows rather than a channel ------------------------
 % points_double holds every point this dataset has ever taken, so bound the
-% query to the window just written or you get whatever sorts first — old
-% rows from earlier runs. In the warehouse ts is a timestamp column, not the
-% int64 nanoseconds it comes back as, so the bounds go in as literals. The
-% millisecond of slack covers the format truncating rather than rounding.
+% query to the window just written. ts is a timestamp column in the
+% warehouse, so the bounds go in as literals. The millisecond of slack
+% covers the format truncating rather than rounding.
 lo = string(t(1)   - milliseconds(1), "yyyy-MM-dd HH:mm:ss.SSS");
 hi = string(t(end) + milliseconds(1), "yyyy-MM-dd HH:mm:ss.SSS");
 
@@ -162,13 +148,11 @@ rowsOut = client.query( ...
     "AND ts BETWEEN TIMESTAMP '" + lo + "' AND TIMESTAMP '" + hi + "' " + ...
     "ORDER BY ts LIMIT " + 3*rows);   % three channels, rows apiece
 
-% Timestamps arrive as int64 nanoseconds. Convert them and the table reads
-% as it stands.
+% Timestamps come back as int64 nanoseconds.
 rowsOut.ts = nominal.fromNanos(rowsOut.ts);
 disp(head(rowsOut))
 
-% To plot it, pivot first. These rows are long — one row per channel per
-% instant — so value against ts would interleave all three into a sawtooth.
+% The rows are long (one per channel per instant), so pivot before plotting.
 wide = unstack(rowsOut, "value", "channel");
 stackedplot(wide.ts, wide{:, 2:end}, ...
             DisplayLabels=wide.Properties.VariableNames(2:end))
@@ -179,12 +163,10 @@ delete(asset);
 delete(client);
 ```
 
-Every object is a handle with a native resource behind it. `delete` releases it
-immediately; otherwise MATLAB does so whenever it collects the variable.
-`nominal.shutdown()` releases everything and stops the worker threads — worth
-calling at the end of a long script, and not needed otherwise.
+Every object is a handle with a native resource behind it. `delete` releases
+it immediately; otherwise MATLAB does so when it collects the variable.
+`nominal.shutdown()` releases everything and stops the worker threads. Call it
+at the end of a long script if you like; it is not needed otherwise.
 
-For the full object and method reference, the other workflows (streaming,
-ingest, export, decimated fetch), and how authentication resolves, see
-[USAGE.md](USAGE.md).
-
+For the full object and method reference and the other workflows (streaming,
+ingest, export, decimated fetch), see [USAGE.md](USAGE.md).

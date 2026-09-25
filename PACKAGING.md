@@ -2,10 +2,9 @@
 
 How to get one `.mltbx` that installs on Windows, macOS and Linux.
 
-MEX binaries cannot be cross-compiled — the link needs the MATLAB installed on
-the target platform — so each gateway is built on its own machine. A `.mltbx`
-can then carry all of them at once: MATLAB picks the right one by `mexext` at
-call time. The result is a single file you hand to anyone.
+MEX binaries cannot be cross-compiled, so each gateway is built on its own
+machine. One `.mltbx` can then carry all of them; MATLAB picks the right one by
+`mexext` at call time.
 
 For installing the finished file, see [HELLOWORLD.md](HELLOWORLD.md). For what
 the build is doing, see [BUILDING.md](BUILDING.md).
@@ -15,11 +14,10 @@ the build is doing, see [BUILDING.md](BUILDING.md).
 On every machine:
 
 - The **same commit**. Different source in different binaries is the one
-  failure mode this process can't detect — the package will build happily and
-  behave differently per platform.
+  failure this process cannot detect.
 - **Rust** (`rustup`, stable) and **`just`**.
 - **MATLAB R2021a or newer**, with a C compiler configured (`mex -setup C`).
-- **`cbindgen`** — `cargo install cbindgen` — for the `header` step.
+- **`cbindgen`** (`cargo install cbindgen`) for the `header` step.
 
 If `matlab` isn't on `PATH`, pass it in. Recipes run through `sh`, so use
 forward slashes even on Windows:
@@ -31,9 +29,6 @@ just matlab='/Applications/MATLAB_R2024b.app/bin/matlab' mex-macos-arm64
 
 ## 1. Build the gateway on each machine
 
-One command per host. Each builds the Rust static library in release, then
-links it into a MEX file.
-
 | Machine | Command | Produces |
 |---|---|---|
 | Windows x86-64 | `just mex-win64` | `nominalmex.mexw64` |
@@ -42,14 +37,11 @@ links it into a MEX file.
 
 All three land in `matlab/+nominal/private/`.
 
-Don't run bare `just` off Windows — the default recipe is `mex-win64`, and it
-will try to build for a Windows target on whatever host you're on.
+Don't run bare `just` off Windows. The default recipe is `mex-win64`.
 
-Intel macOS is not supported. `build.m` refuses to run on one rather than
-building a triple that has never been linked; Apple silicon is the only Mac
-target.
+Intel macOS is not supported; `build.m` refuses to run on one.
 
-Sanity-check each build before moving on — no network needed:
+Sanity-check each build before moving on, no network needed:
 
 ```
 just mex-test
@@ -57,8 +49,8 @@ just mex-test
 
 ## 2. Collect the binaries onto one machine
 
-Pick whichever machine you'll package on. Copy the other hosts' gateways into
-its checkout, alongside the one already there:
+Pick the machine you'll package on. Copy the other hosts' gateways into its
+checkout:
 
 ```
 matlab/+nominal/private/
@@ -67,8 +59,8 @@ matlab/+nominal/private/
 └── nominalmex.mexa64        from the Linux box
 ```
 
-Copy only these files. They're gitignored, so `git pull` won't disturb them and
-you can't accidentally commit them.
+They're gitignored, so `git pull` won't disturb them and you can't commit them
+by accident.
 
 ## 3. Package, once
 
@@ -76,7 +68,7 @@ you can't accidentally commit them.
 just package-only
 ```
 
-Writes `dist/NominalForMATLAB-<version>.mltbx` and prints what it claimed:
+Writes `dist/NominalForMATLAB-<version>.mltbx` and prints what it included:
 
 ```
 Packaging Nominal for MATLAB 0.1.0
@@ -85,22 +77,19 @@ Wrote .../dist/NominalForMATLAB-0.1.0.mltbx (…)
 ```
 
 Expect it to be large. Each gateway is around 35 MB with the Rust library
-statically linked in, and a multi-platform box carries one per platform —
-Windows alone compresses to roughly 12 MB.
+linked in, and Windows alone compresses to roughly 12 MB.
 
-Check the platforms line. `tools/package.m` derives `SupportedPlatforms` from the
-binaries actually present, so a platform missing from it is a gateway you
-forgot to copy — and MATLAB will refuse to install on that platform rather
-than installing and failing on the first call.
+Check the platforms line. It is derived from the binaries actually present, so
+a missing platform is a gateway you forgot to copy. MATLAB refuses to install
+the toolbox on a platform it does not list.
 
-**Use `package-only`, not `package`.** `just package` depends on `mex-win64`,
-so it rebuilds the Windows gateway and works only on Windows. `package-only`
-packages what's in the tree and builds nothing, which is the whole point here.
-The tradeoff is that it will happily package a `-fast` gateway, so make sure
-step 1 used the release recipes above.
+**Use `package-only`, not `package`.** `just package` rebuilds the Windows
+gateway and works only on Windows. `package-only` packages what is in the tree
+and builds nothing. It will also happily package a `-fast` gateway, so make
+sure step 1 used the release recipes.
 
-The version comes from `[workspace.package]` in the root `Cargo.toml` — bump it
-there, not in `tools/package.m`.
+The version comes from `[workspace.package]` in the root `Cargo.toml`. Bump it
+there.
 
 ## 4. Verify
 
@@ -111,20 +100,17 @@ matlab.addons.install("NominalForMATLAB-0.1.0.mltbx")
 nominal.now()          % reaches native code; fails loudly if the MEX is wrong
 ```
 
-`nominal.now()` is the cheapest call that actually crosses into the library, so
-it distinguishes "toolbox installed" from "toolbox works" without credentials
-or a network.
+`nominal.now()` is the cheapest call that crosses into the library, so it
+tells "installed" from "works" without credentials or a network.
 
 ## Platform status
 
-Only the Windows path has been built and exercised end to end. The macOS and
-Linux recipes are written but unverified — specifically, `platformSettings()`
-in `matlab/build.m` names each platform's system libraries by hand, because a
-Rust staticlib doesn't record its own dependencies, and those lists are guesses
-off Windows.
+All three gateways have been built and linked on real hardware, and all three
+have run the full demo suite against the live API.
 
-If a MEX link fails with unresolved symbols, get the real list from the host
-that's failing and reconcile it against `platformSettings()`:
+If a MEX link fails with unresolved symbols, the hand-maintained library list
+in `platformSettings()` in `matlab/build.m` is out of date for that host. Get
+the real list and reconcile:
 
 ```
 just native-libs

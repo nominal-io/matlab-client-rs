@@ -1,15 +1,10 @@
 classdef (Abstract) Resource < handle
     % RESOURCE  Base for every Nominal object that owns a library handle.
     %
-    %   Subclasses hold an int32 handle into a registry owned by the Nominal
-    %   shared library. This class exists so that releasing one is automatic:
-    %   MATLAB calls delete() when the last reference goes out of scope, which
-    %   frees the handle. Nothing here needs a manual free, unlike the C and
-    %   LabVIEW paths where forgetting one is a leak.
-    %
-    %   Deriving from handle (rather than value semantics) is deliberate:
-    %   copying a Nominal object must alias the same underlying resource, not
-    %   duplicate a handle that would then be freed twice.
+    %   Subclasses hold an int32 handle into the Nominal library. MATLAB calls
+    %   delete() when the last reference goes out of scope, which frees the
+    %   handle, so nothing needs a manual free. Copies alias the same
+    %   underlying resource.
 
     properties (SetAccess = protected, GetAccess = public, Hidden)
         % The library handle. Hidden because it is an implementation detail —

@@ -1,26 +1,21 @@
 classdef Channel < nominal.Resource
     % CHANNEL  A write address for one named series on a stream.
     %
-    %   A channel in Nominal is a named series within a dataset — roughly a
-    %   column. This object is the address points are written to: a stream, a
-    %   name, and the tags to stamp on each point. Creating one performs no API
-    %   call; the channel appears in Nominal when the first point arrives.
+    %   A channel is a named series within a dataset, roughly a column. This
+    %   object is where points for it are written: a stream, a name, and the
+    %   tags to stamp on each point. Creating one makes no API call; the
+    %   channel appears in Nominal when the first point arrives.
     %
     %       ch = s.channel("rpm");
     %       ch.tag("bank", "1");
     %       ch.push(timestamps, values);
     %
-    %   Tags belong to points rather than to the channel, so changing them
-    %   partway through acquisition is legal: earlier points keep the tags they
-    %   were sent with, later ones carry the new set, and all of them land in
-    %   the same channel. That is how a multiplexed channel is written — one
-    %   address per tag set, all sharing a name.
+    %   Tags belong to points, not to the channel. Earlier points keep the tags
+    %   they were sent with, later ones carry the new set, and all land in the
+    %   same channel. Keep tag cardinality low: anything that changes every
+    %   point belongs in its own channel.
     %
-    %   Keep tag cardinality low. Anything that changes every point belongs in
-    %   its own channel; used as a tag it degrades queries.
-    %
-    %   For several channels sharing one clock, nominal.Stream.push is faster —
-    %   one call rather than one per channel.
+    %   For several channels sharing one clock, nominal.Stream.push is faster.
     %
     %   See also NOMINAL.STREAM
 
@@ -72,11 +67,10 @@ classdef Channel < nominal.Resource
         end
 
         function s = stream(obj)
-            %STREAM  Handle of the stream this address writes to.
+            %STREAM  Raw int32 handle of the stream this channel writes to.
             %
-            %   Returns the raw int32 rather than a nominal.Stream, because the
-            %   stream is owned elsewhere and wrapping it here would create a
-            %   second object that frees the same handle.
+            %   Not a nominal.Stream object, since the stream is owned by the
+            %   object you opened it from.
             obj.assertLive();
             s = nominalmex('channel_stream', obj.Handle);
         end

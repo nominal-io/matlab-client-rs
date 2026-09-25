@@ -8,8 +8,7 @@ function results = nominalexample_streamdemo(datasetRid)
 %   dataset you name, so point it at something disposable.
 %
 %   What was pushed is returned, and left in the base workspace as
-%   `nominalStream` — so the data that went up can be compared against what
-%   comes back down:
+%   `nominalStream`, so it can be compared against what comes back:
 %
 %       nominalexample_streamdemo(rid)
 %       plot(nominalStream.BlockTimestamps, nominalStream.EngineSamples)
@@ -26,9 +25,8 @@ function results = nominalexample_streamdemo(datasetRid)
 %       rid = c.datasets("telemetry").Rid(1);
 %       nominalexample_streamdemo(rid)
 %
-%   Writing is one pattern: preallocate an N-by-C matrix, fill it, push it.
-%   MATLAB stores matrices column-major, so each channel's samples are already
-%   contiguous and reach the library with no copy or transpose.
+%   Writing is one pattern: preallocate an N-by-C matrix, fill it, push it
+%   once.
 %
 %   See also NOMINAL.STREAM, NOMINALEXAMPLE_CONNECT
 
@@ -59,16 +57,11 @@ function results = nominalexample_streamdemo(datasetRid)
     fprintf('Stream opened\n');
 
     % 3 -------------------------------------------------- single channel
-    %
-    % Named sineChannel rather than "single" because that is a MATLAB builtin
-    % — the single-precision type — and shadowing it in a demo teaches a bad
-    % habit to anyone copying from here.
     sineChannel = stream.channel("demo.sine");
 
     % 4 ------------------------------------------- push 100 points to it
     %
-    % Timestamps are literal here — unlike run times, 0 does not mean "now",
-    % because a stream may carry times relative to an epoch you chose.
+    % Streaming timestamps are literal. Unlike run times, 0 does not mean now.
     acquisitionStart = nominal.now();
     sineTimestamps = acquisitionStart + int64(0:99)' * 1000000;  % 1 ms apart
     sineValues = sin(linspace(0, 4*pi, 100))';                   % two cycles
@@ -82,27 +75,20 @@ function results = nominalexample_streamdemo(datasetRid)
 
     % 5 ------------------------------------------------- three channels
     %
-    % An array of nominal.Channel, all on the one stream. Engine telemetry
-    % names, chosen because they are recognisable and carry three genuinely
-    % different units: shaft speed, exhaust gas temperature, and a pressure.
+    % An array of nominal.Channel, all on the one stream.
     engineChannels = [stream.channel("demo.rpm"), ...
                       stream.channel("demo.egt"), ...
                       stream.channel("demo.psi")];
     fprintf('Created %d more channels\n', numel(engineChannels));
 
-    % A tag is stamped on every point written through that address from here
-    % on. Tags belong to points, not to the channel.
+    % A tag applies to every point pushed through this channel from here on.
+    % Tags belong to points, not to the channel.
     engineChannels(1).tag("bank", "1");
 
     % 6 ------------------------------------------- a block of three series
     %
-    % Preallocate, fill, push once — the pattern this client is fastest at.
-    %
-    % The numbers are synthetic: 100 rows at 1 ms, so a tenth of a second of
-    % an engine spooling up. RPM ramps 1510 -> 2500, exhaust gas temperature
-    % 701 -> 800 Cel, and oil pressure 30.1 -> 40 psi. Steeper than anything
-    % real over 100 ms — nothing reads these values back, they exist so the
-    % charts in Nominal show a trend rather than a flat line.
+    % Preallocate, fill, push once. The numbers are synthetic: 100 rows at
+    % 1 ms, shaped to show a trend on a chart.
     blockRowCount = 100;
     blockTimestamps = acquisitionStart + int64(0:blockRowCount-1)' * 1000000;
 
@@ -117,21 +103,17 @@ function results = nominalexample_streamdemo(datasetRid)
     fprintf('Pushed %d x %d block via matrix push\n', ...
             blockRowCount, numel(engineChannels));
 
-    % Captured before teardown: the channel objects are released below, so
-    % their names have to be read while they are still live.
+    % Read the names before the channel handles are released below.
     results.EngineChannels = arrayfun(@(c) c.Name, engineChannels);
     results.BlockTimestamps = blockTimestamps;
     results.EngineSamples = engineSamples;
 
     % 7 ------------------------------------------------------- teardown
     %
-    % Order matters. Everything here is released automatically when it goes
-    % out of scope, but MATLAB does not promise when — and releasing the
-    % stream is what flushes buffered points. Doing it explicitly means the
-    % data has landed before this function returns.
-    %
-    % Innermost first: channels, then the stream that owns them, then the
-    % dataset and client.
+    % Order matters: channels, then the stream, then the dataset and client.
+    % Deleting the stream flushes buffered points and blocks until they have
+    % landed. Doing it explicitly means the data is there before this function
+    % returns.
     delete(engineChannels);
     delete(sineChannel);
     delete(stream);      % flushes; blocks until it completes

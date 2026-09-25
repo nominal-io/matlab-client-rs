@@ -1,19 +1,16 @@
 classdef ChannelMetadata < nominal.Resource
     % CHANNELMETADATA  A channel's units, description, and data type.
     %
-    %   This is the catalog side of a channel — deliberately distinct from
-    %   nominal.Channel, which is the write address points are streamed to.
-    %   Both describe the same series in Nominal, but they are keyed
-    %   differently: metadata by (dataset, name) with no tags, streaming by
-    %   stream and name with tags stamped on each point.
+    %   The catalog side of a channel. nominal.Channel is the streaming side,
+    %   where points are written.
     %
     %       m = ds.channelMetadata("rpm");
     %       m.Unit
     %
     %       ds.setChannelMetadata("rpm", "double", Unit="1/min");
     %
-    %   Metadata is scoped to a single dataset. Setting a unit on "rpm" in one
-    %   dataset does not set it on "rpm" in another, even with matching names.
+    %   Metadata is per dataset. Setting a unit on "rpm" in one dataset does
+    %   not set it on "rpm" in another.
     %
     %   See also NOMINAL.DATASET, NOMINAL.CHANNEL
 
