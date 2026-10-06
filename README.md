@@ -107,7 +107,11 @@ linked. Intel macOS is not supported. See [BUILDING.md](BUILDING.md).
   is the only kind this client creates. A run's data sources are its asset's,
   live, so there is nothing to attach. Every argument returns an error.
 - **Video and connection data sources** show up in `a.datasources()` with the
-  right `Type`, but nothing here can act on one.
+  right `Type`, but nothing here can act on one beyond renaming or detaching.
+- **`a.datasources()` does not show tag filters.** The tags given to
+  `addDataset` are stored but not read back.
+- **Not available here:** time offsets on attached datasets, asset types,
+  numeric properties, and compositions.
 - **Listings cannot be limited or paged.** `c.assets()` and `c.datasets()`
   with no filter return everything, which on a large workspace is tens of
   thousands of rows and several seconds. Pass a name filter instead.

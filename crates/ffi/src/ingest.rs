@@ -29,7 +29,7 @@ use crate::client::{client_or_fail, ClientHandle};
 use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
-use crate::strings::{c_str_to_string, set_string, StringHandle};
+use crate::strings::{c_str_to_string, pairs_from_c, set_string, StringHandle};
 
 use nominal::core::{
     CsvIngest, DatasetCreate, DatasetTarget, IngestJob, IngestJobStatus, ParquetIngest, TimeUnit,
@@ -182,6 +182,9 @@ fn deliver(
 /// `new_dataset_name` set to create one. `out_dataset_rid` receives the RID the
 /// data is landing in, which is how you find a freshly-created dataset.
 ///
+/// `tag_keys` and `tag_values` are parallel arrays of `tag_count` strings,
+/// stamped on every point in the file. Pass `tag_count = 0` for none.
+///
 /// Blocks while the file uploads, which for a large file is a long time. The
 /// ingest itself continues afterwards — see [`nominal_ingest_wait`].
 #[no_mangle]
@@ -194,6 +197,9 @@ pub extern "C" fn nominal_ingest_csv(
     timestamp_column: *const c_char,
     timestamp_kind: i32,
     timestamp_unit: i32,
+    tag_keys: *const *const c_char,
+    tag_values: *const *const c_char,
+    tag_count: u32,
     out_job: *mut IngestJobHandle,
     out_dataset_rid: StringHandle,
     error_out: *mut ErrorHandle,
@@ -203,16 +209,18 @@ pub extern "C" fn nominal_ingest_csv(
         let client = client_or_fail(client_handle, error_out)?;
         let path = unsafe { c_str_to_string(path, "path", error_out)? };
         let column = unsafe { c_str_to_string(timestamp_column, "timestamp_column", error_out)? };
+        let tags = unsafe { pairs_from_c(tag_keys, tag_values, tag_count, "tag", error_out)? };
 
         let target = target_from(dataset_handle, new_dataset_name, error_out)?;
         let timestamp = timestamp_from(&column, timestamp_kind, timestamp_unit, error_out)?;
 
+        let options = tags
+            .into_iter()
+            .fold(CsvIngest::new(timestamp), |o, (k, v)| {
+                o.additional_file_tag(k, v)
+            });
         let (job, rid) = RUNTIME
-            .block_on(
-                client
-                    .ingest()
-                    .upload_csv(&path, target, CsvIngest::new(timestamp)),
-            )
+            .block_on(client.ingest().upload_csv(&path, target, options))
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
 
         deliver(job, rid, out_job, out_dataset_rid, error_out)
@@ -221,7 +229,7 @@ pub extern "C" fn nominal_ingest_csv(
 
 /// Upload a Parquet file and start ingesting it.
 ///
-/// Arguments match [`nominal_ingest_csv`].
+/// Arguments match [`nominal_ingest_csv`], tags included.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn nominal_ingest_parquet(
@@ -232,6 +240,9 @@ pub extern "C" fn nominal_ingest_parquet(
     timestamp_column: *const c_char,
     timestamp_kind: i32,
     timestamp_unit: i32,
+    tag_keys: *const *const c_char,
+    tag_values: *const *const c_char,
+    tag_count: u32,
     out_job: *mut IngestJobHandle,
     out_dataset_rid: StringHandle,
     error_out: *mut ErrorHandle,
@@ -241,16 +252,18 @@ pub extern "C" fn nominal_ingest_parquet(
         let client = client_or_fail(client_handle, error_out)?;
         let path = unsafe { c_str_to_string(path, "path", error_out)? };
         let column = unsafe { c_str_to_string(timestamp_column, "timestamp_column", error_out)? };
+        let tags = unsafe { pairs_from_c(tag_keys, tag_values, tag_count, "tag", error_out)? };
 
         let target = target_from(dataset_handle, new_dataset_name, error_out)?;
         let timestamp = timestamp_from(&column, timestamp_kind, timestamp_unit, error_out)?;
 
+        let options = tags
+            .into_iter()
+            .fold(ParquetIngest::new(timestamp), |o, (k, v)| {
+                o.additional_file_tag(k, v)
+            });
         let (job, rid) = RUNTIME
-            .block_on(
-                client
-                    .ingest()
-                    .upload_parquet(&path, target, ParquetIngest::new(timestamp)),
-            )
+            .block_on(client.ingest().upload_parquet(&path, target, options))
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
 
         deliver(job, rid, out_job, out_dataset_rid, error_out)

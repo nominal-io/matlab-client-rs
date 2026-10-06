@@ -27,7 +27,7 @@ use crate::client::{client_or_fail, ClientHandle};
 use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
-use crate::strings::c_str_to_string;
+use crate::strings::{c_str_to_string, pairs_from_c};
 
 use nominal_streaming::api::clients::scout::compute::api::{
     AsyncComputeService, AsyncComputeServiceClient,
@@ -35,8 +35,9 @@ use nominal_streaming::api::clients::scout::compute::api::{
 use nominal_streaming::api::objects::api::Timestamp;
 use nominal_streaming::api::objects::scout::compute::api::{
     ComputableNode, ComputeNodeRequest, ComputeNodeResponse, Context, Dataset, DecimateStrategy,
-    DecimateWithBuckets, NumericSeries, PageInfo, PageStrategy, PageToken, SavedDataset,
-    SelectSeries, Series, StringConstant, SummarizationStrategy, SummarizeSeries,
+    DecimateWithBuckets, Grouping, NumericSeries, NumericTagFilterSeries, PageInfo, PageStrategy,
+    PageToken, SavedDataset, SelectSeries, Series, StringConstant, StringSetConstantV2,
+    SummarizationStrategy, SummarizeSeries, TagAnd, TagIn, TagPredicate,
 };
 use nominal_streaming::client::conjure::http::client::{AsyncService, ConjureRuntime};
 use nominal_streaming::client::conjure::object::SafeLong;
@@ -45,7 +46,7 @@ use nominal_streaming::prelude::BearerToken;
 
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -143,16 +144,47 @@ fn nanos_from_timestamp(timestamp: &Timestamp) -> i64 {
     *timestamp.seconds() * 1_000_000_000 + *timestamp.nanos()
 }
 
-/// The channel selection shared by both fetch modes.
-fn select(dataset_rid: &str, channel: &str) -> Series {
-    Series::Numeric(Box::new(NumericSeries::SelectNumeric(
+/// The channel selection shared by both fetch modes, narrowed to the series
+/// carrying every one of `tags` when any are given.
+fn select(dataset_rid: &str, channel: &str, tags: &[(String, String)]) -> Series {
+    let selected = NumericSeries::SelectNumeric(
         SelectSeries::builder()
             .name(StringConstant::Literal(channel.to_owned()))
             .dataset(Dataset::Saved(SavedDataset::new(StringConstant::Literal(
                 dataset_rid.to_owned(),
             ))))
             .build(),
-    )))
+    );
+
+    let predicate = tags
+        .iter()
+        .map(|(key, value)| {
+            TagPredicate::In(TagIn::new(
+                StringConstant::Literal(key.clone()),
+                StringSetConstantV2::Literal(BTreeSet::from([StringConstant::Literal(
+                    value.clone(),
+                )])),
+            ))
+        })
+        .reduce(|left, right| TagPredicate::And(TagAnd::new(left, right)));
+
+    Series::Numeric(Box::new(match predicate {
+        Some(predicate) => {
+            NumericSeries::FilterByTag(NumericTagFilterSeries::new(selected, predicate))
+        }
+        None => selected,
+    }))
+}
+
+/// `{UUT=A, stand=3}`, for naming a tag set in an error.
+fn describe_grouping(grouping: &Grouping) -> String {
+    match grouping {
+        Grouping::TagsWithValues(tags) => {
+            let pairs: Vec<String> = tags.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            format!("{{{}}}", pairs.join(", "))
+        }
+        _ => "{?}".to_owned(),
+    }
 }
 
 fn request(
@@ -206,6 +238,33 @@ fn take_numeric(
                 .collect();
             Ok((timestamps, values, None))
         }
+        // A channel whose points carry tags comes back split by tag set, even
+        // when there is only one. One set is the whole channel. Several are
+        // separate series that share a name, and interleaving them would mix
+        // unrelated data, so the caller has to pick one by tag.
+        ComputeNodeResponse::Grouped(grouped) => {
+            let groups: Vec<_> = grouped.responses().iter().collect();
+            match groups.as_slice() {
+                [] => Ok((Vec::new(), Vec::new(), None)),
+                [only] => take_numeric(only.response().clone(), error_out),
+                several => {
+                    let sets: Vec<String> = several
+                        .iter()
+                        .map(|g| describe_grouping(g.grouping()))
+                        .collect();
+                    Err(fail(
+                        error_out,
+                        ErrorCode::InvalidParameter,
+                        format!(
+                            "this channel has {} tag sets in the window: {}. \
+                             Select one by tag.",
+                            several.len(),
+                            sets.join(", ")
+                        ),
+                    ))
+                }
+            }
+        }
         other => Err(fail(
             error_out,
             ErrorCode::NominalError,
@@ -242,7 +301,13 @@ fn deliver(
 ///
 /// Timestamps are nanoseconds since the epoch, and the window is inclusive at
 /// both ends.
+///
+/// `tag_keys` and `tag_values` are parallel arrays of `tag_count` strings that
+/// pick which of the channel's series to read. A channel written with more
+/// than one tag set fails without them, naming the sets; pass `tag_count = 0`
+/// otherwise.
 #[no_mangle]
+#[allow(clippy::too_many_arguments)]
 pub extern "C" fn nominal_compute_fetch_decimated(
     client_handle: ClientHandle,
     dataset_handle: i32,
@@ -250,6 +315,9 @@ pub extern "C" fn nominal_compute_fetch_decimated(
     start_nanos: i64,
     end_nanos: i64,
     buckets: u32,
+    tag_keys: *const *const c_char,
+    tag_values: *const *const c_char,
+    tag_count: u32,
     out_series: *mut SeriesHandle,
     error_out: *mut ErrorHandle,
 ) -> i32 {
@@ -258,6 +326,7 @@ pub extern "C" fn nominal_compute_fetch_decimated(
         let client = client_or_fail(client_handle, error_out)?;
         let dataset = dataset_or_fail(dataset_handle, error_out)?;
         let channel = unsafe { c_str_to_string(channel, "channel", error_out)? };
+        let tags = unsafe { pairs_from_c(tag_keys, tag_values, tag_count, "tag", error_out)? };
 
         if buckets == 0 {
             return Err(fail(
@@ -268,7 +337,7 @@ pub extern "C" fn nominal_compute_fetch_decimated(
         }
 
         let node = SummarizeSeries::builder()
-            .input(select(dataset.rid(), &channel))
+            .input(select(dataset.rid(), &channel, &tags))
             .summarization_strategy(SummarizationStrategy::Decimate(Box::new(
                 DecimateStrategy::Buckets(DecimateWithBuckets::new(buckets as i32)),
             )))
@@ -302,13 +371,19 @@ pub extern "C" fn nominal_compute_fetch_decimated(
 ///
 /// Gives up after 5,000 pages, about 25 million points, on the grounds that
 /// anything larger does not belong in memory.
+///
+/// Tags as for [`nominal_compute_fetch_decimated`].
 #[no_mangle]
+#[allow(clippy::too_many_arguments)]
 pub extern "C" fn nominal_compute_fetch(
     client_handle: ClientHandle,
     dataset_handle: i32,
     channel: *const c_char,
     start_nanos: i64,
     end_nanos: i64,
+    tag_keys: *const *const c_char,
+    tag_values: *const *const c_char,
+    tag_count: u32,
     out_series: *mut SeriesHandle,
     error_out: *mut ErrorHandle,
 ) -> i32 {
@@ -317,6 +392,7 @@ pub extern "C" fn nominal_compute_fetch(
         let client = client_or_fail(client_handle, error_out)?;
         let dataset = dataset_or_fail(dataset_handle, error_out)?;
         let channel = unsafe { c_str_to_string(channel, "channel", error_out)? };
+        let tags = unsafe { pairs_from_c(tag_keys, tag_values, tag_count, "tag", error_out)? };
 
         let token = BearerToken::new(client.token()).map_err(|e| {
             fail(
@@ -338,7 +414,7 @@ pub extern "C" fn nominal_compute_fetch(
             }
 
             let node = SummarizeSeries::builder()
-                .input(select(dataset.rid(), &channel))
+                .input(select(dataset.rid(), &channel, &tags))
                 .summarization_strategy(SummarizationStrategy::Page(Box::new(
                     PageStrategy::PageInfo(info.build()),
                 )))

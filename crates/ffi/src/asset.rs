@@ -2,9 +2,17 @@ use crate::client::{client_or_fail, ClientHandle};
 use crate::dataset::{dataset_or_fail, DatasetHandle};
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
-use crate::strings::{c_str_to_string, set_string, StringHandle};
+use crate::scout;
+use crate::strings::{c_str_to_string, pairs_from_c, set_string, StringHandle};
 use crate::update::{snapshot, UpdateHandle};
 use nominal::core::{Asset, AssetCreate, AssetQuery, AssetUpdate};
+use nominal_streaming::api::clients::scout::assets::AsyncAssetService;
+use nominal_streaming::api::objects::scout::api::DataSourceRefName;
+use nominal_streaming::api::objects::scout::asset::api::{
+    CreateAssetDataScope, UpdateAssetRefNamesRequest, UpdateAssetRequest,
+};
+use nominal_streaming::api::objects::scout::rids::api::AssetRid;
+use std::collections::BTreeSet;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -79,6 +87,30 @@ pub extern "C" fn nominal_asset_get_or_create_by_name(
                 .block_on(client.assets().create(AssetCreate::new(name)))
                 .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?,
         };
+
+        deliver(asset, out_asset, error_out)
+    })
+}
+
+/// Create an asset, whether or not one of that name exists.
+///
+/// Names are not unique in Nominal, so this always makes a new one. Use
+/// `nominal_asset_get_or_create_by_name` to reuse an existing asset.
+#[no_mangle]
+pub extern "C" fn nominal_asset_create(
+    client_handle: ClientHandle,
+    name: *const c_char,
+    out_asset: *mut AssetHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_asset, error_out, "out_asset")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let name = unsafe { c_str_to_string(name, "name", error_out)? };
+
+        let asset = RUNTIME
+            .block_on(client.assets().create(AssetCreate::new(name)))
+            .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
 
         deliver(asset, out_asset, error_out)
     })
@@ -159,6 +191,13 @@ pub extern "C" fn nominal_asset_update_commit(
 /// spaces, dots, hyphens and mixed case are all accepted. A collision comes
 /// back as `Assets:DuplicateDataScopeNames`.
 ///
+/// `tag_keys` and `tag_values` are parallel arrays of `tag_count` strings. When
+/// given, only the dataset's series carrying every one of those tags are part
+/// of this asset's view of it — which is how one shared dataset, written with
+/// a tag per unit under test, becomes a separate view on each unit's asset.
+/// Pass `tag_count = 0` (either pointer may then be null) for the whole
+/// dataset.
+///
 /// Returns nothing. The caller's asset handle is a snapshot and does not see
 /// the new data source; re-fetch to observe it.
 #[no_mangle]
@@ -167,6 +206,9 @@ pub extern "C" fn nominal_asset_add_dataset(
     asset_handle: AssetHandle,
     ref_name: *const c_char,
     dataset_handle: DatasetHandle,
+    tag_keys: *const *const c_char,
+    tag_values: *const *const c_char,
+    tag_count: u32,
     error_out: *mut ErrorHandle,
 ) -> i32 {
     ffi_guard(error_out, || {
@@ -175,14 +217,152 @@ pub extern "C" fn nominal_asset_add_dataset(
         let dataset = dataset_or_fail(dataset_handle, error_out)?;
         let ref_name = unsafe { c_str_to_string(ref_name, "ref_name", error_out)? };
 
+        let tags = unsafe { pairs_from_c(tag_keys, tag_values, tag_count, "tag", error_out)? };
+
+        if tags.is_empty() {
+            RUNTIME
+                .block_on(
+                    client
+                        .assets()
+                        .add_dataset(asset.rid(), &ref_name, dataset.rid()),
+                )
+                .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+            return Ok(());
+        }
+
         RUNTIME
-            .block_on(
-                client
-                    .assets()
-                    .add_dataset(asset.rid(), &ref_name, dataset.rid()),
-            )
+            .block_on(client.assets().add_dataset_with_tags(
+                asset.rid(),
+                &ref_name,
+                dataset.rid(),
+                tags,
+            ))
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
 
+        Ok(())
+    })
+}
+
+/// Detach whatever is attached to this asset under `ref_name`.
+///
+/// The API has no remove call, so this re-reads the asset's data scopes and
+/// writes back every one except that. The others keep their tag filters and
+/// offsets. The dataset itself is untouched; only the attachment goes.
+///
+/// Fails if nothing on the asset has that reference name.
+#[no_mangle]
+pub extern "C" fn nominal_asset_remove_data_source(
+    client_handle: ClientHandle,
+    asset_handle: AssetHandle,
+    ref_name: *const c_char,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let client = client_or_fail(client_handle, error_out)?;
+        let asset = asset_or_fail(asset_handle, error_out)?;
+        let ref_name = unsafe { c_str_to_string(ref_name, "ref_name", error_out)? };
+
+        let service = scout::asset_service(&client, error_out)?;
+        let token = scout::bearer(&client, error_out)?;
+        let rid = AssetRid(scout::parse_rid(asset.rid(), "asset RID", error_out)?);
+
+        // Fresh from the server: the handle is a snapshot, and writing back a
+        // stale list would undo attachments made since.
+        let fresh = RUNTIME
+            .block_on(service.get_assets(&token, &BTreeSet::from([rid.clone()])))
+            .map_err(|e| scout::api_error(error_out, e))?
+            .remove(&rid)
+            .ok_or_else(|| fail(error_out, ErrorCode::NominalError, "asset not found"))?;
+
+        let scopes = fresh.data_scopes();
+        if !scopes.iter().any(|s| s.data_scope_name().0 == ref_name) {
+            return Err(fail(
+                error_out,
+                ErrorCode::InvalidParameter,
+                format!("asset has no data source called {ref_name:?}"),
+            ));
+        }
+
+        let kept: BTreeSet<CreateAssetDataScope> = scopes
+            .iter()
+            .filter(|s| s.data_scope_name().0 != ref_name)
+            .map(|s| {
+                CreateAssetDataScope::builder()
+                    .data_scope_name(s.data_scope_name().clone())
+                    .data_source(s.data_source().clone())
+                    .offset(s.offset().cloned())
+                    .series_tags(s.series_tags().clone())
+                    .build()
+            })
+            .collect();
+
+        let request = UpdateAssetRequest::builder()
+            .data_scopes(Some(kept))
+            .build();
+        RUNTIME
+            .block_on(service.update_asset(&token, &rid, &request))
+            .map_err(|e| scout::api_error(error_out, e))?;
+        Ok(())
+    })
+}
+
+/// Rename the reference name a data source is attached under.
+///
+/// The server applies the rename to every workbook using this asset too. The
+/// attachment otherwise stays as it was, tag filter included.
+///
+/// Fails if `old_name` is not attached, or if `new_name` already is: the
+/// server answers a clash with an internal error rather than a useful one, so
+/// it is checked here first.
+#[no_mangle]
+pub extern "C" fn nominal_asset_rename_ref_name(
+    client_handle: ClientHandle,
+    asset_handle: AssetHandle,
+    old_name: *const c_char,
+    new_name: *const c_char,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let client = client_or_fail(client_handle, error_out)?;
+        let asset = asset_or_fail(asset_handle, error_out)?;
+        let old_name = unsafe { c_str_to_string(old_name, "old_name", error_out)? };
+        let new_name = unsafe { c_str_to_string(new_name, "new_name", error_out)? };
+
+        let fresh = RUNTIME
+            .block_on(client.assets().get(asset.rid()))
+            .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+        let in_use = fresh.data_sources();
+        if !in_use.contains_key(&old_name) {
+            return Err(fail(
+                error_out,
+                ErrorCode::InvalidParameter,
+                format!("asset has no data source called {old_name:?}"),
+            ));
+        }
+        if old_name == new_name {
+            return Ok(());
+        }
+        if in_use.contains_key(&new_name) {
+            return Err(fail(
+                error_out,
+                ErrorCode::InvalidParameter,
+                format!("asset already has a data source called {new_name:?}"),
+            ));
+        }
+
+        let service = scout::asset_service(&client, error_out)?;
+        let token = scout::bearer(&client, error_out)?;
+        let rid = AssetRid(scout::parse_rid(asset.rid(), "asset RID", error_out)?);
+        let request = UpdateAssetRefNamesRequest::builder()
+            .insert_data_scope_ref_name_updates(
+                DataSourceRefName(old_name),
+                DataSourceRefName(new_name),
+            )
+            .build();
+
+        RUNTIME
+            .block_on(service.update_asset_ref_names(&token, &rid, &request))
+            .map_err(|e| scout::api_error(error_out, e))?;
         Ok(())
     })
 }
@@ -296,7 +476,7 @@ handle_registry!(
 );
 
 /// Store a fetched list and report its size.
-fn deliver_list(
+pub(crate) fn deliver_list(
     mut assets: Vec<Asset>,
     out_list: *mut AssetListHandle,
     out_count: *mut u32,

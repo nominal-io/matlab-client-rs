@@ -7,9 +7,9 @@ function results = nominalexample_rundemo(assetName)
 %   Needs credentials. Creates an asset, a dataset, and a run over them, then
 %   closes it.
 %
-%   Covers: create with an explicit start, get by RID, update, all accessors,
-%   and finish. Not addDataset: a run's data sources are its asset's, so there
-%   is nothing to attach.
+%   Covers: create with an explicit start, get by RID, adding and removing
+%   an asset, update, all accessors, and finish. Not addDataset: a run's data
+%   sources are its asset's, so there is nothing to attach.
 %
 %   See also NOMINAL.RUN, NOMINALEXAMPLE_ASSETDEMO,
 %   NOMINALEXAMPLE_EVENTDEMO, NOMINALEXAMPLE_CONNECT
@@ -31,8 +31,9 @@ function results = nominalexample_rundemo(assetName)
     % or omit the argument, to start now. (Unlike streaming timestamps, 0 here
     % means now, not the epoch.)
     %
-    % Each mutation below returns a new object: openRun -> updatedRun ->
-    % finishedRun. Earlier handles keep reporting their older state.
+    % Each mutation below returns a new object: openRun -> sharedRun ->
+    % soloRun -> updatedRun -> finishedRun. Earlier handles keep reporting
+    % their older state.
     runStartTime = datetime("now", TimeZone="UTC") - minutes(1);
     openRun = asset.run("matlab-demo-run", runStartTime);
 
@@ -63,11 +64,22 @@ function results = nominalexample_rundemo(assetName)
     % asset.run().
     fprintf('  data sources come from the asset; nothing to attach\n');
 
+    % --- more than one asset ------------------------------------------
+    %
+    % A run can span several assets, say a test chamber and the unit in it.
+    % createAsset always makes a new asset; getOrCreateAsset would reuse one
+    % of the same name.
+    chamber = client.createAsset(asset.Name + " chamber");
+    sharedRun = openRun.addAsset(chamber);
+    fprintf('  on %d assets after addAsset\n', numel(sharedRun.AssetRids));
+    soloRun = sharedRun.removeAsset(chamber);
+    fprintf('  on %d asset after removeAsset\n', numel(soloRun.AssetRids));
+
     % --- update -------------------------------------------------------
     %
     % update accepts start and end times as well as these metadata fields.
     % Collections replace, they do not merge.
-    updatedRun = openRun.update( ...
+    updatedRun = soloRun.update( ...
         Description = "Created by the Nominal MATLAB demo", ...
         Labels      = ["matlab-demo" "smoke"], ...
         Properties  = struct(operator = "matlab", phase = "demo"));
@@ -102,6 +114,9 @@ function results = nominalexample_rundemo(assetName)
     % Each handle in the chain needs its own delete.
     delete(finishedRun);
     delete(updatedRun);
+    delete(soloRun);
+    delete(sharedRun);
+    delete(chamber);
     delete(sameRunByRid);
     delete(openRun);
     delete(dataset);

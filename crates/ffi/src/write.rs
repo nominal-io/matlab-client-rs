@@ -31,13 +31,13 @@ use crate::client::{client_or_fail, ClientHandle};
 use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
-use crate::strings::c_str_to_string;
+use crate::strings::{c_str_to_string, pairs_from_c};
 
 use nominal_streaming::api::clients::storage::writer::api::{
     AsyncNominalChannelWriterService, AsyncNominalChannelWriterServiceClient,
 };
 use nominal_streaming::api::objects::api::rids::NominalDataSourceOrDatasetRid;
-use nominal_streaming::api::objects::api::{Channel, Timestamp};
+use nominal_streaming::api::objects::api::{Channel, TagName, TagValue, Timestamp};
 use nominal_streaming::api::objects::storage::writer::api::{
     DoublePoint, PointsExternal, RecordsBatchExternal, WriteBatchesRequestExternal,
 };
@@ -48,7 +48,7 @@ use nominal_streaming::prelude::BearerToken;
 
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -137,6 +137,9 @@ fn timestamp_from_nanos(nanos: i64, error_out: *mut ErrorHandle) -> Result<Times
 /// Timestamps are literal, including zero — a stream may carry times relative
 /// to an epoch the caller chose.
 ///
+/// `tag_keys` and `tag_values` are parallel arrays of `tag_count` strings,
+/// stamped on every point written. Pass `tag_count = 0` for none.
+///
 /// Returns once the write has been accepted. Blocks for the duration.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
@@ -148,11 +151,19 @@ pub extern "C" fn nominal_write_doubles(
     timestamps_nanos: *const i64,
     values: *const f64,
     row_count: u32,
+    tag_keys: *const *const c_char,
+    tag_values: *const *const c_char,
+    tag_count: u32,
     error_out: *mut ErrorHandle,
 ) -> i32 {
     ffi_guard(error_out, || {
         let client = client_or_fail(client_handle, error_out)?;
         let dataset = dataset_or_fail(dataset_handle, error_out)?;
+        let tags: BTreeMap<TagName, TagValue> =
+            unsafe { pairs_from_c(tag_keys, tag_values, tag_count, "tag", error_out)? }
+                .into_iter()
+                .map(|(k, v)| (TagName(k), TagValue(v)))
+                .collect();
 
         if row_count == 0 || channel_count == 0 {
             // Nothing to send is not an error: an acquisition loop with an
@@ -191,10 +202,13 @@ pub extern "C" fn nominal_write_doubles(
                 .map(|(&timestamp, &value)| DoublePoint::new(timestamp, value))
                 .collect();
 
-            batches.push(RecordsBatchExternal::new(
-                Channel(name),
-                PointsExternal::Double(points),
-            ));
+            batches.push(
+                RecordsBatchExternal::builder()
+                    .channel(Channel(name))
+                    .points(PointsExternal::Double(points))
+                    .tags(tags.clone())
+                    .build(),
+            );
         }
 
         let rid = ResourceIdentifier::new(dataset.rid()).map_err(|e| {

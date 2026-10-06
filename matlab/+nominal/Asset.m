@@ -105,14 +105,27 @@ classdef Asset < nominal.Resource
                                ["RefName" "Rid" "Type"]);
         end
 
-        function addDataset(obj, dataset, refName)
+        function addDataset(obj, dataset, refName, options)
             %ADDDATASET  Attach a dataset you already have to this asset.
             %
             %   a.addDataset(ds);
             %   a.addDataset(ds, "can");
+            %   a.addDataset(ds, Tags=struct(UUT="A"));
             %
             %   Takes any dataset handle: one fetched by RID, from a search, or
             %   from an ingest.
+            %
+            %   Tags limits this asset to the dataset's series carrying every
+            %   one of those tags. Write one shared dataset with a tag per unit
+            %   under test, then give each unit's asset its own slice:
+            %
+            %       assetA.addDataset(ds, Tags=struct(UUT="A"));
+            %       assetB.addDataset(ds, Tags=struct(UUT="B"));
+            %
+            %   Tag values are strings; numbers are converted. For a key that
+            %   is not a valid field name, pass a dictionary (R2022b+):
+            %
+            %       a.addDataset(ds, Tags=dictionary("test-stand", "3"));
             %
             %   refName is the dataset's name within this asset and must be
             %   unique among its data sources. Spaces, dots and mixed case are
@@ -124,8 +137,13 @@ classdef Asset < nominal.Resource
             %   with none, otherwise the dataset's own name, otherwise that
             %   with a number.
             %
-            %   Attaching a dataset already on this asset *moves* it to the new
-            %   reference name. A dataset appears at most once per asset.
+            %   An asset holds a dataset once per tag filter. Attaching it again
+            %   with the same Tags *moves* it to the new reference name; with
+            %   different Tags it is added alongside, so one dataset can appear
+            %   twice, split by tag:
+            %
+            %       a.addDataset(ds, "drone",  Tags=struct(source="drone"));
+            %       a.addDataset(ds, "remote", Tags=struct(source="remote"));
             %
             %   This asset handle is a snapshot and will not show the new data
             %   source. Use a.datasources(Refresh=true) to see it.
@@ -135,8 +153,12 @@ classdef Asset < nominal.Resource
                 obj (1,1) nominal.Asset
                 dataset (1,1) nominal.Dataset
                 refName (1,1) string = ""
+                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
             end
             obj.assertLive();
+
+            % Before freeRefName, so bad tags fail without a request.
+            [tagKeys, tagValues] = keyValuePairs(options.Tags, "tag");
 
             explicit = refName ~= "";
             if ~explicit
@@ -145,7 +167,7 @@ classdef Asset < nominal.Resource
 
             try
                 nominalmex('asset_add_dataset', obj.Client.Handle, obj.Handle, ...
-                           char(refName), dataset.Handle);
+                           char(refName), dataset.Handle, tagKeys, tagValues);
             catch attachError
                 % Only a name the caller chose can collide — one we picked was
                 % free a moment ago, and a collision there means someone else
@@ -155,6 +177,50 @@ classdef Asset < nominal.Resource
                                            "a.addDataset(ds, ""can"")");
                 end
                 rethrow(attachError);
+            end
+        end
+
+        function removeDataset(obj, refName)
+            %REMOVEDATASET  Detach the data source with this reference name.
+            %
+            %   a.removeDataset("can");
+            %
+            %   The dataset itself is untouched, and stays on any other asset
+            %   holding it. Everything else on this asset keeps its tag filter.
+            %   Errors if nothing here has that reference name.
+            %
+            %   See also NOMINAL.ASSET/ADDDATASET, NOMINAL.ASSET/DATASOURCES
+            arguments
+                obj (1,1) nominal.Asset
+                refName (1,1) string
+            end
+            obj.assertLive();
+            nominalmex('asset_remove_data_source', obj.Client.Handle, obj.Handle, ...
+                       char(refName));
+        end
+
+        function renameRefName(obj, oldName, newName)
+            %RENAMEREFNAME  Change the reference name a data source is under.
+            %
+            %   a.renameRefName("default", "flight-telemetry");
+            %
+            %   Workbooks using this asset are updated to match. The tag
+            %   filter, if any, is kept. Errors if oldName is not attached or
+            %   newName already is.
+            %
+            %   See also NOMINAL.ASSET/DATASOURCES
+            arguments
+                obj (1,1) nominal.Asset
+                oldName (1,1) string
+                newName (1,1) string
+            end
+            obj.assertLive();
+            try
+                nominalmex('asset_rename_ref_name', obj.Client.Handle, obj.Handle, ...
+                           char(oldName), char(newName));
+            catch renameError
+                obj.rethrowAttachError(renameError, newName, ...
+                    sprintf('a.renameRefName("%s", "other")', oldName));
             end
         end
 
@@ -344,15 +410,18 @@ classdef Asset < nominal.Resource
         function rethrowAttachError(obj, cause, refName, suggestion)
             %RETHROWATTACHERROR  Translate a refName collision, rethrow the rest.
             %
-            %   Both routes that attach a data source hit the same rejection,
-            %   so both translate it here. The raw error is a wall of Conjure
+            %   Attaching and renaming can both collide, so both translate the
+            %   rejection here. The server's own error is a wall of Conjure
             %   naming "data scope" — an internal concept that appears nowhere
             %   in this API — which tells the caller nothing about what to do.
+            %   A rename is checked before it is sent, since the server answers
+            %   that collision with an internal error.
             %
-            %   suggestion is the call to show, since the two entry points take
-            %   the reference name in different positions.
+            %   suggestion is the call to show, since the entry points take the
+            %   reference name in different positions.
 
-            if contains(cause.message, "DuplicateDataScopeNames")
+            if contains(cause.message, ["DuplicateDataScopeNames" ...
+                                        "already has a data source called"])
                 error('nominal:refNameInUse', ...
                       ['asset "%s" already has a data source called "%s".\n' ...
                        'Reference names must be unique on an asset, so pass a ' ...

@@ -52,6 +52,18 @@ function nominaltest_smoketest()
     [passed, failed] = check('wrong argument type is rejected', ...
         @wrongTypeRejected, passed, failed);
 
+    [passed, failed] = check('tags take a struct or a dictionary, nothing else', ...
+        @tagTypes, passed, failed);
+
+    [passed, failed] = check('a tag with two values is refused', ...
+        @multiValuedTagRefused, passed, failed);
+
+    [passed, failed] = check('write/fetch tags and event properties are checked before sending', ...
+        @writeTagsAndPropertiesChecked, passed, failed);
+
+    [passed, failed] = check('run assets take an Asset or a RID', ...
+        @runAssetArgument, passed, failed);
+
     fprintf('\n%d passed, %d failed\n', passed, failed);
     if failed > 0
         error('nominal:smokeTestFailed', '%d check(s) failed', failed);
@@ -179,4 +191,69 @@ function wrongTypeRejected()
         threw = true;
     end
     assertTrue(threw, 'passing a Client where a Dataset belongs should fail');
+end
+
+function id = attachError(tags)
+    % Fake handles: valid tags get as far as the library, which rejects the
+    % unknown asset. Bad tags must fail before that. An explicit refName
+    % skips the free-name lookup, so nothing here touches the network.
+    c = offlineClient();
+    id = '';
+    try
+        nominal.Asset(c, int32(1)).addDataset(nominal.Dataset(c, int32(1)), ...
+                                              "ref", Tags=tags);
+    catch e
+        id = e.identifier;
+    end
+end
+
+function tagTypes()
+    reachedLibrary = 'nominal:invalidHandle';
+    id = attachError(struct(UUT="A", stand=3));
+    assertTrue(strcmp(id, reachedLibrary), sprintf('struct: got %s', id));
+    id = attachError(dictionary(["test-stand" "UUT"], ["3" "A"]));
+    assertTrue(strcmp(id, reachedLibrary), sprintf('dictionary: got %s', id));
+    id = attachError("UUT=A");
+    assertTrue(~isempty(id) && ~strcmp(id, reachedLibrary), ...
+               'a string should be refused before the library');
+end
+
+function multiValuedTagRefused()
+    id = attachError(struct(UUT=["A" "B"]));
+    assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('struct: got %s', id));
+    id = attachError(dictionary("UUT", {["A" "B"]}));
+    assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('dictionary: got %s', id));
+end
+
+function id = errorFrom(fn)
+    id = '';
+    try
+        fn();
+    catch e
+        id = e.identifier;
+    end
+end
+
+function writeTagsAndPropertiesChecked()
+    % Both fail in MATLAB, before the fake handles reach the library.
+    c = offlineClient();
+    ds = nominal.Dataset(c, int32(1));
+    id = errorFrom(@() ds.write("rpm", int64(1), 1, Tags=struct(UUT=["A" "B"])));
+    assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('write: got %s', id));
+    id = errorFrom(@() ds.fetch("rpm", int64(1), int64(2), Tags=struct(UUT=["A" "B"])));
+    assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('fetch: got %s', id));
+    id = errorFrom(@() c.createEvent("ri.x", "step", Properties=dictionary("k", {[1 2]})));
+    assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('event: got %s', id));
+end
+
+function runAssetArgument()
+    c = offlineClient();
+    r = nominal.Run(c, int32(1));
+    id = errorFrom(@() r.addAsset(42));
+    assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('number: got %s', id));
+    % A RID or an Asset gets as far as the library, which rejects the fake run.
+    id = errorFrom(@() r.addAsset("ri.scout.x.asset.y"));
+    assertTrue(strcmp(id, 'nominal:invalidHandle'), sprintf('RID: got %s', id));
+    id = errorFrom(@() r.removeAsset(nominal.Asset(c, int32(1))));
+    assertTrue(strcmp(id, 'nominal:invalidHandle'), sprintf('Asset: got %s', id));
 end

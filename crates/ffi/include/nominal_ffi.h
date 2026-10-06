@@ -225,6 +225,17 @@ int32_t nominal_asset_get_or_create_by_name(ClientHandle client_handle,
                                             ErrorHandle *error_out);
 
 /**
+ * Create an asset, whether or not one of that name exists.
+ *
+ * Names are not unique in Nominal, so this always makes a new one. Use
+ * `nominal_asset_get_or_create_by_name` to reuse an existing asset.
+ */
+int32_t nominal_asset_create(ClientHandle client_handle,
+                             const char *name,
+                             AssetHandle *out_asset,
+                             ErrorHandle *error_out);
+
+/**
  * Fetch an asset by RID.
  */
 int32_t nominal_asset_get_by_rid(ClientHandle client_handle,
@@ -259,6 +270,13 @@ int32_t nominal_asset_update_commit(ClientHandle client_handle,
  * spaces, dots, hyphens and mixed case are all accepted. A collision comes
  * back as `Assets:DuplicateDataScopeNames`.
  *
+ * `tag_keys` and `tag_values` are parallel arrays of `tag_count` strings. When
+ * given, only the dataset's series carrying every one of those tags are part
+ * of this asset's view of it — which is how one shared dataset, written with
+ * a tag per unit under test, becomes a separate view on each unit's asset.
+ * Pass `tag_count = 0` (either pointer may then be null) for the whole
+ * dataset.
+ *
  * Returns nothing. The caller's asset handle is a snapshot and does not see
  * the new data source; re-fetch to observe it.
  */
@@ -266,7 +284,40 @@ int32_t nominal_asset_add_dataset(ClientHandle client_handle,
                                   AssetHandle asset_handle,
                                   const char *ref_name,
                                   DatasetHandle dataset_handle,
+                                  const char *const *tag_keys,
+                                  const char *const *tag_values,
+                                  uint32_t tag_count,
                                   ErrorHandle *error_out);
+
+/**
+ * Detach whatever is attached to this asset under `ref_name`.
+ *
+ * The API has no remove call, so this re-reads the asset's data scopes and
+ * writes back every one except that. The others keep their tag filters and
+ * offsets. The dataset itself is untouched; only the attachment goes.
+ *
+ * Fails if nothing on the asset has that reference name.
+ */
+int32_t nominal_asset_remove_data_source(ClientHandle client_handle,
+                                         AssetHandle asset_handle,
+                                         const char *ref_name,
+                                         ErrorHandle *error_out);
+
+/**
+ * Rename the reference name a data source is attached under.
+ *
+ * The server applies the rename to every workbook using this asset too. The
+ * attachment otherwise stays as it was, tag filter included.
+ *
+ * Fails if `old_name` is not attached, or if `new_name` already is: the
+ * server answers a clash with an internal error rather than a useful one, so
+ * it is checked here first.
+ */
+int32_t nominal_asset_rename_ref_name(ClientHandle client_handle,
+                                      AssetHandle asset_handle,
+                                      const char *old_name,
+                                      const char *new_name,
+                                      ErrorHandle *error_out);
 
 /**
  * Release an asset handle. Freeing an unknown handle is a no-op.
@@ -556,6 +607,11 @@ int32_t nominal_client_user_display_name(ClientHandle handle,
  *
  * Timestamps are nanoseconds since the epoch, and the window is inclusive at
  * both ends.
+ *
+ * `tag_keys` and `tag_values` are parallel arrays of `tag_count` strings that
+ * pick which of the channel's series to read. A channel written with more
+ * than one tag set fails without them, naming the sets; pass `tag_count = 0`
+ * otherwise.
  */
 int32_t nominal_compute_fetch_decimated(ClientHandle client_handle,
                                         int32_t dataset_handle,
@@ -563,6 +619,9 @@ int32_t nominal_compute_fetch_decimated(ClientHandle client_handle,
                                         int64_t start_nanos,
                                         int64_t end_nanos,
                                         uint32_t buckets,
+                                        const char *const *tag_keys,
+                                        const char *const *tag_values,
+                                        uint32_t tag_count,
                                         SeriesHandle *out_series,
                                         ErrorHandle *error_out);
 
@@ -576,12 +635,17 @@ int32_t nominal_compute_fetch_decimated(ClientHandle client_handle,
  *
  * Gives up after 5,000 pages, about 25 million points, on the grounds that
  * anything larger does not belong in memory.
+ *
+ * Tags as for [`nominal_compute_fetch_decimated`].
  */
 int32_t nominal_compute_fetch(ClientHandle client_handle,
                               int32_t dataset_handle,
                               const char *channel,
                               int64_t start_nanos,
                               int64_t end_nanos,
+                              const char *const *tag_keys,
+                              const char *const *tag_values,
+                              uint32_t tag_count,
                               SeriesHandle *out_series,
                               ErrorHandle *error_out);
 
@@ -659,6 +723,30 @@ int32_t nominal_dataset_get_by_rid(ClientHandle client_handle,
                                    const char *rid,
                                    DatasetHandle *out_dataset,
                                    ErrorHandle *error_out);
+
+/**
+ * Create a dataset attached to no asset.
+ *
+ * Names are not unique in Nominal, so this always makes a new one. Attach it
+ * with `nominal_asset_add_dataset`, to as many assets as need it.
+ */
+int32_t nominal_dataset_create(ClientHandle client_handle,
+                               const char *name,
+                               DatasetHandle *out_dataset,
+                               ErrorHandle *error_out);
+
+/**
+ * Every asset this dataset is attached to, ordered by name.
+ *
+ * Each asset appears once, however many times it holds the dataset. Read the
+ * list with `nominal_asset_list_at` and release it with
+ * `nominal_asset_list_free`.
+ */
+int32_t nominal_dataset_assets(ClientHandle client_handle,
+                               DatasetHandle dataset_handle,
+                               AssetListHandle *out_list,
+                               uint32_t *out_count,
+                               ErrorHandle *error_out);
 
 /**
  * Fetch the dataset named `name` on this asset, attaching or creating it.
@@ -772,6 +860,9 @@ int32_t nominal_dataset_property(DatasetHandle handle,
  *
  * `event_type` is 0 info, 1 flag, 2 error, 3 success.
  *
+ * `property_keys` and `property_values` are parallel arrays of
+ * `property_count` strings. Pass `property_count = 0` for none.
+ *
  * Release the result with `nominal_event_free`.
  */
 int32_t nominal_event_create(ClientHandle client_handle,
@@ -781,6 +872,9 @@ int32_t nominal_event_create(ClientHandle client_handle,
                              int32_t event_type,
                              int64_t timestamp_nanos,
                              int64_t duration_nanos,
+                             const char *const *property_keys,
+                             const char *const *property_values,
+                             uint32_t property_count,
                              EventHandle *out_event,
                              ErrorHandle *error_out);
 
@@ -824,6 +918,14 @@ int32_t nominal_event_asset_count(EventHandle handle, uint32_t *out_count, Error
  */
 int32_t nominal_event_asset_at(EventHandle handle,
                                uint32_t index,
+                               StringHandle out_string,
+                               ErrorHandle *error_out);
+
+/**
+ * Value of a property, or an error if the event has no such key.
+ */
+int32_t nominal_event_property(EventHandle handle,
+                               const char *key,
                                StringHandle out_string,
                                ErrorHandle *error_out);
 
@@ -883,6 +985,9 @@ int32_t nominal_export_presigned_url(ClientHandle client_handle,
  * `new_dataset_name` set to create one. `out_dataset_rid` receives the RID the
  * data is landing in, which is how you find a freshly-created dataset.
  *
+ * `tag_keys` and `tag_values` are parallel arrays of `tag_count` strings,
+ * stamped on every point in the file. Pass `tag_count = 0` for none.
+ *
  * Blocks while the file uploads, which for a large file is a long time. The
  * ingest itself continues afterwards — see [`nominal_ingest_wait`].
  */
@@ -893,6 +998,9 @@ int32_t nominal_ingest_csv(ClientHandle client_handle,
                            const char *timestamp_column,
                            int32_t timestamp_kind,
                            int32_t timestamp_unit,
+                           const char *const *tag_keys,
+                           const char *const *tag_values,
+                           uint32_t tag_count,
                            IngestJobHandle *out_job,
                            StringHandle out_dataset_rid,
                            ErrorHandle *error_out);
@@ -900,7 +1008,7 @@ int32_t nominal_ingest_csv(ClientHandle client_handle,
 /**
  * Upload a Parquet file and start ingesting it.
  *
- * Arguments match [`nominal_ingest_csv`].
+ * Arguments match [`nominal_ingest_csv`], tags included.
  */
 int32_t nominal_ingest_parquet(ClientHandle client_handle,
                                const char *path,
@@ -909,6 +1017,9 @@ int32_t nominal_ingest_parquet(ClientHandle client_handle,
                                const char *timestamp_column,
                                int32_t timestamp_kind,
                                int32_t timestamp_unit,
+                               const char *const *tag_keys,
+                               const char *const *tag_values,
+                               uint32_t tag_count,
                                IngestJobHandle *out_job,
                                StringHandle out_dataset_rid,
                                ErrorHandle *error_out);
@@ -1006,6 +1117,42 @@ int32_t nominal_run_add_dataset(ClientHandle client_handle,
                                 int32_t dataset_handle,
                                 RunHandle *out_run,
                                 ErrorHandle *error_out);
+
+/**
+ * Add an asset to a run, returning the updated run as a new handle.
+ *
+ * A run made on one asset can then span a test chamber and the unit inside
+ * it. Adding an asset the run already has changes nothing.
+ */
+int32_t nominal_run_add_asset(ClientHandle client_handle,
+                              RunHandle run_handle,
+                              const char *asset_rid,
+                              RunHandle *out_run,
+                              ErrorHandle *error_out);
+
+/**
+ * Remove an asset from a run, returning the updated run as a new handle.
+ *
+ * Fails if the run is not on that asset, or if it is the run's only one.
+ */
+int32_t nominal_run_remove_asset(ClientHandle client_handle,
+                                 RunHandle run_handle,
+                                 const char *asset_rid,
+                                 RunHandle *out_run,
+                                 ErrorHandle *error_out);
+
+/**
+ * Number of assets a run belongs to.
+ */
+int32_t nominal_run_asset_count(RunHandle handle, uint32_t *out_count, ErrorHandle *error_out);
+
+/**
+ * RID of the asset at `index`, counting from zero.
+ */
+int32_t nominal_run_asset_at(RunHandle handle,
+                             uint32_t index,
+                             StringHandle out_string,
+                             ErrorHandle *error_out);
 
 /**
  * Apply a staged update and return the updated run as a new handle.
@@ -1316,6 +1463,9 @@ int32_t nominal_streamchannel_free(StreamChannelHandle handle);
  * Timestamps are literal, including zero — a stream may carry times relative
  * to an epoch the caller chose.
  *
+ * `tag_keys` and `tag_values` are parallel arrays of `tag_count` strings,
+ * stamped on every point written. Pass `tag_count = 0` for none.
+ *
  * Returns once the write has been accepted. Blocks for the duration.
  */
 int32_t nominal_write_doubles(ClientHandle client_handle,
@@ -1325,6 +1475,9 @@ int32_t nominal_write_doubles(ClientHandle client_handle,
                               const int64_t *timestamps_nanos,
                               const double *values,
                               uint32_t row_count,
+                              const char *const *tag_keys,
+                              const char *const *tag_values,
+                              uint32_t tag_count,
                               ErrorHandle *error_out);
 
 #ifdef __cplusplus

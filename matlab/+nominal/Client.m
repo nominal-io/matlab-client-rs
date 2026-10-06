@@ -134,6 +134,40 @@ classdef Client < nominal.Resource
             a = nominal.Asset(obj, nominalmex('asset_get_or_create', obj.Handle, char(name)));
         end
 
+        function a = createAsset(obj, name)
+            %CREATEASSET  Create an asset, even if one of that name exists.
+            %
+            %   Names are not unique in Nominal, so this always makes a new
+            %   one. Use getOrCreateAsset to reuse an existing asset.
+            %
+            %   See also NOMINAL.CLIENT/GETORCREATEASSET
+            arguments
+                obj (1,1) nominal.Client
+                name (1,1) string
+            end
+            obj.assertLive();
+            a = nominal.Asset(obj, nominalmex('asset_create', obj.Handle, char(name)));
+        end
+
+        function d = createDataset(obj, name)
+            %CREATEDATASET  Create a dataset attached to no asset.
+            %
+            %   ds = c.createDataset("bench telemetry");
+            %   assetA.addDataset(ds, Tags=struct(UUT="A"));
+            %   assetB.addDataset(ds, Tags=struct(UUT="B"));
+            %
+            %   Always makes a new one, whatever its name. Attach it with
+            %   asset.addDataset, to as many assets as need it.
+            %
+            %   See also NOMINAL.ASSET/ADDDATASET, NOMINAL.ASSET/GETORCREATEDATASET
+            arguments
+                obj (1,1) nominal.Client
+                name (1,1) string
+            end
+            obj.assertLive();
+            d = nominal.Dataset(obj, nominalmex('dataset_create', obj.Handle, char(name)));
+        end
+
         function a = assetByRid(obj, rid)
             %ASSETBYRID  Fetch an asset by RID.
             arguments
@@ -166,6 +200,12 @@ classdef Client < nominal.Resource
             %   Type is one of info, flag, error, success. Timestamp accepts a
             %   zoned datetime or int64 nanoseconds, and defaults to now.
             %   Duration defaults to zero, meaning an instantaneous event.
+            %
+            %   Properties is a struct, or a dictionary for keys that aren't
+            %   valid field names:
+            %
+            %       c.createEvent(rids, "step 3", Type="success", ...
+            %                     Properties=struct(status="pass", output=4.2));
             arguments
                 obj (1,1) nominal.Client
                 assetRids (1,:) string
@@ -174,6 +214,7 @@ classdef Client < nominal.Resource
                     ["info" "flag" "error" "success"])} = "info"
                 options.Timestamp = int64(0)
                 options.Duration = seconds(0)
+                options.Properties (1,1) {mustBeA(options.Properties, ["struct" "dictionary"])} = struct()
             end
             obj.assertLive();
 
@@ -181,6 +222,7 @@ classdef Client < nominal.Resource
                 error('nominal:invalidParameter', ...
                       'at least one asset RID is required');
             end
+            [propertyKeys, propertyValues] = keyValuePairs(options.Properties, "property");
 
             if isduration(options.Duration)
                 durationNanos = int64(round(seconds(options.Duration) * 1e9));
@@ -190,7 +232,8 @@ classdef Client < nominal.Resource
 
             e = nominal.Event(nominalmex('event_create', obj.Handle, ...
                 cellstr(assetRids), char(name), char(options.Type), ...
-                nominal.toNanos(options.Timestamp), durationNanos));
+                nominal.toNanos(options.Timestamp), durationNanos, ...
+                propertyKeys, propertyValues));
         end
 
         function r = runByRid(obj, rid)
@@ -221,6 +264,9 @@ classdef Client < nominal.Resource
             %   Kind says how to read the timestamp column: iso8601 (the
             %   default), epoch, or relative. Unit applies to the latter two.
             %
+            %   Tags are stamped on every point in the file: a struct, or a
+            %   dictionary for keys that aren't valid field names.
+            %
             %   Blocks while the file uploads. The server-side ingest continues
             %   afterwards; call job.wait() if you need it finished.
             %
@@ -240,6 +286,7 @@ classdef Client < nominal.Resource
                 options.Unit (1,1) string {mustBeMember(options.Unit, ...
                     ["nanoseconds" "microseconds" "milliseconds" ...
                      "seconds" "minutes" "hours"])} = "seconds"
+                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
             end
             obj.assertLive();
 
@@ -247,6 +294,7 @@ classdef Client < nominal.Resource
                 error('nominal:invalidParameter', ...
                       'TimestampColumn= is required: name the column holding time');
             end
+            [tagKeys, tagValues] = keyValuePairs(options.Tags, "tag");
 
             % Zero means "no existing dataset" on the C side, which is what
             % pairs with a NewDataset name.
@@ -267,7 +315,8 @@ classdef Client < nominal.Resource
 
             [handle, datasetRid] = nominalmex(command, obj.Handle, char(path), ...
                 datasetHandle, char(options.NewDataset), ...
-                char(options.TimestampColumn), char(options.Kind), char(options.Unit));
+                char(options.TimestampColumn), char(options.Kind), char(options.Unit), ...
+                tagKeys, tagValues);
 
             job = nominal.IngestJob(obj, handle, string(datasetRid));
         end

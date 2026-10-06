@@ -86,6 +86,43 @@ pub(crate) unsafe fn c_str_to_string(
     c_str_to_string_exact(ptr, name, error_out).map(|s| s.trim().to_owned())
 }
 
+/// Read `count` key/value pairs from two parallel C string arrays.
+///
+/// Tags and properties both cross the ABI this way. `what` names them in
+/// errors, so a bad entry reads as `tag_values[1] must not be null`.
+///
+/// # Safety
+/// When `count > 0`, both arrays must hold `count` pointers, each null or a
+/// NUL-terminated string. Either array may be null when `count` is 0.
+pub(crate) unsafe fn pairs_from_c(
+    keys: *const *const c_char,
+    values: *const *const c_char,
+    count: u32,
+    what: &str,
+    error_out: *mut ErrorHandle,
+) -> Result<Vec<(String, String)>, ErrorCode> {
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    if keys.is_null() || values.is_null() {
+        return Err(fail(
+            error_out,
+            ErrorCode::InvalidParameter,
+            format!("{what}_keys and {what}_values must not be null when {what}_count > 0"),
+        ));
+    }
+
+    let keys = std::slice::from_raw_parts(keys, count as usize);
+    let values = std::slice::from_raw_parts(values, count as usize);
+    let mut pairs = Vec::with_capacity(count as usize);
+    for (index, (&key, &value)) in keys.iter().zip(values).enumerate() {
+        let key = c_str_to_string(key, &format!("{what}_keys[{index}]"), error_out)?;
+        let value = c_str_to_string(value, &format!("{what}_values[{index}]"), error_out)?;
+        pairs.push((key, value));
+    }
+    Ok(pairs)
+}
+
 /// Read a caller-provided C string verbatim, preserving whitespace.
 ///
 /// For values the caller is storing rather than naming — a streamed string
@@ -217,4 +254,70 @@ pub extern "C" fn nominal_copy_string_from_reference(
 
         copied as u32
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CString;
+
+    fn read(
+        keys: &[*const c_char],
+        values: &[*const c_char],
+    ) -> Result<Vec<(String, String)>, ErrorCode> {
+        let mut err = 0;
+        let result = unsafe {
+            pairs_from_c(
+                keys.as_ptr(),
+                values.as_ptr(),
+                keys.len() as u32,
+                "tag",
+                &mut err,
+            )
+        };
+        crate::error::nominal_error_free(err);
+        result
+    }
+
+    #[test]
+    fn no_pairs_needs_no_arrays() {
+        let mut err = 0;
+        let pairs = unsafe { pairs_from_c(std::ptr::null(), std::ptr::null(), 0, "tag", &mut err) };
+        assert_eq!(pairs.unwrap(), Vec::new());
+    }
+
+    #[test]
+    fn pairs_are_read_in_order() {
+        let (uut, a) = (CString::new("UUT").unwrap(), CString::new("A").unwrap());
+        let (stand, three) = (
+            CString::new("test-stand").unwrap(),
+            CString::new("3").unwrap(),
+        );
+        let pairs = read(
+            &[uut.as_ptr(), stand.as_ptr()],
+            &[a.as_ptr(), three.as_ptr()],
+        );
+        assert_eq!(
+            pairs.unwrap(),
+            vec![
+                ("UUT".to_owned(), "A".to_owned()),
+                ("test-stand".to_owned(), "3".to_owned())
+            ]
+        );
+    }
+
+    #[test]
+    fn null_arrays_are_refused_when_there_are_pairs() {
+        let mut err = 0;
+        let pairs = unsafe { pairs_from_c(std::ptr::null(), std::ptr::null(), 2, "tag", &mut err) };
+        assert_eq!(pairs.unwrap_err(), ErrorCode::InvalidParameter);
+        crate::error::nominal_error_free(err);
+    }
+
+    #[test]
+    fn a_null_value_is_refused() {
+        let uut = CString::new("UUT").unwrap();
+        let pairs = read(&[uut.as_ptr()], &[std::ptr::null()]);
+        assert_eq!(pairs.unwrap_err(), ErrorCode::InvalidParameter);
+    }
 }

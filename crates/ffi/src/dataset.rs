@@ -1,10 +1,13 @@
-use crate::asset::asset_or_fail;
+use crate::asset::{asset_or_fail, deliver_list as deliver_asset_list, AssetListHandle};
 use crate::client::{client_or_fail, ClientHandle};
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
+use crate::scout;
 use crate::strings::{c_str_to_string, set_string, StringHandle};
 use crate::update::{snapshot, UpdateHandle};
 use nominal::core::{Dataset, DatasetCreate, DatasetQuery, DatasetUpdate};
+use nominal_streaming::api::clients::scout::assets::AsyncAssetService;
+use nominal_streaming::api::objects::api::rids::DataSourceRid;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -205,6 +208,73 @@ pub extern "C" fn nominal_dataset_get_by_rid(
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
 
         deliver(dataset, out_dataset, error_out)
+    })
+}
+
+/// Create a dataset attached to no asset.
+///
+/// Names are not unique in Nominal, so this always makes a new one. Attach it
+/// with `nominal_asset_add_dataset`, to as many assets as need it.
+#[no_mangle]
+pub extern "C" fn nominal_dataset_create(
+    client_handle: ClientHandle,
+    name: *const c_char,
+    out_dataset: *mut DatasetHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_dataset, error_out, "out_dataset")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let name = unsafe { c_str_to_string(name, "name", error_out)? };
+
+        let dataset = RUNTIME
+            .block_on(client.catalog().create_dataset(DatasetCreate::new(name)))
+            .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+
+        deliver(dataset, out_dataset, error_out)
+    })
+}
+
+/// Every asset this dataset is attached to, ordered by name.
+///
+/// Each asset appears once, however many times it holds the dataset. Read the
+/// list with `nominal_asset_list_at` and release it with
+/// `nominal_asset_list_free`.
+#[no_mangle]
+pub extern "C" fn nominal_dataset_assets(
+    client_handle: ClientHandle,
+    dataset_handle: DatasetHandle,
+    out_list: *mut AssetListHandle,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_list, error_out, "out_list")?;
+        require_out(out_count, error_out, "out_count")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let dataset = dataset_or_fail(dataset_handle, error_out)?;
+
+        let service = scout::asset_service(&client, error_out)?;
+        let token = scout::bearer(&client, error_out)?;
+        let rid = DataSourceRid(scout::parse_rid(dataset.rid(), "dataset RID", error_out)?);
+
+        let found = RUNTIME
+            .block_on(service.get_assets_by_data_source(&token, &rid))
+            .map_err(|e| scout::api_error(error_out, e))?;
+
+        // Re-fetched through the crate so the list holds its Asset type.
+        let rids: Vec<String> = found.iter().map(|a| a.rid().0.to_string()).collect();
+        let assets = if rids.is_empty() {
+            Vec::new()
+        } else {
+            RUNTIME
+                .block_on(client.assets().get_batch(&rids))
+                .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?
+                .into_values()
+                .collect()
+        };
+
+        deliver_asset_list(assets, out_list, out_count, error_out)
     })
 }
 

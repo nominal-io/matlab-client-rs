@@ -5,7 +5,7 @@ function results = nominalexample_eventdemo(assetName)
 %   nominalexample_eventdemo("engine-3")     % on an existing asset
 %
 %   Needs credentials. Creates one event of each type on the asset, including
-%   an instantaneous one and a spanning one.
+%   an instantaneous one, a spanning one, and one carrying properties.
 %
 %   Events attach to assets, not to runs or datasets. A run shows the events
 %   whose time falls inside its window, so to see these on a run, create a run
@@ -60,11 +60,24 @@ function results = nominalexample_eventdemo(assetName)
         describe(otherEvents(typeIndex));
     end
 
+    % --- a step result ------------------------------------------------
+    %
+    % Properties carry the outcome: a struct, or a dictionary for keys that
+    % aren't valid field names. Values are stored as text.
+    stepEvent = client.createEvent(asset.Rid, "step 3", ...
+                                   Type = "success", ...
+                                   Timestamp = referenceTime - minutes(1), ...
+                                   Properties = struct(status = "pass", output = 4.2));
+
+    describe(stepEvent);
+    fprintf('  status   %s, output %s\n', ...
+            stepEvent.property("status"), stepEvent.property("output"));
+
     % --- results ------------------------------------------------------
     %
     % One row per event. There is no list-events endpoint in this client, so
     % this table is the only record of what was created.
-    allEvents = [ignitionEvent, overspeedEvent, otherEvents];
+    allEvents = [ignitionEvent, overspeedEvent, otherEvents, stepEvent];
     results = struct('Events', table( ...
         arrayfun(@(e) e.Rid, allEvents)', ...
         arrayfun(@(e) e.Name, allEvents)', ...
@@ -76,6 +89,7 @@ function results = nominalexample_eventdemo(assetName)
     % --- teardown -----------------------------------------------------
     %
     % Releasing an event handle does not delete the event in Nominal.
+    delete(stepEvent);
     delete(otherEvents);
     delete(overspeedEvent);
     delete(ignitionEvent);

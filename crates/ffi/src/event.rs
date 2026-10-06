@@ -25,7 +25,7 @@
 use crate::client::{client_or_fail, ClientHandle};
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
-use crate::strings::{c_str_to_string, set_string, StringHandle};
+use crate::strings::{c_str_to_string, pairs_from_c, set_string, StringHandle};
 use crate::time::instant_from_nanos;
 
 use nominal_streaming::api::clients::event::{AsyncEventService, AsyncEventServiceClient};
@@ -193,6 +193,9 @@ fn safe_long(value: i64, what: &str, error_out: *mut ErrorHandle) -> Result<Safe
 ///
 /// `event_type` is 0 info, 1 flag, 2 error, 3 success.
 ///
+/// `property_keys` and `property_values` are parallel arrays of
+/// `property_count` strings. Pass `property_count = 0` for none.
+///
 /// Release the result with `nominal_event_free`.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
@@ -204,6 +207,9 @@ pub extern "C" fn nominal_event_create(
     event_type: i32,
     timestamp_nanos: i64,
     duration_nanos: i64,
+    property_keys: *const *const c_char,
+    property_values: *const *const c_char,
+    property_count: u32,
     out_event: *mut EventHandle,
     error_out: *mut ErrorHandle,
 ) -> i32 {
@@ -212,6 +218,15 @@ pub extern "C" fn nominal_event_create(
         let client = client_or_fail(client_handle, error_out)?;
         let name = unsafe { c_str_to_string(name, "name", error_out)? };
         let kind = kind_from_code(event_type, error_out)?;
+        let properties = unsafe {
+            pairs_from_c(
+                property_keys,
+                property_values,
+                property_count,
+                "property",
+                error_out,
+            )?
+        };
 
         if asset_rids.is_null() || asset_count == 0 {
             return Err(fail(
@@ -260,6 +275,11 @@ pub extern "C" fn nominal_event_create(
             .name(name)
             .type_(kind)
             .extend_asset_rids(assets)
+            .extend_properties(
+                properties
+                    .into_iter()
+                    .map(|(k, v)| (PropertyName(k), PropertyValue(v))),
+            )
             .build();
 
         let token = BearerToken::new(client.token()).map_err(|e| {
@@ -414,7 +434,32 @@ pub extern "C" fn nominal_event_asset_at(
     })
 }
 
-/// Suppress unused-import warnings for the property/label types, which are
-/// wired up once event updates are exposed.
+/// Value of a property, or an error if the event has no such key.
+#[no_mangle]
+pub extern "C" fn nominal_event_property(
+    handle: EventHandle,
+    key: *const c_char,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let event = event_or_fail(handle, error_out)?;
+        let key = unsafe { c_str_to_string(key, "key", error_out)? };
+        let value = event
+            .properties()
+            .get(&PropertyName(key.clone()))
+            .ok_or_else(|| {
+                fail(
+                    error_out,
+                    ErrorCode::InvalidParameter,
+                    format!("event has no property {key:?}"),
+                )
+            })?;
+        set_string(out_string, value.0.as_str(), error_out)
+    })
+}
+
+/// Suppress the unused-import warning for the label type, which is wired up
+/// once event updates are exposed.
 #[allow(dead_code)]
 fn _reserved(_: BTreeMap<PropertyName, PropertyValue>, _: BTreeSet<Label>) {}

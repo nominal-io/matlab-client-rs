@@ -53,6 +53,16 @@ classdef Event < nominal.Resource
             v = string(nominalmex('event_assets', obj.Handle));
             v = reshape(v, 1, []);
         end
+
+        function value = property(obj, key)
+            %PROPERTY  Value of one property. Errors if the key is absent.
+            arguments
+                obj (1,1) nominal.Event
+                key (1,1) string
+            end
+            obj.assertLive();
+            value = string(nominalmex('event_property', obj.Handle, char(key)));
+        end
     end
 
     methods (Access = protected)

@@ -81,8 +81,10 @@ function issueCount = checkSignatures(root, matlabRoot)
 %   stops working with no error anywhere — which is exactly the kind of thing
 %   a lint gate is for.
 %
-%   This checks the file's own grammar. It cannot tell whether the methods it
-%   names still exist; a rename in the class is still a silent break.
+%   The validator also looks each method up, so a method renamed in the class
+%   but not here is reported. That only works against these sources: an
+%   installed copy of the toolbox would answer for the old classes, so this
+%   folder goes first on the path while it runs.
 
     issueCount = 0;
     signatures = fullfile(matlabRoot, 'resources', 'functionSignatures.json');
@@ -90,15 +92,18 @@ function issueCount = checkSignatures(root, matlabRoot)
         return
     end
 
+    previousPath = addpath(matlabRoot);
+    restorePath = onCleanup(@() path(previousPath));
     problems = validateFunctionSignaturesJSON(signatures);
     if isempty(problems)
         return
     end
 
+    % A table, one row per problem.
     relative = erase(signatures, [root filesep]);
-    for k = 1:numel(problems)
+    for k = 1:height(problems)
         fprintf('%s:%d: [signatures] %s\n', relative, ...
-                problems(k).LineNumber, problems(k).Message);
+                problems.LineNumber(k), problems.Message(k));
     end
-    issueCount = numel(problems);
+    issueCount = height(problems);
 end

@@ -58,6 +58,7 @@ pub mod event;
 pub mod export;
 pub mod ingest;
 pub mod run;
+pub mod scout;
 pub mod sql;
 pub mod stream;
 pub mod streamchannel;
@@ -82,6 +83,7 @@ pub(crate) fn clear_all_registries() {
     event::clear_events();
     event::clear_event_services();
     write::clear_write_services();
+    scout::clear_scout_services();
     export::clear_export_services();
     sql::clear_sql_results();
     // No SQL transport to clear: it is a shared reqwest client whose pool

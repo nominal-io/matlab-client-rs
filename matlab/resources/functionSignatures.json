@@ -72,6 +72,22 @@
     "outputs": [{"name": "asset", "type": "nominal.Asset"}]
   },
 
+  "nominal.Client.createAsset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Asset name; a new asset even if the name exists"}
+    ],
+    "outputs": [{"name": "asset", "type": "nominal.Asset"}]
+  },
+
+  "nominal.Client.createDataset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Dataset name; attached to no asset"}
+    ],
+    "outputs": [{"name": "dataset", "type": "nominal.Dataset"}]
+  },
+
   "nominal.Client.assetByRid": {
     "inputs": [
       {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
@@ -103,7 +119,8 @@
       {"name": "name", "kind": "required", "type": ["string"], "purpose": "Event name"},
       {"name": "Type", "kind": "namevalue", "type": ["choices={'info','flag','error','success'}"]},
       {"name": "Timestamp", "kind": "namevalue", "purpose": "datetime or int64 nanoseconds"},
-      {"name": "Duration", "kind": "namevalue", "purpose": "duration; zero marks an instant"}
+      {"name": "Duration", "kind": "namevalue", "purpose": "duration; zero marks an instant"},
+      {"name": "Properties", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "e.g. struct(status=\"pass\")"}
     ],
     "outputs": [{"name": "event", "type": "nominal.Event"}]
   },
@@ -116,7 +133,8 @@
       {"name": "Dataset", "kind": "namevalue", "type": ["nominal.Dataset"], "purpose": "Existing dataset to land in"},
       {"name": "NewDataset", "kind": "namevalue", "type": ["string"], "purpose": "Name for a new, unattached dataset"},
       {"name": "Kind", "kind": "namevalue", "type": ["choices={'iso8601','epoch','relative'}"]},
-      {"name": "Unit", "kind": "namevalue", "type": ["choices={'nanoseconds','microseconds','milliseconds','seconds','minutes','hours'}"]}
+      {"name": "Unit", "kind": "namevalue", "type": ["choices={'nanoseconds','microseconds','milliseconds','seconds','minutes','hours'}"]},
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Stamped on every point in the file"}
     ],
     "outputs": [{"name": "job", "type": "nominal.IngestJob"}]
   },
@@ -161,7 +179,23 @@
     "inputs": [
       {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
       {"name": "dataset", "kind": "required", "type": ["nominal.Dataset"], "purpose": "Dataset to attach"},
-      {"name": "refName", "kind": "ordered", "type": ["string"], "purpose": "Reference name; omit and a free one is chosen"}
+      {"name": "refName", "kind": "ordered", "type": ["string"], "purpose": "Reference name; omit and a free one is chosen"},
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Only series carrying these tags: struct(UUT=\"A\") or dictionary(\"test-stand\",\"3\")"}
+    ]
+  },
+
+  "nominal.Asset.removeDataset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "refName", "kind": "required", "type": ["string"], "purpose": "Reference name to detach"}
+    ]
+  },
+
+  "nominal.Asset.renameRefName": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "oldName", "kind": "required", "type": ["string"], "purpose": "Reference name now"},
+      {"name": "newName", "kind": "required", "type": ["string"], "purpose": "Reference name to use instead"}
     ]
   },
 
@@ -207,7 +241,8 @@
       {"name": "channel", "kind": "required", "type": ["string"], "purpose": "Channel name"},
       {"name": "startTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
       {"name": "endTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
-      {"name": "Buckets", "kind": "namevalue", "type": ["numeric"], "purpose": "Decimate to roughly this many points"}
+      {"name": "Buckets", "kind": "namevalue", "type": ["numeric"], "purpose": "Decimate to roughly this many points"},
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Which tag set, if the channel has several"}
     ],
     "outputs": [{"name": "tt", "type": "timetable"}]
   },
@@ -217,8 +252,14 @@
       {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
       {"name": "channels", "kind": "required", "type": ["string"], "purpose": "One name per column of values"},
       {"name": "timestamps", "kind": "required", "purpose": "datetime column or int64 nanoseconds"},
-      {"name": "values", "kind": "required", "type": ["numeric"], "purpose": "Rows by channels"}
+      {"name": "values", "kind": "required", "type": ["numeric"], "purpose": "Rows by channels"},
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Stamped on every point written"}
     ]
+  },
+
+  "nominal.Dataset.assets": {
+    "inputs": [{"name": "obj", "kind": "required", "type": ["nominal.Dataset"]}],
+    "outputs": [{"name": "t", "type": "table"}]
   },
 
   "nominal.Dataset.channels": {
@@ -318,6 +359,30 @@
       {"name": "endTime", "kind": "ordered", "purpose": "datetime or int64 nanoseconds; omit for now"}
     ],
     "outputs": [{"name": "finished", "type": "nominal.Run"}]
+  },
+
+  "nominal.Run.addAsset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Run"]},
+      {"name": "asset", "kind": "required", "type": [["nominal.Asset"], ["string"]], "purpose": "Asset, or its RID"}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Run"}]
+  },
+
+  "nominal.Run.removeAsset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Run"]},
+      {"name": "asset", "kind": "required", "type": [["nominal.Asset"], ["string"]], "purpose": "Asset, or its RID; not the run's last"}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Run"}]
+  },
+
+  "nominal.Event.property": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Event"]},
+      {"name": "key", "kind": "required", "type": ["string"]}
+    ],
+    "outputs": [{"name": "value", "type": "string"}]
   },
 
   "nominal.Run.property": {

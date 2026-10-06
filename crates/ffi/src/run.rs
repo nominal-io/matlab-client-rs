@@ -7,14 +7,18 @@
 //! reference name; the run does not own them.
 
 use crate::asset::asset_or_fail;
-use crate::client::{client_or_fail, ClientHandle};
+use crate::client::{client_or_fail, ClientEntry, ClientHandle};
 use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
+use crate::scout;
 use crate::strings::{c_str_to_string, set_string, StringHandle};
 use crate::time::{instant_from_nanos, nanos_from_instant};
 use crate::update::{snapshot, UpdateHandle};
 use nominal::core::{Run, RunCreate, RunUpdate};
+use nominal_streaming::api::clients::scout::AsyncRunService;
+use nominal_streaming::api::objects::scout::rids::api::AssetRid;
+use nominal_streaming::api::objects::scout::run::api::{RunRid, UpdateRunRequest};
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -160,6 +164,158 @@ pub extern "C" fn nominal_run_add_dataset(
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
 
         deliver(updated, out_run, error_out)
+    })
+}
+
+/// Re-read a run's assets, let `edit` change them, and write them back.
+///
+/// Fresh from the server rather than from the caller's snapshot, so an asset
+/// added elsewhere in the meantime is not dropped. The API replaces the whole
+/// list, and treats an empty one as "no change" — so emptying it is refused
+/// here rather than silently ignored there. A run always has an asset.
+fn edit_run_assets(
+    client: &ClientEntry,
+    run_rid: &str,
+    edit: impl FnOnce(&mut Vec<String>) -> Result<(), ErrorCode>,
+    error_out: *mut ErrorHandle,
+) -> Result<Run, ErrorCode> {
+    let fresh = RUNTIME
+        .block_on(client.runs().get(run_rid))
+        .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+
+    let mut assets = fresh.assets().to_vec();
+    edit(&mut assets)?;
+    if assets.is_empty() {
+        return Err(fail(
+            error_out,
+            ErrorCode::InvalidParameter,
+            "a run must keep at least one asset",
+        ));
+    }
+
+    let mut rids = Vec::with_capacity(assets.len());
+    for rid in &assets {
+        rids.push(AssetRid(scout::parse_rid(rid, "asset RID", error_out)?));
+    }
+    let request = UpdateRunRequest::builder().assets(rids).build();
+
+    let service = scout::run_service(client, error_out)?;
+    let token = scout::bearer(client, error_out)?;
+    let run = RunRid(scout::parse_rid(run_rid, "run RID", error_out)?);
+    RUNTIME
+        .block_on(service.update_run(&token, &run, &request))
+        .map_err(|e| scout::api_error(error_out, e))?;
+
+    RUNTIME
+        .block_on(client.runs().get(run_rid))
+        .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))
+}
+
+/// Add an asset to a run, returning the updated run as a new handle.
+///
+/// A run made on one asset can then span a test chamber and the unit inside
+/// it. Adding an asset the run already has changes nothing.
+#[no_mangle]
+pub extern "C" fn nominal_run_add_asset(
+    client_handle: ClientHandle,
+    run_handle: RunHandle,
+    asset_rid: *const c_char,
+    out_run: *mut RunHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_run, error_out, "out_run")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let run = run_or_fail(run_handle, error_out)?;
+        let asset_rid = unsafe { c_str_to_string(asset_rid, "asset_rid", error_out)? };
+
+        let updated = edit_run_assets(
+            &client,
+            run.rid(),
+            |assets| {
+                if !assets.contains(&asset_rid) {
+                    assets.push(asset_rid);
+                }
+                Ok(())
+            },
+            error_out,
+        )?;
+        deliver(updated, out_run, error_out)
+    })
+}
+
+/// Remove an asset from a run, returning the updated run as a new handle.
+///
+/// Fails if the run is not on that asset, or if it is the run's only one.
+#[no_mangle]
+pub extern "C" fn nominal_run_remove_asset(
+    client_handle: ClientHandle,
+    run_handle: RunHandle,
+    asset_rid: *const c_char,
+    out_run: *mut RunHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_run, error_out, "out_run")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let run = run_or_fail(run_handle, error_out)?;
+        let asset_rid = unsafe { c_str_to_string(asset_rid, "asset_rid", error_out)? };
+
+        let updated = edit_run_assets(
+            &client,
+            run.rid(),
+            |assets| {
+                let before = assets.len();
+                assets.retain(|rid| *rid != asset_rid);
+                if assets.len() == before {
+                    return Err(fail(
+                        error_out,
+                        ErrorCode::InvalidParameter,
+                        format!("run is not on asset {asset_rid}"),
+                    ));
+                }
+                Ok(())
+            },
+            error_out,
+        )?;
+        deliver(updated, out_run, error_out)
+    })
+}
+
+/// Number of assets a run belongs to.
+#[no_mangle]
+pub extern "C" fn nominal_run_asset_count(
+    handle: RunHandle,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_count, error_out, "out_count")?;
+        let run = run_or_fail(handle, error_out)?;
+        unsafe { *out_count = run.assets().len() as u32 };
+        Ok(())
+    })
+}
+
+/// RID of the asset at `index`, counting from zero.
+#[no_mangle]
+pub extern "C" fn nominal_run_asset_at(
+    handle: RunHandle,
+    index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let run = run_or_fail(handle, error_out)?;
+        let assets = run.assets();
+        let rid = assets.get(index as usize).ok_or_else(|| {
+            fail(
+                error_out,
+                ErrorCode::InvalidParameter,
+                format!("asset index {index} out of range ({} assets)", assets.len()),
+            )
+        })?;
+        set_string(out_string, rid.as_str(), error_out)
     })
 }
 

@@ -556,22 +556,6 @@ static void cmd_dataset_get_or_create(mxArray *plhs[], int nlhs, int nrhs,
     }
 }
 
-static void cmd_asset_add_dataset(int nrhs, const mxArray *prhs[])
-{
-    ErrorHandle err = 0;
-    char *ref_name;
-    int32_t status;
-
-    require_args(nrhs, 4, "asset_add_dataset");
-    ref_name = arg_string(prhs[3], "refName");
-    status = nominal_asset_add_dataset(arg_i32(prhs[1], "client"),
-                                       arg_i32(prhs[2], "asset"),
-                                       ref_name,
-                                       arg_i32(prhs[4], "dataset"), &err);
-    mxFree(ref_name);
-    throw_if_failed(status, err);
-}
-
 static void cmd_asset_attached_dataset(mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
     ErrorHandle err = 0;
@@ -637,6 +621,46 @@ static void cmd_run_add_dataset(mxArray *plhs[], int nrhs, const mxArray *prhs[]
     mxFree(ref_name);
     throw_if_failed(status, err);
     plhs[0] = mx_i32(out);
+}
+
+/* run_add_asset and run_remove_asset: same shape, returning the updated run. */
+static void cmd_run_edit_asset(int32_t (*fn)(ClientHandle, RunHandle, const char *,
+                                             RunHandle *, ErrorHandle *),
+                               mxArray *plhs[], int nrhs, const mxArray *prhs[],
+                               const char *command)
+{
+    ErrorHandle err = 0;
+    RunHandle out = 0;
+    char *asset_rid;
+    int32_t status;
+
+    require_args(nrhs, 3, command);
+    asset_rid = arg_string(prhs[3], "assetRid");
+    status = fn(arg_i32(prhs[1], "client"), arg_i32(prhs[2], "run"),
+                asset_rid, &out, &err);
+    mxFree(asset_rid);
+    throw_if_failed(status, err);
+    plhs[0] = mx_i32(out);
+}
+
+/* Asset RIDs a run belongs to, as a cell array of char vectors. */
+static void cmd_run_assets(mxArray *plhs[], int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    RunHandle run;
+    uint32_t count = 0, i;
+    mxArray *out;
+
+    require_args(nrhs, 1, "run_assets");
+    run = arg_i32(prhs[1], "run");
+
+    throw_if_failed(nominal_run_asset_count(run, &count, &err), err);
+    out = mxCreateCellMatrix((mwSize)count, 1);
+    for (i = 0; i < count; ++i) {
+        throw_if_failed(nominal_run_asset_at(run, i, g_scratch, &err), err);
+        mxSetCell(out, i, scratch_to_mx());
+    }
+    plhs[0] = out;
 }
 
 /* Returns [nanos, hasEnd]; an open run reports hasEnd false and nanos 0. */
@@ -1016,8 +1040,8 @@ static const char *job_status_name(int32_t code)
  * Borrow a MATLAB cell array of char vectors as the `const char *const *` the
  * C ABI takes.
  *
- * Three commands need this — write, export, and event creation — so it lives
- * here rather than being spelled out at each. Everything comes from mxCalloc
+ * Several commands need this, so it lives here rather than being spelled out
+ * at each. Everything comes from mxCalloc
  * and mxArrayToUTF8String, which MATLAB reclaims on error unwind as well as on
  * return, so `release` is tidiness rather than the only thing standing between
  * this and a leak.
@@ -1059,9 +1083,80 @@ static void release_string_array(StringArray *array)
     mxFree((void *)array->ptrs);
 }
 
+/*
+ * Tags and properties arrive as two cell arrays of equal length, keys and
+ * values; empty cells mean none. The MATLAB side builds them from a struct or
+ * a dictionary.
+ */
+static void borrow_pairs(const mxArray *keys_in, const mxArray *values_in,
+                         const char *what, StringArray *keys, StringArray *values)
+{
+    *keys = borrow_string_array(keys_in, what);
+    *values = borrow_string_array(values_in, what);
+    if (keys->count != values->count) {
+        mexErrMsgIdAndTxt("nominal:invalidParameter",
+                          "%s keys and values must be the same length", what);
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* Data sources                                                        */
 /* ------------------------------------------------------------------ */
+
+static void cmd_asset_add_dataset(int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    char *ref_name;
+    StringArray keys, values;
+    int32_t status;
+
+    require_args(nrhs, 6, "asset_add_dataset");
+    ref_name = arg_string(prhs[3], "refName");
+    borrow_pairs(prhs[5], prhs[6], "tag", &keys, &values);
+
+    status = nominal_asset_add_dataset(arg_i32(prhs[1], "client"),
+                                       arg_i32(prhs[2], "asset"),
+                                       ref_name,
+                                       arg_i32(prhs[4], "dataset"),
+                                       keys.ptrs, values.ptrs,
+                                       (uint32_t)keys.count, &err);
+    mxFree(ref_name);
+    release_string_array(&keys);
+    release_string_array(&values);
+    throw_if_failed(status, err);
+}
+
+static void cmd_asset_remove_data_source(int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    char *ref_name;
+    int32_t status;
+
+    require_args(nrhs, 3, "asset_remove_data_source");
+    ref_name = arg_string(prhs[3], "refName");
+    status = nominal_asset_remove_data_source(arg_i32(prhs[1], "client"),
+                                              arg_i32(prhs[2], "asset"),
+                                              ref_name, &err);
+    mxFree(ref_name);
+    throw_if_failed(status, err);
+}
+
+static void cmd_asset_rename_ref_name(int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    char *old_name, *new_name;
+    int32_t status;
+
+    require_args(nrhs, 4, "asset_rename_ref_name");
+    old_name = arg_string(prhs[3], "oldName");
+    new_name = arg_string(prhs[4], "newName");
+    status = nominal_asset_rename_ref_name(arg_i32(prhs[1], "client"),
+                                           arg_i32(prhs[2], "asset"),
+                                           old_name, new_name, &err);
+    mxFree(old_name);
+    mxFree(new_name);
+    throw_if_failed(status, err);
+}
 
 /*
  * Return every data source on an asset as a struct array.
@@ -1114,14 +1209,14 @@ static void cmd_asset_datasources(mxArray *plhs[], int nrhs, const mxArray *prhs
 static void cmd_dataset_write(int nrhs, const mxArray *prhs[])
 {
     ErrorHandle err = 0;
-    StringArray channels;
+    StringArray channels, tag_keys, tag_values;
     mwSize cols;
     size_t n_times = 0, rows;
     const int64_t *times;
     const double *values;
     int32_t status;
 
-    require_args(nrhs, 5, "dataset_write");
+    require_args(nrhs, 7, "dataset_write");
 
     channels = borrow_string_array(prhs[3], "channels");
     cols = channels.count;
@@ -1146,12 +1241,18 @@ static void cmd_dataset_write(int nrhs, const mxArray *prhs[])
                           (unsigned long long)rows, (unsigned long long)n_times);
     }
 
+    borrow_pairs(prhs[6], prhs[7], "tag", &tag_keys, &tag_values);
+
     status = nominal_write_doubles(arg_i32(prhs[1], "client"),
                                    arg_i32(prhs[2], "dataset"),
                                    channels.ptrs, (uint32_t)cols,
-                                   times, values, (uint32_t)rows, &err);
+                                   times, values, (uint32_t)rows,
+                                   tag_keys.ptrs, tag_values.ptrs,
+                                   (uint32_t)tag_keys.count, &err);
 
     release_string_array(&channels);
+    release_string_array(&tag_keys);
+    release_string_array(&tag_values);
     throw_if_failed(status, err);
 }
 
@@ -1180,6 +1281,11 @@ static void cmd_asset_list(mxArray *plhs[], int nrhs, const mxArray *prhs[],
         status = nominal_asset_search(arg_i32(prhs[1], "client"), text,
                                       &list, &count, &err);
         mxFree(text);
+    } else if (strcmp(command, "dataset_assets") == 0) {
+        require_args(nrhs, 2, command);
+        status = nominal_dataset_assets(arg_i32(prhs[1], "client"),
+                                        arg_i32(prhs[2], "dataset"),
+                                        &list, &count, &err);
     } else {
         require_args(nrhs, 1, command);
         status = nominal_asset_list(arg_i32(prhs[1], "client"), &list, &count, &err);
@@ -1358,11 +1464,11 @@ static void cmd_event_create(mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
     ErrorHandle err = 0;
     EventHandle out = 0;
-    StringArray rids;
+    StringArray rids, keys, values;
     char *name, *type_name;
     int32_t status;
 
-    require_args(nrhs, 6, "event_create");
+    require_args(nrhs, 8, "event_create");
 
     rids = borrow_string_array(prhs[2], "assetRids");
     if (rids.count == 0) {
@@ -1372,15 +1478,19 @@ static void cmd_event_create(mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
     name = arg_string(prhs[3], "name");
     type_name = arg_string(prhs[4], "type");
+    borrow_pairs(prhs[7], prhs[8], "property", &keys, &values);
 
     status = nominal_event_create(arg_i32(prhs[1], "client"),
                                   rids.ptrs, (uint32_t)rids.count,
                                   name, event_type_code(type_name),
                                   arg_i64(prhs[5], "timestamp"),
                                   arg_i64(prhs[6], "duration"),
+                                  keys.ptrs, values.ptrs, (uint32_t)keys.count,
                                   &out, &err);
 
     release_string_array(&rids);
+    release_string_array(&keys);
+    release_string_array(&values);
     mxFree(name);
     mxFree(type_name);
 
@@ -1443,27 +1553,35 @@ static void cmd_dataset_fetch(int nlhs, mxArray *plhs[], int nrhs, const mxArray
     ErrorHandle err = 0;
     SeriesHandle series = 0;
     char *channel;
+    StringArray tag_keys, tag_values;
     int32_t status;
     uint32_t length = 0, written = 0;
     mxArray *times = NULL, *values = NULL;
     int decimated = (strcmp(command, "dataset_fetch_decimated") == 0);
+    int tags_at = decimated ? 7 : 6;   /* tag keys, then values, come last */
 
     require_outputs(nlhs, 2, command);
-    require_args(nrhs, decimated ? 6 : 5, command);
+    require_args(nrhs, tags_at + 1, command);
     channel = arg_string(prhs[3], "channel");
+    borrow_pairs(prhs[tags_at], prhs[tags_at + 1], "tag", &tag_keys, &tag_values);
 
     if (decimated) {
         status = nominal_compute_fetch_decimated(
             arg_i32(prhs[1], "client"), arg_i32(prhs[2], "dataset"), channel,
             arg_i64(prhs[4], "startNanos"), arg_i64(prhs[5], "endNanos"),
-            (uint32_t)arg_i32(prhs[6], "buckets"), &series, &err);
+            (uint32_t)arg_i32(prhs[6], "buckets"),
+            tag_keys.ptrs, tag_values.ptrs, (uint32_t)tag_keys.count,
+            &series, &err);
     } else {
         status = nominal_compute_fetch(
             arg_i32(prhs[1], "client"), arg_i32(prhs[2], "dataset"), channel,
             arg_i64(prhs[4], "startNanos"), arg_i64(prhs[5], "endNanos"),
+            tag_keys.ptrs, tag_values.ptrs, (uint32_t)tag_keys.count,
             &series, &err);
     }
     mxFree(channel);
+    release_string_array(&tag_keys);
+    release_string_array(&tag_values);
     /* No series exists on failure, so there is nothing to release yet. */
     throw_if_failed(status, err);
 
@@ -1552,17 +1670,19 @@ static void cmd_ingest_file(int nlhs, mxArray *plhs[], int nrhs, const mxArray *
     ErrorHandle err = 0;
     IngestJobHandle job = 0;
     char *path, *new_name, *column, *kind, *unit;
+    StringArray tag_keys, tag_values;
     int32_t status, kind_code, unit_code;
     int parquet = (strcmp(command, "ingest_parquet") == 0);
 
     require_outputs(nlhs, 2, command);
-    require_args(nrhs, 7, command);
+    require_args(nrhs, 9, command);
 
     path = arg_string(prhs[2], "path");
     new_name = arg_string(prhs[4], "newDatasetName");
     column = arg_string(prhs[5], "timestampColumn");
     kind = arg_string(prhs[6], "timestampKind");
     unit = arg_string(prhs[7], "timestampUnit");
+    borrow_pairs(prhs[8], prhs[9], "tag", &tag_keys, &tag_values);
 
     kind_code = timestamp_kind_code(kind);
     unit_code = time_unit_code(unit);
@@ -1571,13 +1691,17 @@ static void cmd_ingest_file(int nlhs, mxArray *plhs[], int nrhs, const mxArray *
      * that this call just created. */
     status = (parquet ? nominal_ingest_parquet : nominal_ingest_csv)(
         arg_i32(prhs[1], "client"), path, arg_i32(prhs[3], "dataset"),
-        new_name, column, kind_code, unit_code, &job, g_scratch, &err);
+        new_name, column, kind_code, unit_code,
+        tag_keys.ptrs, tag_values.ptrs, (uint32_t)tag_keys.count,
+        &job, g_scratch, &err);
 
     mxFree(path);
     mxFree(new_name);
     mxFree(column);
     mxFree(kind);
     mxFree(unit);
+    release_string_array(&tag_keys);
+    release_string_array(&tag_values);
     throw_if_failed(status, err);
 
     plhs[0] = mx_i32(job);
@@ -1760,6 +1884,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
     /* --- asset --- */
     if (IS("asset_get_or_create")) { do_lookup(nominal_asset_get_or_create_by_name, nlhs, plhs, nrhs, prhs, command); return; }
+    if (IS("asset_create"))        { do_lookup(nominal_asset_create, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("asset_get_by_rid"))    { do_lookup(nominal_asset_get_by_rid, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("asset_update_commit")) { cmd_asset_update_commit(plhs, nrhs, prhs); return; }
     if (IS("asset_free"))          { do_free(nominal_asset_free, nlhs, plhs, nrhs, prhs, command); return; }
@@ -1771,10 +1896,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("asset_label_at"))      { cmd_label_at(nominal_asset_label_at, plhs, nrhs, prhs, command); return; }
     if (IS("asset_property"))      { cmd_property(nominal_asset_property, plhs, nrhs, prhs, command); return; }
     if (IS("asset_datasources"))   { cmd_asset_datasources(plhs, nrhs, prhs); return; }
-    if (IS("asset_list") || IS("asset_search")) { cmd_asset_list(plhs, nrhs, prhs, command); return; }
+    if (IS("asset_list") || IS("asset_search") || IS("dataset_assets")) { cmd_asset_list(plhs, nrhs, prhs, command); return; }
+    if (IS("asset_remove_data_source")) { cmd_asset_remove_data_source(nrhs, prhs); return; }
+    if (IS("asset_rename_ref_name"))    { cmd_asset_rename_ref_name(nrhs, prhs); return; }
 
     /* --- dataset --- */
     if (IS("dataset_get_by_rid"))     { do_lookup(nominal_dataset_get_by_rid, nlhs, plhs, nrhs, prhs, command); return; }
+    if (IS("dataset_create"))         { do_lookup(nominal_dataset_create, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("dataset_list") || IS("dataset_search")) { cmd_dataset_list(plhs, nrhs, prhs, command); return; }
     if (IS("dataset_write"))          { cmd_dataset_write(nrhs, prhs); return; }
     if (IS("dataset_get_or_create"))  { cmd_dataset_get_or_create(plhs, nlhs, nrhs, prhs); return; }
@@ -1794,6 +1922,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("run_get_by_rid"))     { do_lookup(nominal_run_get_by_rid, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("run_set_end_time"))   { cmd_run_set_end_time(plhs, nrhs, prhs); return; }
     if (IS("run_add_dataset"))    { cmd_run_add_dataset(plhs, nrhs, prhs); return; }
+    if (IS("run_add_asset"))      { cmd_run_edit_asset(nominal_run_add_asset, plhs, nrhs, prhs, command); return; }
+    if (IS("run_remove_asset"))   { cmd_run_edit_asset(nominal_run_remove_asset, plhs, nrhs, prhs, command); return; }
+    if (IS("run_assets"))         { cmd_run_assets(plhs, nrhs, prhs); return; }
     if (IS("run_update_commit"))  { cmd_run_update_commit(plhs, nrhs, prhs); return; }
     if (IS("run_free"))           { do_free(nominal_run_free, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("run_rid"))            { do_getter_string(nominal_run_rid, nlhs, plhs, nrhs, prhs, command); return; }
@@ -1850,6 +1981,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("event_timestamp")) { cmd_event_i64(nominal_event_timestamp, plhs, nrhs, prhs, command); return; }
     if (IS("event_duration"))  { cmd_event_i64(nominal_event_duration, plhs, nrhs, prhs, command); return; }
     if (IS("event_assets"))    { cmd_event_assets(plhs, nrhs, prhs); return; }
+    if (IS("event_property"))  { cmd_property(nominal_event_property, plhs, nrhs, prhs, command); return; }
 
     /* --- reading data back --- */
     if (IS("dataset_fetch") || IS("dataset_fetch_decimated")) { cmd_dataset_fetch(nlhs, plhs, nrhs, prhs, command); return; }

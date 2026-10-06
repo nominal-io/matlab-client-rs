@@ -6,6 +6,10 @@ classdef Run < nominal.Resource
     %       r = a.run("burn-12");           % starts now, left open
     %       r = c.runByRid(rid);
     %
+    %   A run can span several assets, say a test chamber and the unit in it:
+    %
+    %       r = r.addAsset(dut);
+    %
     %   Closing it:
     %
     %       r = r.finish();                 % ends now
@@ -24,6 +28,7 @@ classdef Run < nominal.Resource
         Labels string       % All labels, as a string array.
         StartTime datetime  % When the run began, UTC.
         EndTime datetime    % When it ended, or NaT while still open.
+        AssetRids string    % Assets it belongs to.
     end
 
     properties (Access = private)
@@ -73,6 +78,11 @@ classdef Run < nominal.Resource
             end
         end
 
+        function v = get.AssetRids(obj)
+            obj.assertLive();
+            v = reshape(string(nominalmex('run_assets', obj.Handle)), 1, []);
+        end
+
         function value = property(obj, key)
             %PROPERTY  Value of one property. Errors if the key is absent.
             arguments
@@ -81,6 +91,44 @@ classdef Run < nominal.Resource
             end
             obj.assertLive();
             value = string(nominalmex('run_property', obj.Handle, char(key)));
+        end
+
+        function updated = addAsset(obj, asset)
+            %ADDASSET  Put this run on another asset, returning the updated run.
+            %
+            %   r = chamber.run("test-42");
+            %   r = r.addAsset(dut);
+            %
+            %   asset is a nominal.Asset or an asset RID. Adding one the run
+            %   already has changes nothing.
+            %
+            %   See also NOMINAL.RUN/REMOVEASSET, NOMINAL.ASSET/RUN
+            arguments
+                obj (1,1) nominal.Run
+                asset           % an Asset or a RID; checked in assetRid
+            end
+            obj.assertLive();
+            updated = nominal.Run(obj.Client, ...
+                nominalmex('run_add_asset', obj.Client.Handle, obj.Handle, ...
+                           char(nominal.Run.assetRid(asset))));
+        end
+
+        function updated = removeAsset(obj, asset)
+            %REMOVEASSET  Take this run off an asset, returning the updated run.
+            %
+            %   asset is a nominal.Asset or an asset RID. Errors if the run is
+            %   not on it, or if it is the run's only asset: a run always has
+            %   one.
+            %
+            %   See also NOMINAL.RUN/ADDASSET
+            arguments
+                obj (1,1) nominal.Run
+                asset           % an Asset or a RID; checked in assetRid
+            end
+            obj.assertLive();
+            updated = nominal.Run(obj.Client, ...
+                nominalmex('run_remove_asset', obj.Client.Handle, obj.Handle, ...
+                           char(nominal.Run.assetRid(asset))));
         end
 
         function updated = finish(obj, endTime)
@@ -154,6 +202,20 @@ classdef Run < nominal.Resource
 
             updated = nominal.Run(obj.Client, ...
                 nominalmex('run_update_commit', obj.Client.Handle, obj.Handle, u));
+        end
+    end
+
+    methods (Static, Access = private)
+        function rid = assetRid(asset)
+            % An Asset or a RID, so r.AssetRids feeds straight back in.
+            if isa(asset, 'nominal.Asset') && isscalar(asset)
+                rid = asset.Rid;
+            elseif (isstring(asset) && isscalar(asset)) || (ischar(asset) && isrow(asset))
+                rid = string(asset);
+            else
+                error('nominal:invalidParameter', ...
+                      'asset must be a nominal.Asset or an asset RID, not %s', class(asset));
+            end
         end
     end
 

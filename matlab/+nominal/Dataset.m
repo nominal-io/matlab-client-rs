@@ -5,6 +5,7 @@ classdef Dataset < nominal.Resource
     %
     %       ds = a.getOrCreateDataset("telemetry", "tlm");
     %       ds = c.datasetByRid(rid);
+    %       ds = c.createDataset("shared");      % attached to nothing
     %
     %   Streaming into it:
     %
@@ -57,6 +58,19 @@ classdef Dataset < nominal.Resource
             value = string(nominalmex('dataset_property', obj.Handle, char(key)));
         end
 
+        function t = assets(obj)
+            %ASSETS  Every asset this dataset is attached to, as a table.
+            %
+            %   Variables: Name, Rid, Description. Ordered by name. An asset
+            %   holding the dataset more than once, under different tags, is
+            %   listed once.
+            %
+            %   See also NOMINAL.ASSET/ADDDATASET
+            obj.assertLive();
+            t = structsToTable(nominalmex('dataset_assets', obj.Client.Handle, obj.Handle), ...
+                               ["Name" "Rid" "Description"]);
+        end
+
         function s = stream(obj)
             %STREAM  Open a stream that writes into this dataset.
             %
@@ -67,14 +81,19 @@ classdef Dataset < nominal.Resource
             s = nominal.Stream(nominalmex('stream_create', obj.Client.Handle, obj.Handle));
         end
 
-        function write(obj, channels, timestamps, values)
+        function write(obj, channels, timestamps, values, options)
             %WRITE  Send a block of samples in one call, with no stream.
             %
             %   ds.write(["rpm" "egt"], t, V)
+            %   ds.write(["rpm" "egt"], t, V, Tags=struct(UUT="A"))
             %
             %   channels   1-by-C string array of channel names
             %   timestamps N-by-1 int64 nanoseconds, or a datetime vector
             %   values     N-by-C double, one column per channel
+            %
+            %   Tags are stamped on every point written: a struct, or a
+            %   dictionary for keys that aren't valid field names. An asset
+            %   attached with the same Tags sees these points.
             %
             %   Returns once the write has been accepted; nothing to flush or
             %   close. Use this for data already in memory, and stream() for
@@ -91,6 +110,7 @@ classdef Dataset < nominal.Resource
                 channels (1,:) string
                 timestamps
                 values (:,:) double
+                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
             end
             obj.assertLive();
 
@@ -99,9 +119,11 @@ classdef Dataset < nominal.Resource
                       'values has %d columns but %d channels were given', ...
                       size(values, 2), numel(channels));
             end
+            [tagKeys, tagValues] = keyValuePairs(options.Tags, "tag");
 
             nominalmex('dataset_write', obj.Client.Handle, obj.Handle, ...
-                       cellstr(channels), nominal.toNanosVector(timestamps), values);
+                       cellstr(channels), nominal.toNanosVector(timestamps), values, ...
+                       tagKeys, tagValues);
         end
 
         function m = channelMetadata(obj, name)
@@ -155,6 +177,11 @@ classdef Dataset < nominal.Resource
             %   Timetable row times are datetimes, which do not resolve to
             %   nanoseconds. Use export if you need the exact instants.
             %
+            %   A channel written with tags holds one series per tag set. If
+            %   it has more than one, pick with Tags, as given to write:
+            %
+            %       tt = ds.fetch("rpm", t0, t1, Tags=struct(UUT="A"))
+            %
             %   See also NOMINAL.DATASET/EXPORT, RETIME, SYNCHRONIZE
             arguments
                 obj (1,1) nominal.Dataset
@@ -166,18 +193,21 @@ classdef Dataset < nominal.Resource
                 % a default of 0 rejects every call that omits Buckets. Zero
                 % is the sentinel for "no decimation".
                 options.Buckets (1,1) double {mustBeNonnegative, mustBeInteger} = 0
+                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
             end
             obj.assertLive();
+            [tagKeys, tagValues] = keyValuePairs(options.Tags, "tag");
 
             if options.Buckets > 0
                 [nanos, values] = nominalmex('dataset_fetch_decimated', ...
                     obj.Client.Handle, obj.Handle, char(channel), ...
                     nominal.toNanos(startTime), nominal.toNanos(endTime), ...
-                    int32(options.Buckets));
+                    int32(options.Buckets), tagKeys, tagValues);
             else
                 [nanos, values] = nominalmex('dataset_fetch', ...
                     obj.Client.Handle, obj.Handle, char(channel), ...
-                    nominal.toNanos(startTime), nominal.toNanos(endTime));
+                    nominal.toNanos(startTime), nominal.toNanos(endTime), ...
+                    tagKeys, tagValues);
             end
 
             tt = timetable(nominal.fromNanos(nanos), values);

@@ -158,10 +158,11 @@ function results = nominalexample_uploaddemo(assetName)
     results.IngestedDatasetRid = ingestTarget.Rid;
 
     % Kind="epoch", Unit="seconds" for a posixtime column. ISO 8601 is the
-    % default.
+    % default. Tags are stamped on every point in the file.
     ingestJob = client.ingest(csvFilePath, TimestampColumn="time", ...
                               Dataset=ingestTarget, ...
-                              Kind="epoch", Unit="seconds");
+                              Kind="epoch", Unit="seconds", ...
+                              Tags=struct(source="csv"));
     fprintf('Ingest job %s\n', ingestJob.Rid);
     fprintf('  landing in %s\n', ingestJob.DatasetRid);
     fprintf('  status now: %s\n', ingestJob.status());
@@ -181,6 +182,12 @@ function results = nominalexample_uploaddemo(assetName)
     if finalStatus == "completed"
         fprintf('  dataset "%s" now has %d channel(s)\n', ...
                 ingestTarget.Name, height(ingestTarget.channels()));
+
+        % Read back by tag. A channel with several tag sets needs Tags to
+        % pick one; with a single set it is optional.
+        tagged = ingestTarget.fetch("csvrpm", startTime, endTime, ...
+                                    Tags=struct(source="csv"));
+        fprintf('  %d points carry source=csv\n', height(tagged));
     end
 
     % 5 -------------------------------------------------------- teardown
