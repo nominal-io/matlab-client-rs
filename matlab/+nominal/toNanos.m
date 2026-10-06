@@ -1,16 +1,22 @@
 function nanos = toNanos(value)
 %TONANOS  Convert a time to int64 nanoseconds since the Unix epoch.
 %
-%   Accepts a zoned datetime, an int64 nanosecond count, or 0. Used wherever
-%   the library takes a single instant, so callers can write either
+%   Used wherever the library takes a single instant, so callers can write
+%   either
 %
 %       r = a.run("burn-12", datetime("now", TimeZone="UTC"));
 %       r = a.run("burn-12", int64(1735689600000000000));
 %
-%   A plain double is refused unless it is 0: doubles lose integer precision
-%   past 2^53 nanoseconds, which is 1970 plus 104 days, so any present-day
-%   timestamp passed as one would be silently rounded. Zero is allowed
-%   because it is the "now" sentinel for run and event times.
+%   Args:
+%       value: A zoned datetime, an int64 nanosecond count, or 0. A plain
+%           double is refused unless it is 0: doubles lose integer
+%           precision past 2^53 nanoseconds, which is 1970 plus 104 days,
+%           so any present-day timestamp passed as one would be silently
+%           rounded. Zero is allowed because it is the "now" sentinel for
+%           run and event times.
+%
+%   Returns:
+%       int64: Nanoseconds since the Unix epoch.
 %
 %   See also NOMINAL.FROMNANOS, NOMINAL.NOW
 

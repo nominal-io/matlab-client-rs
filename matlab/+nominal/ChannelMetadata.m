@@ -31,11 +31,30 @@ classdef ChannelMetadata < nominal.Resource
             obj.Handle = handle;
         end
 
-        function v = get.Name(obj);          obj.assertLive(); v = string(nominalmex('meta_name', obj.Handle));           end
-        function v = get.Unit(obj);          obj.assertLive(); v = string(nominalmex('meta_unit', obj.Handle));           end
-        function v = get.Description(obj);   obj.assertLive(); v = string(nominalmex('meta_description', obj.Handle));    end
-        function v = get.DataType(obj);      obj.assertLive(); v = string(nominalmex('meta_data_type', obj.Handle));      end
-        function v = get.DatasourceRid(obj); obj.assertLive(); v = string(nominalmex('meta_datasource_rid', obj.Handle)); end
+        function v = get.Name(obj)
+            obj.assertLive();
+            v = string(nominalmex('meta_name', obj.Handle));
+        end
+
+        function v = get.Unit(obj)
+            obj.assertLive();
+            v = string(nominalmex('meta_unit', obj.Handle));
+        end
+
+        function v = get.Description(obj)
+            obj.assertLive();
+            v = string(nominalmex('meta_description', obj.Handle));
+        end
+
+        function v = get.DataType(obj)
+            obj.assertLive();
+            v = string(nominalmex('meta_data_type', obj.Handle));
+        end
+
+        function v = get.DatasourceRid(obj)
+            obj.assertLive();
+            v = string(nominalmex('meta_datasource_rid', obj.Handle));
+        end
     end
 
     methods (Access = protected)

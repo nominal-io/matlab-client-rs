@@ -51,11 +51,14 @@ classdef Channel < nominal.Resource
         function push(obj, timestamps, values)
             %PUSH  Write a batch of samples to this channel.
             %
-            %   timestamps is int64 nanoseconds or a datetime vector; values is
-            %   a double vector of the same length. Timestamps are literal,
-            %   including zero.
+            %   ch.push(t, v)
             %
             %   Blocks if the stream has saturated.
+            %
+            %   Args:
+            %       timestamps: int64 nanoseconds or a datetime vector.
+            %           Literal, including zero.
+            %       values: Double vector of the same length.
             arguments
                 obj (1,1) nominal.Channel
                 timestamps
@@ -71,6 +74,9 @@ classdef Channel < nominal.Resource
             %
             %   Not a nominal.Stream object, since the stream is owned by the
             %   object you opened it from.
+            %
+            %   Returns:
+            %       int32: The stream's handle.
             obj.assertLive();
             s = nominalmex('channel_stream', obj.Handle);
         end

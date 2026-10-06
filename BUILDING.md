@@ -5,7 +5,7 @@ Building produces one file: `matlab/+nominal/private/nominalmex.mexw64` (or
 is no DLL and nothing to put on `PATH`. Installing means getting `matlab/` onto
 the MATLAB path.
 
-Once it is built, see [USAGE.md](USAGE.md).
+Once it is built, see the [documentation](https://dev.nominal.io/matlab/client/).
 
 ## Prerequisites
 
@@ -185,6 +185,43 @@ platform, see [PACKAGING.md](PACKAGING.md).
 The packager's other decisions (the fixed identifier UUID, which folders land
 on the installed path, the `MinimumMatlabRelease` floor) are set and explained
 in [tools/package.m](tools/package.m).
+
+## Docs
+
+The site at [https://dev.nominal.io/matlab/client/](https://dev.nominal.io/matlab/client/) is built from `docs/` and needs
+[uv](https://docs.astral.sh/uv/):
+
+```
+just build-docs     # docs/_build/dirhtml; warnings fail the build, as in CI
+just serve-docs     # live preview on http://127.0.0.1:8000
+```
+
+The reference pages come from the help text in `matlab/+nominal`, so edit the help text, not
+the docs. `docs/_ext/matlab_help.py` renders MathWorks-style help as reST; `matlab_ref.py` and
+`examples.py` generate `docs/ref/` and `docs/examples/`, which are gitignored.
+
+Help text keeps MathWorks style: a one-line `%NAME  Summary.`, usage lines under it, prose,
+and `See also`. Arguments, name-value options and outputs go in `Args:`, `Options:` and
+`Returns:` sections, which Sphinx's napoleon renders as parameter lists. `Dataset.m` shows the
+pattern:
+
+```matlab
+%   Args:
+%       startTime: Zoned datetime or int64 nanoseconds.
+%
+%   Options:
+%       Buckets: Decimate server-side to roughly this many points.
+%
+%   Returns:
+%       timetable: One variable, named after the channel.
+```
+
+List every name-value option, since the web signature shows them only as `options`. Skip
+positional arguments whose name says it all, and leave types out: the `arguments` block has them.
+
+`.github/workflows/deploy-docs.yml` deploys the build to this repo's GitHub Pages on every
+push to `main`, and the Nominal docs hub ([nominal-io/pub-docs](https://github.com/nominal-io/pub-docs))
+pulls it from there.
 
 ## Build artifacts and version control
 

@@ -1,0 +1,5 @@
+/* The MATLAB domain emits a "Constructor Summary" heading whenever a class has a constructor,
+   even when the constructor is excluded from the page. Hide any member heading with nothing
+   under it. */
+.members > dl > dt:has(+ dd:empty) { display: none; }
+.members > dl > dd:empty { display: none; }

@@ -17,11 +17,11 @@ tt = ds.fetch("rpm", t0, t1);              % get a timetable back
 
 | | |
 |---|---|
-| **[HELLOWORLD.md](HELLOWORLD.md)** | Handed a `.mltbx`? Install it, connect, run something. No repo needed. |
-| **[USAGE.md](USAGE.md)** | Quick start, authenticating, every object and method, common workflows |
+| **[Documentation](https://dev.nominal.io/matlab/client/)** | Quickstart, guides, examples and the full reference. Source in [docs/](docs/). |
 | **[BUILDING.md](BUILDING.md)** | Prerequisites, building the gateway, installing it, packaging a `.mltbx` |
 | **[PACKAGING.md](PACKAGING.md)** | Building on Windows, macOS and Linux and shipping one multi-platform `.mltbx` |
 | **[matlab/examples/](matlab/examples/)** | Runnable demos. `nominalexample_alldemos` runs them all. |
+| **[docs/](docs/)** | The Sphinx site: `just build-docs`, `just serve-docs`. See [BUILDING.md](BUILDING.md#docs). |
 
 ## How it behaves
 

@@ -46,11 +46,30 @@ classdef Run < nominal.Resource
             obj.Handle = handle;
         end
 
-        function v = get.Rid(obj);         obj.assertLive(); v = string(nominalmex('run_rid', obj.Handle));         end
-        function v = get.Name(obj);        obj.assertLive(); v = string(nominalmex('run_name', obj.Handle));        end
-        function v = get.Description(obj); obj.assertLive(); v = string(nominalmex('run_description', obj.Handle)); end
-        function v = get.Url(obj);         obj.assertLive(); v = string(nominalmex('run_url', obj.Handle));         end
-        function v = get.Number(obj);      obj.assertLive(); v = nominalmex('run_number', obj.Handle);              end
+        function v = get.Rid(obj)
+            obj.assertLive();
+            v = string(nominalmex('run_rid', obj.Handle));
+        end
+
+        function v = get.Name(obj)
+            obj.assertLive();
+            v = string(nominalmex('run_name', obj.Handle));
+        end
+
+        function v = get.Description(obj)
+            obj.assertLive();
+            v = string(nominalmex('run_description', obj.Handle));
+        end
+
+        function v = get.Url(obj)
+            obj.assertLive();
+            v = string(nominalmex('run_url', obj.Handle));
+        end
+
+        function v = get.Number(obj)
+            obj.assertLive();
+            v = nominalmex('run_number', obj.Handle);
+        end
 
         function v = get.StartTime(obj)
             obj.assertLive();
@@ -85,6 +104,9 @@ classdef Run < nominal.Resource
 
         function value = property(obj, key)
             %PROPERTY  Value of one property. Errors if the key is absent.
+            %
+            %   Returns:
+            %       string: The property's value.
             arguments
                 obj (1,1) nominal.Run
                 key (1,1) string
@@ -99,8 +121,13 @@ classdef Run < nominal.Resource
             %   r = chamber.run("test-42");
             %   r = r.addAsset(dut);
             %
-            %   asset is a nominal.Asset or an asset RID. Adding one the run
-            %   already has changes nothing.
+            %   Adding one the run already has changes nothing.
+            %
+            %   Args:
+            %       asset: A nominal.Asset or an asset RID.
+            %
+            %   Returns:
+            %       nominal.Run: The updated run.
             %
             %   See also NOMINAL.RUN/REMOVEASSET, NOMINAL.ASSET/RUN
             arguments
@@ -116,9 +143,16 @@ classdef Run < nominal.Resource
         function updated = removeAsset(obj, asset)
             %REMOVEASSET  Take this run off an asset, returning the updated run.
             %
-            %   asset is a nominal.Asset or an asset RID. Errors if the run is
-            %   not on it, or if it is the run's only asset: a run always has
-            %   one.
+            %   r = r.removeAsset(dut);
+            %
+            %   Errors if the run is not on it, or if it is the run's only
+            %   asset: a run always has one.
+            %
+            %   Args:
+            %       asset: A nominal.Asset or an asset RID.
+            %
+            %   Returns:
+            %       nominal.Run: The updated run.
             %
             %   See also NOMINAL.RUN/ADDASSET
             arguments
@@ -134,8 +168,14 @@ classdef Run < nominal.Resource
         function updated = finish(obj, endTime)
             %FINISH  Close the run, returning the updated run.
             %
-            %   endTime may be a datetime or int64 nanoseconds. Omit it to end
-            %   the run now, which is the usual case.
+            %   r = r.finish();
+            %
+            %   Args:
+            %       endTime: Zoned datetime or int64 nanoseconds. Omit it to
+            %           end the run now, which is the usual case.
+            %
+            %   Returns:
+            %       nominal.Run: The closed run.
             arguments
                 obj (1,1) nominal.Run
                 endTime = int64(0)
@@ -171,10 +211,26 @@ classdef Run < nominal.Resource
         function updated = update(obj, options)
             %UPDATE  Apply metadata changes, returning the updated run.
             %
-            %   Takes StartTime and EndTime as well as the shared fields.
-            %   Labels and Properties REPLACE rather than merge. Fields not
-            %   passed are left alone. The original object still shows the
-            %   pre-update state.
+            %   r2 = r.update(Labels=["burn" "nominal"], ...
+            %                 EndTime=datetime("now", TimeZone="UTC"));
+            %
+            %   Options not passed are left alone. Labels and Properties
+            %   REPLACE rather than merge: read r.Labels first and concatenate
+            %   if you mean to add.
+            %
+            %   Options:
+            %       Name: New display name.
+            %       Description: New description.
+            %       Properties: Struct of key-value pairs, replacing all of
+            %           them. struct() clears them.
+            %       Labels: String array, replacing all of them. string.empty
+            %           clears them.
+            %       StartTime: Zoned datetime or int64 nanoseconds.
+            %       EndTime: Zoned datetime or int64 nanoseconds.
+            %
+            %   Returns:
+            %       nominal.Run: A new handle with the changes applied. The
+            %       original still shows the pre-update state.
             arguments
                 obj (1,1) nominal.Run
                 % No defaults on the shared fields, so stageUpdate can tell

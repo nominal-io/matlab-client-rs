@@ -46,8 +46,10 @@ classdef IngestJob < nominal.Resource
         function s = status(obj)
             %STATUS  Read the job's current state from the server.
             %
-            %   One of submitted, queued, inProgress, completed, failed, or
-            %   cancelled. The first three mean it is still running.
+            %   Returns:
+            %       string: "submitted", "queued", "inProgress", "completed",
+            %       "failed" or "cancelled". The first three mean it is still
+            %       running.
             obj.assertLive();
             s = string(nominalmex('ingest_status', obj.Client.Handle, obj.Handle));
         end
@@ -55,9 +57,8 @@ classdef IngestJob < nominal.Resource
         function s = wait(obj)
             %WAIT  Block until the job finishes.
             %
-            %   Returns "completed" when the ingest succeeds, and RAISES
-            %   nominal:nominalError when it fails. Wrap it if a failure is
-            %   something you want to report rather than throw:
+            %   RAISES nominal:nominalError when the ingest fails. Wrap it if a
+            %   failure is something you want to report rather than throw:
             %
             %       try
             %           job.wait();
@@ -67,6 +68,9 @@ classdef IngestJob < nominal.Resource
             %
             %   Or poll status() in a loop. No timeout, so a stuck job blocks
             %   indefinitely.
+            %
+            %   Returns:
+            %       string: "completed", when the ingest succeeds.
             obj.assertLive();
             s = string(nominalmex('ingest_wait', obj.Client.Handle, obj.Handle));
         end

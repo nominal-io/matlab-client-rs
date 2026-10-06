@@ -6,7 +6,7 @@ MEX binaries cannot be cross-compiled, so each gateway is built on its own
 machine. One `.mltbx` can then carry all of them; MATLAB picks the right one by
 `mexext` at call time.
 
-For installing the finished file, see [HELLOWORLD.md](HELLOWORLD.md). For what
+For installing the finished file, see the [Quickstart](https://dev.nominal.io/matlab/client/quickstart/). For what
 the build is doing, see [BUILDING.md](BUILDING.md).
 
 ## Before you start

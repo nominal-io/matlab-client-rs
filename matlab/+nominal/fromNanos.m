@@ -1,11 +1,16 @@
 function dt = fromNanos(nanos)
 %FROMNANOS  Convert int64 nanoseconds since the Unix epoch to a UTC datetime.
 %
-%   The inverse of nominal.toNanos. Always returns a UTC datetime; set its
-%   TimeZone to view it locally.
+%   The inverse of nominal.toNanos.
 %
 %   datetime does not resolve to nanoseconds, so the conversion is not exact
 %   at that level. Keep the raw int64 if you need the exact instant.
+%
+%   Args:
+%       nanos: int64 nanoseconds since the Unix epoch.
+%
+%   Returns:
+%       datetime: Always UTC; set its TimeZone to view it locally.
 %
 %   See also NOMINAL.TONANOS, NOMINAL.NOW
 

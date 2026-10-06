@@ -30,9 +30,20 @@ classdef Event < nominal.Resource
             obj.Handle = handle;
         end
 
-        function v = get.Rid(obj);  obj.assertLive(); v = string(nominalmex('event_rid', obj.Handle));  end
-        function v = get.Name(obj); obj.assertLive(); v = string(nominalmex('event_name', obj.Handle)); end
-        function v = get.Type(obj); obj.assertLive(); v = string(nominalmex('event_type', obj.Handle)); end
+        function v = get.Rid(obj)
+            obj.assertLive();
+            v = string(nominalmex('event_rid', obj.Handle));
+        end
+
+        function v = get.Name(obj)
+            obj.assertLive();
+            v = string(nominalmex('event_name', obj.Handle));
+        end
+
+        function v = get.Type(obj)
+            obj.assertLive();
+            v = string(nominalmex('event_type', obj.Handle));
+        end
 
         function v = get.Timestamp(obj)
             obj.assertLive();
@@ -56,6 +67,9 @@ classdef Event < nominal.Resource
 
         function value = property(obj, key)
             %PROPERTY  Value of one property. Errors if the key is absent.
+            %
+            %   Returns:
+            %       string: The property's value.
             arguments
                 obj (1,1) nominal.Event
                 key (1,1) string

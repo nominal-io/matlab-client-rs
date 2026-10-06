@@ -35,9 +35,20 @@ classdef Dataset < nominal.Resource
             obj.Handle = handle;
         end
 
-        function v = get.Rid(obj);         obj.assertLive(); v = string(nominalmex('dataset_rid', obj.Handle));         end
-        function v = get.Name(obj);        obj.assertLive(); v = string(nominalmex('dataset_name', obj.Handle));        end
-        function v = get.Description(obj); obj.assertLive(); v = string(nominalmex('dataset_description', obj.Handle)); end
+        function v = get.Rid(obj)
+            obj.assertLive();
+            v = string(nominalmex('dataset_rid', obj.Handle));
+        end
+
+        function v = get.Name(obj)
+            obj.assertLive();
+            v = string(nominalmex('dataset_name', obj.Handle));
+        end
+
+        function v = get.Description(obj)
+            obj.assertLive();
+            v = string(nominalmex('dataset_description', obj.Handle));
+        end
 
         function v = get.Labels(obj)
             obj.assertLive();
@@ -50,6 +61,9 @@ classdef Dataset < nominal.Resource
 
         function value = property(obj, key)
             %PROPERTY  Value of one property. Errors if the key is absent.
+            %
+            %   Returns:
+            %       string: The property's value.
             arguments
                 obj (1,1) nominal.Dataset
                 key (1,1) string
@@ -61,9 +75,11 @@ classdef Dataset < nominal.Resource
         function t = assets(obj)
             %ASSETS  Every asset this dataset is attached to, as a table.
             %
-            %   Variables: Name, Rid, Description. Ordered by name. An asset
-            %   holding the dataset more than once, under different tags, is
-            %   listed once.
+            %   An asset holding the dataset more than once, under different
+            %   tags, is listed once.
+            %
+            %   Returns:
+            %       table: Variables Name, Rid and Description, ordered by name.
             %
             %   See also NOMINAL.ASSET/ADDDATASET
             obj.assertLive();
@@ -76,7 +92,12 @@ classdef Dataset < nominal.Resource
             %
             %   Data is buffered and sent in the background. The stream flushes
             %   when released; call delete(s) to make that happen at a known
-            %   point. See nominal.Stream.
+            %   point.
+            %
+            %   Returns:
+            %       nominal.Stream: The open stream.
+            %
+            %   See also NOMINAL.STREAM
             obj.assertLive();
             s = nominal.Stream(nominalmex('stream_create', obj.Client.Handle, obj.Handle));
         end
@@ -87,14 +108,6 @@ classdef Dataset < nominal.Resource
             %   ds.write(["rpm" "egt"], t, V)
             %   ds.write(["rpm" "egt"], t, V, Tags=struct(UUT="A"))
             %
-            %   channels   1-by-C string array of channel names
-            %   timestamps N-by-1 int64 nanoseconds, or a datetime vector
-            %   values     N-by-C double, one column per channel
-            %
-            %   Tags are stamped on every point written: a struct, or a
-            %   dictionary for keys that aren't valid field names. An asset
-            %   attached with the same Tags sees these points.
-            %
             %   Returns once the write has been accepted; nothing to flush or
             %   close. Use this for data already in memory, and stream() for
             %   continuous acquisition.
@@ -102,7 +115,16 @@ classdef Dataset < nominal.Resource
             %   Keep a call to roughly 50,000 points and at most 10 channels.
             %   Past that, use a stream.
             %
-            %   Timestamps are literal, including zero.
+            %   Args:
+            %       channels: 1-by-C string array of channel names.
+            %       timestamps: N-by-1 int64 nanoseconds, or a datetime
+            %           vector. Literal, including zero.
+            %       values: N-by-C double, one column per channel.
+            %
+            %   Options:
+            %       Tags: Stamped on every point written. A struct, or a
+            %           dictionary for keys that aren't valid field names. An
+            %           asset attached with the same Tags sees these points.
             %
             %   See also NOMINAL.DATASET/STREAM
             arguments
@@ -131,6 +153,10 @@ classdef Dataset < nominal.Resource
             %
             %   Errors if the dataset has no channel with that name. Use
             %   setChannelMetadata to attach metadata before any data exists.
+            %
+            %   Returns:
+            %       nominal.ChannelMetadata: The channel's units, description
+            %       and data type.
             arguments
                 obj (1,1) nominal.Dataset
                 name (1,1) string
@@ -143,12 +169,14 @@ classdef Dataset < nominal.Resource
         function t = channels(obj)
             %CHANNELS  Every channel in this dataset, as a table.
             %
-            %   Variables: Name, Unit, Description, DataType. Ordered by name.
-            %
             %       ds.channels()
             %       ds.channels().Name                    % just the names
             %       c = ds.channels();
             %       c(c.Unit == "Cel", :)                 % only the temperatures
+            %
+            %   Returns:
+            %       table: Variables Name, Unit, Description and DataType,
+            %       ordered by name.
             obj.assertLive();
             t = structsToTable(nominalmex('meta_list', obj.Client.Handle, obj.Handle), ...
                                ["Name" "Unit" "Description" "DataType"]);
@@ -159,28 +187,33 @@ classdef Dataset < nominal.Resource
             %
             %   tt = ds.fetch("rpm", t0, t1)
             %   tt = ds.fetch("rpm", t0, t1, Buckets=2000)
+            %   tt = ds.fetch("rpm", t0, t1, Tags=struct(UUT="A"))
             %
-            %   startTime and endTime are zoned datetimes or int64 nanoseconds;
-            %   the window is inclusive at both ends. The result is a timetable
-            %   with one variable named after the channel, so it plots and
-            %   resamples directly:
+            %   The result plots and resamples directly:
             %
             %       plot(tt.Time, tt.("rpm"))
             %       retime(tt, "regular", "linear", TimeStep=seconds(1))
             %
-            %   Buckets asks the server to decimate to roughly that many
-            %   points (bucket means), capped at 10,000. Use it for plotting.
-            %   Without it the whole window is fetched, which can be many round
-            %   trips over a wide window; use export when the destination is a
-            %   file.
+            %   Without Buckets the whole window is fetched, which can be many
+            %   round trips over a wide window; use export when the destination
+            %   is a file.
             %
-            %   Timetable row times are datetimes, which do not resolve to
-            %   nanoseconds. Use export if you need the exact instants.
+            %   Args:
+            %       startTime: Zoned datetime or int64 nanoseconds. The window
+            %           is inclusive at both ends.
+            %       endTime: Zoned datetime or int64 nanoseconds.
             %
-            %   A channel written with tags holds one series per tag set. If
-            %   it has more than one, pick with Tags, as given to write:
+            %   Options:
+            %       Buckets: Decimate server-side to roughly this many points
+            %           (bucket means), capped at 10,000. Use it for plotting.
+            %       Tags: A channel written with tags holds one series per tag
+            %           set. If it has more than one, pick with Tags, as given
+            %           to write.
             %
-            %       tt = ds.fetch("rpm", t0, t1, Tags=struct(UUT="A"))
+            %   Returns:
+            %       timetable: One variable, named after the channel. Row times
+            %       are datetimes, which do not resolve to nanoseconds; use
+            %       export if you need the exact instants.
             %
             %   See also NOMINAL.DATASET/EXPORT, RETIME, SYNCHRONIZE
             arguments
@@ -235,16 +268,22 @@ classdef Dataset < nominal.Resource
             %   ds.export("run12.mat", ["rpm" "egt"], t0, t1)
             %   ds.export("run12.csv", ch, t0, t1, Format="csv")
             %
-            %   Format is matfile (the default), csv, or arrow. The file is
-            %   replaced if it exists. Blocks until the export is complete.
-            %
             %   Same data as fetch, but in one request, so better for a wide
             %   window. Use fetch for samples in the workspace, export for
-            %   samples on disk.
+            %   samples on disk. Blocks until the export is complete.
             %
-            %   Resolution is full (every sample, the default), buckets, or
-            %   interval. The latter two read ResolutionValue as a point count
-            %   or a nanosecond spacing respectively.
+            %   Args:
+            %       path: File to write. Replaced if it exists.
+            %       channels: Channel names.
+            %       startTime: Zoned datetime or int64 nanoseconds.
+            %       endTime: Zoned datetime or int64 nanoseconds.
+            %
+            %   Options:
+            %       Format: "matfile" (the default), "csv" or "arrow".
+            %       Resolution: "full" (every sample, the default), "buckets"
+            %           or "interval".
+            %       ResolutionValue: The point count for "buckets", or the
+            %           nanosecond spacing for "interval".
             %
             %   See also NOMINAL.DATASET/FETCH, NOMINAL.DATASET/EXPORTURL
             arguments
@@ -270,8 +309,24 @@ classdef Dataset < nominal.Resource
         function url = exportUrl(obj, channels, startTime, endTime, options)
             %EXPORTURL  A time-limited download link instead of a file.
             %
+            %   url = ds.exportUrl(["rpm" "egt"], t0, t1, Format="csv")
+            %
             %   For handing to a browser or something that is not MATLAB.
-            %   Arguments match export, minus the path.
+            %
+            %   Args:
+            %       channels: Channel names.
+            %       startTime: Zoned datetime or int64 nanoseconds.
+            %       endTime: Zoned datetime or int64 nanoseconds.
+            %
+            %   Options:
+            %       Format: "matfile" (the default), "csv" or "arrow".
+            %       Resolution: "full" (every sample, the default), "buckets"
+            %           or "interval".
+            %       ResolutionValue: The point count for "buckets", or the
+            %           nanosecond spacing for "interval".
+            %
+            %   Returns:
+            %       string: The download URL. It expires.
             %
             %   See also NOMINAL.DATASET/EXPORT
             arguments
@@ -298,18 +353,25 @@ classdef Dataset < nominal.Resource
             %   ds.setChannelMetadata("rpm", "double", Unit="1/min")
             %   ds.setChannelMetadata("rpm", "double", Unit="")     % clear
             %
-            %   dataType is required and always sent, so naming the wrong one
-            %   re-declares the channel. One of: double, int, uint, string,
-            %   log, doubleArray, stringArray, struct, video, spatial.
-            %
-            %   Units are UCUM symbols such as "1/min", "Cel", "m/s2". A symbol
-            %   UCUM cannot parse is stored display-only, with no conversions.
-            %
             %   This is an upsert and works before any data exists, so you can
             %   declare units ahead of a stream or upload.
             %
-            %   The returned object reflects what you sent, not what the server
-            %   holds. Re-fetch with channelMetadata to check.
+            %   Args:
+            %       name: Channel name.
+            %       dataType: Required and always sent, so naming the wrong one
+            %           re-declares the channel. One of double, int, uint,
+            %           string, log, doubleArray, stringArray, struct, video,
+            %           spatial.
+            %
+            %   Options:
+            %       Unit: A UCUM symbol such as "1/min", "Cel" or "m/s2". A
+            %           symbol UCUM cannot parse is stored display-only, with
+            %           no conversions.
+            %       Description: Free text.
+            %
+            %   Returns:
+            %       nominal.ChannelMetadata: What you sent, not what the server
+            %       holds. Re-fetch with channelMetadata to check.
             arguments
                 obj (1,1) nominal.Dataset
                 name (1,1) string
@@ -338,9 +400,23 @@ classdef Dataset < nominal.Resource
         function updated = update(obj, options)
             %UPDATE  Apply metadata changes, returning the updated dataset.
             %
-            %   Labels and Properties REPLACE rather than merge. Fields not
-            %   passed are left alone. The original object still shows the
-            %   pre-update state.
+            %   ds2 = ds.update(Description="reduced", Labels=["flight-test"])
+            %
+            %   Options not passed are left alone. Labels and Properties
+            %   REPLACE rather than merge: read ds.Labels first and concatenate
+            %   if you mean to add.
+            %
+            %   Options:
+            %       Name: New display name.
+            %       Description: New description.
+            %       Properties: Struct of key-value pairs, replacing all of
+            %           them. struct() clears them.
+            %       Labels: String array, replacing all of them. string.empty
+            %           clears them.
+            %
+            %   Returns:
+            %       nominal.Dataset: A new handle with the changes applied. The
+            %       original still shows the pre-update state.
             arguments
                 obj (1,1) nominal.Dataset
                 % No defaults, so stageUpdate can tell "passed empty" (clear)

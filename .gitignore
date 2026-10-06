@@ -31,3 +31,10 @@ target
 
 # Packaged toolboxes from `just package`
 dist
+
+# Docs toolchain and build output
+.venv
+docs/_build
+docs/ref/
+docs/examples/
+__pycache__/

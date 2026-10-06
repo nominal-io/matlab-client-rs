@@ -215,6 +215,18 @@ dev-build-win-fast: header build-win64-fast mex-win64-fast
 [group('gateway')]
 dev-build-win: header build-win64 mex-win64
 
+# Build the docs (docs/) into docs/_build/dirhtml; warnings fail the build, as in CI.
+# Guides, examples and a reference generated from the help text in +nominal. Needs uv.
+# Published by .github/workflows/deploy-docs.yml, pulled into dev.nominal.io/matlab/client/.
+[group('docs')]
+build-docs:
+    uv run --group docs sphinx-build -E -W --keep-going -j auto -b dirhtml docs docs/_build/dirhtml
+
+# Live-preview the docs on http://127.0.0.1:8000, rebuilding on page, example or help-text edits
+[group('docs')]
+serve-docs:
+    uv run --group docs --with sphinx-autobuild sphinx-autobuild -j auto -b dirhtml docs docs/_build/dirhtml --watch matlab/+nominal --watch matlab/examples --ignore "docs/ref/*" --ignore "docs/examples/*"
+
 # Clean build artifacts
 [group('tools')]
 clean:

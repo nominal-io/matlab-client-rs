@@ -56,6 +56,9 @@ classdef Client < nominal.Resource
             %WHOAMI  Display name of the authenticated user.
             %
             %   Calls the API, so it doubles as a credential check.
+            %
+            %   Returns:
+            %       string: The user's display name.
             obj.assertLive();
             name = string(nominalmex('client_user', obj.Handle));
         end
@@ -63,18 +66,20 @@ classdef Client < nominal.Resource
         function t = assets(obj, filter)
             %ASSETS  Assets you can see, as a table.
             %
-            %   Variables: Name, Rid, Description. Ordered by name.
-            %
-            %   With one argument, keeps only assets whose name contains it
-            %   (case-insensitive substring). Use this to find a RID from a
-            %   name:
-            %
-            %       c.assets("engine")
-            %       a = c.assetByRid(c.assets("engine").Rid(1));
+            %   c.assets("engine")
+            %   a = c.assetByRid(c.assets("engine").Rid(1));
             %
             %   With no argument it fetches EVERY asset in the workspace in
             %   one call, which on a real deployment is tens of thousands of
             %   rows. There is no page size to pass, so filter.
+            %
+            %   Args:
+            %       filter: Keep only assets whose name contains this
+            %           (case-insensitive substring). Use it to find a RID
+            %           from a name.
+            %
+            %   Returns:
+            %       table: Variables Name, Rid and Description, ordered by name.
             %
             %   See also NOMINAL.CLIENT/DATASETS
             arguments
@@ -93,15 +98,18 @@ classdef Client < nominal.Resource
         function t = datasets(obj, filter)
             %DATASETS  Datasets you can see, as a table.
             %
-            %   Variables: Name, Rid. Ordered by name. With one argument, keeps
-            %   only datasets whose name contains it.
-            %
-            %       ds = c.datasetByRid(c.datasets("telemetry").Rid(1));
-            %       ds.channels()                    % what is inside it
+            %   ds = c.datasetByRid(c.datasets("telemetry").Rid(1));
+            %   ds.channels()                    % what is inside it
             %
             %   With no argument it fetches EVERY dataset in the workspace in
             %   one call. Slow on a real deployment, and there is no page size
             %   to pass, so filter.
+            %
+            %   Args:
+            %       filter: Keep only datasets whose name contains this.
+            %
+            %   Returns:
+            %       table: Variables Name and Rid, ordered by name.
             %
             %   See also NOMINAL.CLIENT/ASSETS, NOMINAL.DATASET/CHANNELS
             arguments
@@ -125,6 +133,9 @@ classdef Client < nominal.Resource
             %   match, the first is returned. Use assetByRid when you know the
             %   RID, and assets(name) to look without creating.
             %
+            %   Returns:
+            %       nominal.Asset: The existing or new asset.
+            %
             %   See also NOMINAL.CLIENT/ASSETBYRID, NOMINAL.CLIENT/ASSETS
             arguments
                 obj (1,1) nominal.Client
@@ -139,6 +150,9 @@ classdef Client < nominal.Resource
             %
             %   Names are not unique in Nominal, so this always makes a new
             %   one. Use getOrCreateAsset to reuse an existing asset.
+            %
+            %   Returns:
+            %       nominal.Asset: The new asset.
             %
             %   See also NOMINAL.CLIENT/GETORCREATEASSET
             arguments
@@ -159,6 +173,9 @@ classdef Client < nominal.Resource
             %   Always makes a new one, whatever its name. Attach it with
             %   asset.addDataset, to as many assets as need it.
             %
+            %   Returns:
+            %       nominal.Dataset: The new dataset, attached to no asset.
+            %
             %   See also NOMINAL.ASSET/ADDDATASET, NOMINAL.ASSET/GETORCREATEDATASET
             arguments
                 obj (1,1) nominal.Client
@@ -170,6 +187,9 @@ classdef Client < nominal.Resource
 
         function a = assetByRid(obj, rid)
             %ASSETBYRID  Fetch an asset by RID.
+            %
+            %   Returns:
+            %       nominal.Asset: The asset.
             arguments
                 obj (1,1) nominal.Client
                 rid (1,1) string
@@ -180,6 +200,9 @@ classdef Client < nominal.Resource
 
         function d = datasetByRid(obj, rid)
             %DATASETBYRID  Fetch a dataset by RID.
+            %
+            %   Returns:
+            %       nominal.Dataset: The dataset.
             arguments
                 obj (1,1) nominal.Client
                 rid (1,1) string
@@ -193,19 +216,24 @@ classdef Client < nominal.Resource
             %
             %   e = c.createEvent(rids, "overspeed", Type="error", ...
             %                     Timestamp=t, Duration=seconds(10));
-            %
-            %   assetRids is a string array of asset RIDs; at least one is
-            %   required.
-            %
-            %   Type is one of info, flag, error, success. Timestamp accepts a
-            %   zoned datetime or int64 nanoseconds, and defaults to now.
-            %   Duration defaults to zero, meaning an instantaneous event.
-            %
-            %   Properties is a struct, or a dictionary for keys that aren't
-            %   valid field names:
-            %
-            %       c.createEvent(rids, "step 3", Type="success", ...
+            %   e = c.createEvent(rids, "step 3", Type="success", ...
             %                     Properties=struct(status="pass", output=4.2));
+            %
+            %   Args:
+            %       assetRids: String array of asset RIDs. At least one is
+            %           required.
+            %
+            %   Options:
+            %       Type: "info" (the default), "flag", "error" or "success".
+            %       Timestamp: Zoned datetime or int64 nanoseconds. Defaults to
+            %           now.
+            %       Duration: A duration, or int64 nanoseconds. Defaults to
+            %           zero, meaning an instantaneous event.
+            %       Properties: A struct, or a dictionary for keys that aren't
+            %           valid field names.
+            %
+            %   Returns:
+            %       nominal.Event: The new event.
             arguments
                 obj (1,1) nominal.Client
                 assetRids (1,:) string
@@ -238,6 +266,9 @@ classdef Client < nominal.Resource
 
         function r = runByRid(obj, rid)
             %RUNBYRID  Fetch a run by RID.
+            %
+            %   Returns:
+            %       nominal.Run: The run.
             arguments
                 obj (1,1) nominal.Client
                 rid (1,1) string
@@ -254,21 +285,30 @@ classdef Client < nominal.Resource
             %   job = c.ingest("run.parquet", TimestampColumn="t", ...
             %                  Dataset=ds, Kind="epoch", Unit="milliseconds");
             %
-            %   .parquet is read as Parquet, anything else as CSV.
-            %
-            %   Give either Dataset (add to an existing one) or NewDataset (a
-            %   name to create). NewDataset creates a dataset attached to no
-            %   asset; attach it afterwards with asset.addDataset. The returned
-            %   job carries DatasetRid either way.
-            %
-            %   Kind says how to read the timestamp column: iso8601 (the
-            %   default), epoch, or relative. Unit applies to the latter two.
-            %
-            %   Tags are stamped on every point in the file: a struct, or a
-            %   dictionary for keys that aren't valid field names.
-            %
             %   Blocks while the file uploads. The server-side ingest continues
             %   afterwards; call job.wait() if you need it finished.
+            %
+            %   Args:
+            %       path: The file. .parquet is read as Parquet, anything else
+            %           as CSV.
+            %
+            %   Options:
+            %       TimestampColumn: Name of the column holding time. Required.
+            %       Dataset: An existing dataset to add to. Give either this or
+            %           NewDataset.
+            %       NewDataset: Name of a dataset to create. It is attached to
+            %           no asset; attach it afterwards with asset.addDataset.
+            %       Kind: How to read the timestamp column: "iso8601" (the
+            %           default), "epoch" or "relative".
+            %       Unit: For "epoch" and "relative" timestamps:
+            %           "nanoseconds", "microseconds", "milliseconds",
+            %           "seconds" (the default), "minutes" or "hours".
+            %       Tags: Stamped on every point in the file. A struct, or a
+            %           dictionary for keys that aren't valid field names.
+            %
+            %   Returns:
+            %       nominal.IngestJob: Carries DatasetRid whichever of Dataset
+            %       or NewDataset was given.
             %
             %   See also NOMINAL.INGESTJOB, NOMINAL.DATASET/WRITE
             arguments
@@ -333,13 +373,17 @@ classdef Client < nominal.Resource
             %   Metadata tables (assets, runs, datasets, events) need not, and
             %   are capped at 10,000 rows.
             %
-            %   Timestamp columns come back as int64 nanoseconds. Pass them
-            %   through nominal.fromNanos for a datetime.
-            %
-            %   SQL always needs a workspace. The client's own is used unless
-            %   Workspace= names another; an unscoped client must give one.
-            %
             %   Results are capped at 1 GiB. Use queryExportUrl for larger.
+            %
+            %   Options:
+            %       Workspace: Workspace RID to query. SQL always needs one:
+            %           the client's own is used unless this names another, and
+            %           an unscoped client must give one.
+            %
+            %   Returns:
+            %       table: One variable per column. Timestamp columns come back
+            %       as int64 nanoseconds; pass them through nominal.fromNanos
+            %       for a datetime.
             %
             %   See also NOMINAL.CLIENT/QUERYEXPORTURL, NOMINAL.FROMNANOS
             arguments
@@ -381,12 +425,18 @@ classdef Client < nominal.Resource
         function url = queryExportUrl(obj, sql, options)
             %QUERYEXPORTURL  Run a query and get a download link for the CSV.
             %
-            %   For results too large for query (capped at 1 GiB). Returns a
-            %   time-limited URL with no size cap.
+            %   For results too large for query, which is capped at 1 GiB.
             %
             %   CSV only, and only for queries on telemetry tables; one
             %   touching assets, runs, or datasets cannot be exported this way.
             %   Fails on deployments with no export bucket configured.
+            %
+            %   Options:
+            %       Workspace: Workspace RID to query. Defaults to the client's
+            %           own; an unscoped client must give one.
+            %
+            %   Returns:
+            %       string: A time-limited download URL with no size cap.
             %
             %   See also NOMINAL.CLIENT/QUERY
             arguments
@@ -402,8 +452,7 @@ classdef Client < nominal.Resource
 
     methods (Static)
         function c = connect(name)
-            %CONNECT  Connect from a stored profile, falling back to the token
-            %in NOMINAL_TOKEN.
+            %CONNECT  Connect from a stored profile, else from NOMINAL_TOKEN.
             %
             %   c = nominal.Client.connect()          % the "default" profile
             %   c = nominal.Client.connect("staging") % a named one
@@ -420,6 +469,12 @@ classdef Client < nominal.Resource
             %   Raises nominal:noCredentials when neither is available. The
             %   message names the config file it looked in and the command
             %   that would fix it.
+            %
+            %   Args:
+            %       name: Profile name. Defaults to "default".
+            %
+            %   Returns:
+            %       nominal.Client: The connection.
             %
             %   See also NOMINAL.CLIENT/FROMPROFILE, NOMINAL.CLIENT/FROMTOKEN
             arguments
@@ -471,7 +526,14 @@ classdef Client < nominal.Resource
             %
             %       client = NominalClient.from_profile("default")
             %
-            %   ConfigPath= reads a config file from somewhere else.
+            %   Args:
+            %       name: Profile name. Defaults to "default".
+            %
+            %   Options:
+            %       ConfigPath: Read this config file instead of the default.
+            %
+            %   Returns:
+            %       nominal.Client: The connection.
             %
             %   See also NOMINAL.CLIENT/FROMTOKEN
             arguments
@@ -498,6 +560,17 @@ classdef Client < nominal.Resource
             %
             %   Python equivalent: NominalClient.from_token. Prefer fromProfile
             %   where you can; a token in a script ends up in version control.
+            %
+            %   Args:
+            %       token: API token. Surrounding whitespace is trimmed.
+            %
+            %   Options:
+            %       Workspace: Workspace RID to scope the client to. Unset
+            %           means unscoped.
+            %       BaseUrl: API base URL. Unset means Nominal production.
+            %
+            %   Returns:
+            %       nominal.Client: The connection.
             %
             %   See also NOMINAL.CLIENT/FROMPROFILE
             arguments

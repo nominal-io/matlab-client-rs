@@ -36,10 +36,25 @@ classdef Asset < nominal.Resource
             obj.Handle = handle;
         end
 
-        function v = get.Rid(obj);         obj.assertLive(); v = string(nominalmex('asset_rid', obj.Handle));         end
-        function v = get.Name(obj);        obj.assertLive(); v = string(nominalmex('asset_name', obj.Handle));        end
-        function v = get.Description(obj); obj.assertLive(); v = string(nominalmex('asset_description', obj.Handle)); end
-        function v = get.Url(obj);         obj.assertLive(); v = string(nominalmex('asset_url', obj.Handle));          end
+        function v = get.Rid(obj)
+            obj.assertLive();
+            v = string(nominalmex('asset_rid', obj.Handle));
+        end
+
+        function v = get.Name(obj)
+            obj.assertLive();
+            v = string(nominalmex('asset_name', obj.Handle));
+        end
+
+        function v = get.Description(obj)
+            obj.assertLive();
+            v = string(nominalmex('asset_description', obj.Handle));
+        end
+
+        function v = get.Url(obj)
+            obj.assertLive();
+            v = string(nominalmex('asset_url', obj.Handle));
+        end
 
         function v = get.Labels(obj)
             obj.assertLive();
@@ -52,6 +67,9 @@ classdef Asset < nominal.Resource
 
         function value = property(obj, key)
             %PROPERTY  Value of one property. Errors if the key is absent.
+            %
+            %   Returns:
+            %       string: The property's value.
             arguments
                 obj (1,1) nominal.Asset
                 key (1,1) string
@@ -65,13 +83,7 @@ classdef Asset < nominal.Resource
             %
             %   s = a.datasources();                % what this handle knows
             %   s = a.datasources(Refresh=true);    % ask the server
-            %
-            %   Variables: RefName, Rid, Type. Type is "dataset", "video", or
-            %   "connection". Only a dataset RID can open a stream. Ordered by
-            %   reference name.
-            %
-            %       s = a.datasources();
-            %       tlm = s(s.Type == "dataset", :);
+            %   tlm = s(s.Type == "dataset", :);    % datasets only
             %
             %   **By default this reads the snapshot taken when the asset was
             %   fetched.** A dataset attached since then, by getOrCreateDataset
@@ -81,7 +93,14 @@ classdef Asset < nominal.Resource
             %       height(a.datasources())              % unchanged
             %       height(a.datasources(Refresh=true))  % +1
             %
-            %   Refresh=true costs one request and does not change this object.
+            %   Options:
+            %       Refresh: Ask the server instead of reading the snapshot.
+            %           Costs one request and does not change this object.
+            %
+            %   Returns:
+            %       table: Variables RefName, Rid and Type, ordered by
+            %       reference name. Type is "dataset", "video" or
+            %       "connection"; only a dataset RID can open a stream.
             %
             %   See also NOMINAL.CLIENT/ASSETBYRID
             arguments
@@ -111,31 +130,13 @@ classdef Asset < nominal.Resource
             %   a.addDataset(ds);
             %   a.addDataset(ds, "can");
             %   a.addDataset(ds, Tags=struct(UUT="A"));
+            %   a.addDataset(ds, Tags=dictionary("test-stand", "3"));
             %
-            %   Takes any dataset handle: one fetched by RID, from a search, or
-            %   from an ingest.
-            %
-            %   Tags limits this asset to the dataset's series carrying every
-            %   one of those tags. Write one shared dataset with a tag per unit
-            %   under test, then give each unit's asset its own slice:
+            %   Write one shared dataset with a tag per unit under test, then
+            %   give each unit's asset its own slice:
             %
             %       assetA.addDataset(ds, Tags=struct(UUT="A"));
             %       assetB.addDataset(ds, Tags=struct(UUT="B"));
-            %
-            %   Tag values are strings; numbers are converted. For a key that
-            %   is not a valid field name, pass a dictionary (R2022b+):
-            %
-            %       a.addDataset(ds, Tags=dictionary("test-stand", "3"));
-            %
-            %   refName is the dataset's name within this asset and must be
-            %   unique among its data sources. Spaces, dots and mixed case are
-            %   fine. It matters when one asset carries two sources measuring
-            %   the same thing, say a CAN log and a test rig both reporting
-            %   "engine temp", and you need to tell them apart.
-            %
-            %   **Omit it and one is chosen for you**: "default" on an asset
-            %   with none, otherwise the dataset's own name, otherwise that
-            %   with a number.
             %
             %   An asset holds a dataset once per tag filter. Attaching it again
             %   with the same Tags *moves* it to the new reference name; with
@@ -147,6 +148,23 @@ classdef Asset < nominal.Resource
             %
             %   This asset handle is a snapshot and will not show the new data
             %   source. Use a.datasources(Refresh=true) to see it.
+            %
+            %   Args:
+            %       dataset: Any dataset handle: one fetched by RID, from a
+            %           search, or from an ingest.
+            %       refName: The dataset's name within this asset, unique among
+            %           its data sources. Spaces, dots and mixed case are fine.
+            %           It matters when one asset carries two sources measuring
+            %           the same thing, say a CAN log and a test rig both
+            %           reporting "engine temp". Omit it and one is chosen for
+            %           you: "default" on an asset with none, otherwise the
+            %           dataset's own name, otherwise that with a number.
+            %
+            %   Options:
+            %       Tags: Limit this asset to the dataset's series carrying
+            %           every one of these tags. A struct, or a dictionary
+            %           (R2022b+) for a key that is not a valid field name.
+            %           Values are strings; numbers are converted.
             %
             %   See also NOMINAL.ASSET/GETORCREATEDATASET, NOMINAL.ASSET/DATASOURCES
             arguments
@@ -234,6 +252,9 @@ classdef Asset < nominal.Resource
             %   Errors when no dataset of that name is attached, and when more
             %   than one is. a.datasources() lists everything without erroring.
             %
+            %   Returns:
+            %       nominal.Dataset: The attached dataset.
+            %
             %   See also NOMINAL.ASSET/GETORCREATEDATASET, NOMINAL.ASSET/DATASOURCES
             arguments
                 obj (1,1) nominal.Asset
@@ -261,15 +282,23 @@ classdef Asset < nominal.Resource
             %        workspace is attached to this asset and returned.
             %     3. Otherwise one is created and attached.
             %
-            %   Step 2 finds the dataset a colleague already made. Since it
-            %   changes your asset based on a name match, AttachExisting=false
-            %   switches it off.
+            %   Step 2 finds the dataset a colleague already made, but it
+            %   changes your asset based on a name match.
             %
             %   Errors when several datasets share the name, listing their RIDs
             %   so you can pick one with client.datasetByRid.
             %
-            %   refName is the dataset's name within this asset, used only when
-            %   attaching. Omit it and a free one is chosen. See addDataset.
+            %   Args:
+            %       refName: The dataset's name within this asset, used only
+            %           when attaching. Omit it and a free one is chosen; see
+            %           addDataset.
+            %
+            %   Options:
+            %       AttachExisting: false skips step 2, going straight from
+            %           step 1 to step 3. Defaults to true.
+            %
+            %   Returns:
+            %       nominal.Dataset: The dataset, attached to this asset.
             %
             %   See also NOMINAL.ASSET/ADDDATASET, NOMINAL.ASSET/GETATTACHEDDATASET
             arguments
@@ -314,9 +343,19 @@ classdef Asset < nominal.Resource
         function r = run(obj, name, startTime)
             %RUN  Create a run on this asset.
             %
-            %   startTime may be a datetime or int64 nanoseconds since the
-            %   epoch. Omit it, or pass 0, to start the run now. The run is
-            %   left open — close it with r.finish().
+            %   r = a.run("burn-12");                                 % starts now
+            %   r = a.run("burn-12", datetime("now", TimeZone="UTC") - minutes(5));
+            %
+            %   The run is left open; close it with r.finish().
+            %
+            %   Args:
+            %       startTime: Zoned datetime or int64 nanoseconds since the
+            %           epoch. Omit it, or pass 0, to start the run now.
+            %
+            %   Returns:
+            %       nominal.Run: The new, open run.
+            %
+            %   See also NOMINAL.RUN/FINISH
             arguments
                 obj (1,1) nominal.Asset
                 name (1,1) string
@@ -335,12 +374,22 @@ classdef Asset < nominal.Resource
             %                 Properties=struct(phase="burn"), ...
             %                 Labels=["a" "b"]);
             %
-            %   Labels and Properties REPLACE rather than merge: passing Labels
-            %   discards whatever the asset had, so read a.Labels first and
-            %   concatenate if you mean to add. Fields not passed are left
-            %   alone. Labels=string.empty clears them.
+            %   Options not passed are left alone. Labels and Properties
+            %   REPLACE rather than merge: passing Labels discards whatever the
+            %   asset had, so read a.Labels first and concatenate if you mean
+            %   to add.
             %
-            %   The original object still shows the pre-update state.
+            %   Options:
+            %       Name: New display name.
+            %       Description: New description.
+            %       Properties: Struct of key-value pairs, replacing all of
+            %           them. struct() clears them.
+            %       Labels: String array, replacing all of them. string.empty
+            %           clears them.
+            %
+            %   Returns:
+            %       nominal.Asset: A new handle with the changes applied. The
+            %       original still shows the pre-update state.
             arguments
                 obj (1,1) nominal.Asset
                 % Deliberately no defaults: stageUpdate reads field presence

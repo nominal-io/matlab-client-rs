@@ -40,6 +40,9 @@ classdef Stream < nominal.Resource
             %
             %   Performs no API call; the channel appears in Nominal when the
             %   first point arrives.
+            %
+            %   Returns:
+            %       nominal.Channel: The write address.
             arguments
                 obj (1,1) nominal.Stream
                 name (1,1) string
@@ -51,15 +54,18 @@ classdef Stream < nominal.Resource
         function push(obj, channels, timestamps, values)
             %PUSH  Write an N-by-C block of samples across C channels.
             %
-            %   channels   1-by-C array of nominal.Channel
-            %   timestamps N-by-1 int64 nanoseconds, or a datetime vector
-            %   values     N-by-C double, one column per channel
+            %   s.push(chans, t, V)
             %
             %   All channels share the timestamp column. For channels on
             %   independent clocks, push each separately with Channel.push.
+            %   Blocks if the stream has saturated.
             %
-            %   Timestamps are literal, including zero. Unlike run times, 0
-            %   does not mean "now".
+            %   Args:
+            %       channels: 1-by-C array of nominal.Channel.
+            %       timestamps: N-by-1 int64 nanoseconds, or a datetime
+            %           vector. Literal, including zero: unlike run times, 0
+            %           does not mean "now".
+            %       values: N-by-C double, one column per channel.
             arguments
                 obj (1,1) nominal.Stream
                 channels (1,:) nominal.Channel
