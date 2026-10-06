@@ -1,8 +1,7 @@
 # Nominal for MATLAB
 
 {.lead}
-Get data into and out of [Nominal](https://nominal.io) from MATLAB. One toolbox, no Python,
-no DLLs.
+Get data into and out of [Nominal](https://nominal.io) from MATLAB. 
 
 ```{toctree}
 :hidden:
@@ -80,4 +79,4 @@ Every language and product.
 ::::
 
 Building the toolbox from source is covered in the repository's
-[BUILDING.md](https://github.com/nominal-io/nominal-matlab/blob/main/BUILDING.md).
+[BUILDING.md](https://github.com/nominal-io/matlab-client-rs/blob/main/BUILDING.md).
