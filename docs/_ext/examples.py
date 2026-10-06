@@ -12,7 +12,7 @@ from pathlib import Path
 
 from sphinx.application import Sphinx
 
-REPO = "https://github.com/nominal-io/nominal-matlab"
+REPO = "https://github.com/nominal-io/matlab-client-rs"
 # shown first, in this order; the rest follow alphabetically
 FIRST = ["nominalexample_alldemos"]
 

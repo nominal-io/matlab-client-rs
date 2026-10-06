@@ -42,12 +42,12 @@ html_css_files = ["custom.css"]
 html_context = {
     "source_type": "github",
     "source_user": "nominal-io",
-    "source_repo": "nominal-matlab",
+    "source_repo": "matlab-client-rs",
     "source_version": "main",
     "source_docs_path": "/docs/",
 }
 html_theme_options = theme_options(
-    github_url="https://github.com/nominal-io/nominal-matlab",
+    github_url="https://github.com/nominal-io/matlab-client-rs",
     nav_links=[
         {"title": "Guides", "url": "index"},
         {"title": "Examples", "url": "examples/index"},
