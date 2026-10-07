@@ -5,8 +5,11 @@ From a `.mltbx` file to running code. No source repo, compiler or Rust needed.
 
 ## 1. Install
 
+Download `NominalForMATLAB-<version>.mltbx` from the latest release on the
+[releases page](https://github.com/nominal-io/matlab-client-rs/releases), then install it:
+
 ```matlab
-matlab.addons.install("C:\path\to\NominalForMATLAB-0.2.0.mltbx")
+matlab.addons.install("C:\path\to\NominalForMATLAB-<version>.mltbx")
 ```
 
 Double-clicking the file does the same thing. An installed toolbox manages its own path, so
@@ -20,7 +23,7 @@ matlab.addons.toolbox.installedToolboxes
 
 ```
        Name: 'Nominal for MATLAB'
-    Version: '0.2.0'
+    Version: '<version>'
        Guid: 'b7e4c2a1-5d3f-4e88-9a12-6f0c3d7b8e45'
 ```
 
