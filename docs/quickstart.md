@@ -1,7 +1,7 @@
 # Quickstart
 
 {.lead}
-From a `.mltbx` file to running code. No source repo, compiler or Rust needed.
+From a `.mltbx` file to running code.
 
 ## 1. Install
 

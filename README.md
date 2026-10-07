@@ -1,8 +1,6 @@
 # Nominal for MATLAB
 
-A MATLAB client for [Nominal](https://nominal.io). The Nominal Rust SDK is
-compiled into a single MEX file, so there is no Python, no DLL and no runtime
-to install.
+A MATLAB client for [Nominal](https://nominal.io), built on the Nominal Rust SDK.
 
 ```matlab
 addpath('matlab')

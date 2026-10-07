@@ -1,9 +1,8 @@
 # Building and installing
 
 Building produces one file: `matlab/+nominal/private/nominalmex.mexw64` (or
-`.mexa64` / `.mexmaca64`). The Rust library is linked in statically, so there
-is no DLL and nothing to put on `PATH`. Installing means getting `matlab/` onto
-the MATLAB path.
+`.mexa64` / `.mexmaca64`), with the Rust library linked in. Installing means
+getting `matlab/` onto the MATLAB path.
 
 Once it is built, see the [documentation](https://dev.nominal.io/matlab/client/).
 
