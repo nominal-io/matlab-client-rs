@@ -8,7 +8,7 @@ from nominal_sphinx_theme import theme_options
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE / "_ext"))
 
-project = "Nominal for MATLAB"
+project = "MATLAB"
 copyright = "Nominal, Inc."
 
 extensions = [
