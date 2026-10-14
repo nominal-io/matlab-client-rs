@@ -31,8 +31,8 @@ nanosecond count. Times coming back are UTC `datetime`. `datetime` does not reso
 nanoseconds, so use `nominal.now()` and raw `int64` when full precision matters.
 
 Plain doubles are refused for timestamps: they lose integer precision past 2^53 nanoseconds,
-which is 1970 plus 104 days, so a present-day timestamp would be silently rounded. `0` is
-accepted as the "now" sentinel for run and event times.
+which is 1970 plus 104 days, so a present-day timestamp would be silently rounded.
+`int64(0)` is the epoch, 1970-01-01T00:00:00Z. Leave a run or event time out to mean now.
 
 **Handles are snapshots.** `update()` returns a new object instead of changing the one you
 have. `a.datasources()` does not show a dataset attached since the handle was fetched until

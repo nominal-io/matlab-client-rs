@@ -31,6 +31,9 @@ function nominaltest_smoketest()
     [passed, failed] = check('doubles are refused as timestamps', ...
         @doubleTimestampRefused, passed, failed);
 
+    [passed, failed] = check('the epoch is the epoch, not now', ...
+        @epochIsLiteral, passed, failed);
+
     [passed, failed] = check('client constructs and reports its base URL', ...
         @clientConstructs, passed, failed);
 
@@ -122,8 +125,21 @@ function doubleTimestampRefused()
     end
     assertTrue(threw, 'a double timestamp should be refused');
 
-    % Zero is the documented exception: it is the "now" sentinel.
-    assertTrue(nominal.toNanos(0) == 0, 'zero should be accepted');
+    % Including zero: it once meant "now", and a double 0 passed in that
+    % belief should fail rather than silently become 1970.
+    threw = false;
+    try
+        nominal.toNanos(0);
+    catch e
+        threw = strcmp(e.identifier, 'nominal:invalidParameter');
+    end
+    assertTrue(threw, 'a double zero should be refused');
+end
+
+function epochIsLiteral()
+    epoch = datetime(1970, 1, 1, TimeZone="UTC");
+    assertTrue(nominal.toNanos(epoch) == 0, 'the epoch should convert to 0');
+    assertTrue(nominal.fromNanos(int64(0)) == epoch, '0 should convert back to the epoch');
 end
 
 function clientConstructs()

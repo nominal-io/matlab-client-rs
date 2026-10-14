@@ -25,8 +25,8 @@
 //! **Strings out** are string handles — see [`strings`]. **Strings in** are
 //! ordinary NUL-terminated C strings, copied on arrival.
 //!
-//! **Timestamps** are `int64_t` nanoseconds since the Unix epoch, with `0`
-//! meaning "now" for single instants. See [`time`].
+//! **Timestamps** are `int64_t` nanoseconds since the Unix epoch, taken
+//! literally: `0` is the epoch, never "now". See [`time`].
 //!
 //! Every exported function catches panics, since unwinding across an
 //! `extern "C"` boundary is undefined behavior.

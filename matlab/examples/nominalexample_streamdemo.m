@@ -61,7 +61,7 @@ function results = nominalexample_streamdemo(datasetRid)
 
     % 4 ------------------------------------------- push 100 points to it
     %
-    % Streaming timestamps are literal. Unlike run times, 0 does not mean now.
+    % Timestamps are literal: int64(0) is the epoch.
     acquisitionStart = nominal.now();
     sineTimestamps = acquisitionStart + int64(0:99)' * 1000000;  % 1 ms apart
     sineValues = sin(linspace(0, 4*pi, 100))';                   % two cycles

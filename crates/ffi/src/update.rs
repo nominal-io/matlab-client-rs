@@ -213,7 +213,7 @@ pub extern "C" fn nominal_update_clear_labels(
     })
 }
 
-/// Stage a start time, in nanoseconds since the Unix epoch. `0` means now.
+/// Stage a start time, in nanoseconds since the Unix epoch.
 ///
 /// Ignored by resources that have no start time.
 #[no_mangle]
@@ -227,7 +227,7 @@ pub extern "C" fn nominal_update_set_start(
     })
 }
 
-/// Stage an end time, in nanoseconds since the Unix epoch. `0` means now.
+/// Stage an end time, in nanoseconds since the Unix epoch.
 ///
 /// Ignored by resources that have no end time.
 #[no_mangle]

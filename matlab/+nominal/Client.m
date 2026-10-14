@@ -240,7 +240,7 @@ classdef Client < nominal.Resource
                 name (1,1) string
                 options.Type (1,1) string {mustBeMember(options.Type, ...
                     ["info" "flag" "error" "success"])} = "info"
-                options.Timestamp = int64(0)
+                options.Timestamp = nominal.now()
                 options.Duration = seconds(0)
                 options.Properties (1,1) {mustBeA(options.Properties, ["struct" "dictionary"])} = struct()
             end

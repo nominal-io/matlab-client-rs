@@ -27,9 +27,8 @@ function results = nominalexample_rundemo(assetName)
 
     % --- create -------------------------------------------------------
     %
-    % Started a minute ago so the window covers data already written. Pass 0,
-    % or omit the argument, to start now. (Unlike streaming timestamps, 0 here
-    % means now, not the epoch.)
+    % Started a minute ago so the window covers data already written. Omit
+    % the argument to start now.
     %
     % Each mutation below returns a new object: openRun -> sharedRun ->
     % soloRun -> updatedRun -> finishedRun. Earlier handles keep reporting

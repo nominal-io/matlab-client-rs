@@ -178,7 +178,7 @@ classdef Run < nominal.Resource
             %       nominal.Run: The closed run.
             arguments
                 obj (1,1) nominal.Run
-                endTime = int64(0)
+                endTime = nominal.now()
             end
             obj.assertLive();
             updated = nominal.Run(obj.Client, ...

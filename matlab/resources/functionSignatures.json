@@ -211,7 +211,7 @@
     "inputs": [
       {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
       {"name": "name", "kind": "required", "type": ["string"], "purpose": "Run name"},
-      {"name": "startTime", "kind": "ordered", "purpose": "datetime or int64 nanoseconds; 0 means now"}
+      {"name": "startTime", "kind": "ordered", "purpose": "datetime or int64 nanoseconds; omit for now"}
     ],
     "outputs": [{"name": "run", "type": "nominal.Run"}]
   },

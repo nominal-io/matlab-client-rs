@@ -1,17 +1,12 @@
 //! Timestamps.
 //!
 //! Every timestamp crossing the boundary is an `int64_t` count of nanoseconds
-//! since the Unix epoch.
+//! since the Unix epoch, taken literally: `0` is 1970-01-01T00:00:00Z.
 //!
-//! For single-instant parameters — a run's start or end, an event's timestamp —
-//! the value `0` means "now", resolved inside the library at the moment of the
-//! call. A literal epoch instant is not a meaningful value for those fields, so
-//! the sentinel costs nothing and spares callers from having to fetch the clock
-//! themselves.
-//!
-//! Streaming data points are the deliberate exception: there, `0` is the
-//! literal instant, because a stream may legitimately carry timestamps relative
-//! to an epoch the caller chose.
+//! There is no "now" sentinel. Simulation output is commonly stored at a
+//! shared time zero, so a run or event at the epoch is a real request, and a
+//! sentinel of 0 silently turned it into the current time. A caller wanting
+//! now reads [`nominal_timestamp_now`] and passes that.
 
 use crate::error::{fail, ErrorCode, ErrorHandle};
 use chrono::{DateTime, Utc};
@@ -23,13 +18,9 @@ pub extern "C" fn nominal_timestamp_now() -> i64 {
     crate::error::guard_value(0, || Utc::now().timestamp_nanos_opt().unwrap_or(0))
 }
 
-/// Convert nanoseconds since the epoch into a `DateTime`, treating `0` as now.
+/// Convert nanoseconds since the epoch into a `DateTime`.
 pub(crate) fn instant_from_nanos(nanos: i64) -> DateTime<Utc> {
-    if nanos == 0 {
-        Utc::now()
-    } else {
-        DateTime::from_timestamp_nanos(nanos)
-    }
+    DateTime::from_timestamp_nanos(nanos)
 }
 
 /// Convert a `DateTime` back to nanoseconds since the epoch.
@@ -47,4 +38,24 @@ pub(crate) fn nanos_from_instant(
             format!("timestamp {instant} is out of nanosecond range"),
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_is_the_epoch_not_now() {
+        assert_eq!(instant_from_nanos(0), DateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn nanoseconds_round_trip() {
+        let mut err = 0;
+        let nanos = 1_791_285_485_599_200_123;
+        assert_eq!(
+            nanos_from_instant(&instant_from_nanos(nanos), &mut err),
+            Ok(nanos)
+        );
+    }
 }

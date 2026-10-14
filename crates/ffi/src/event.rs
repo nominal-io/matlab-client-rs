@@ -187,7 +187,7 @@ fn safe_long(value: i64, what: &str, error_out: *mut ErrorHandle) -> Result<Safe
 /// `asset_rids` is an array of `asset_count` NUL-terminated RID strings. At
 /// least one is required — an event with no asset is not created.
 ///
-/// `timestamp_nanos` is nanoseconds since the epoch, with `0` meaning now.
+/// `timestamp_nanos` is nanoseconds since the epoch.
 /// `duration_nanos` is how long the event spans; pass `0` for an instantaneous
 /// event.
 ///

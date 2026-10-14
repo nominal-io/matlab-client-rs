@@ -350,7 +350,8 @@ classdef Asset < nominal.Resource
             %
             %   Args:
             %       startTime: Zoned datetime or int64 nanoseconds since the
-            %           epoch. Omit it, or pass 0, to start the run now.
+            %           epoch. Omit it to start the run now. int64(0) is the
+            %           epoch itself.
             %
             %   Returns:
             %       nominal.Run: The new, open run.
@@ -359,7 +360,7 @@ classdef Asset < nominal.Resource
             arguments
                 obj (1,1) nominal.Asset
                 name (1,1) string
-                startTime = int64(0)
+                startTime = nominal.now()
             end
             obj.assertLive();
             r = nominal.Run(obj.Client, ...

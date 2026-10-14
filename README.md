@@ -53,8 +53,8 @@ or an `int64` nanosecond count. Times coming back are UTC `datetime`.
 
 Plain doubles are refused for timestamps: they lose integer precision past
 2^53 nanoseconds, which is 1970 plus 104 days, so a present-day timestamp
-would be silently rounded. `0` is accepted as the "now" sentinel for run and
-event times.
+would be silently rounded. `int64(0)` is the epoch, 1970-01-01T00:00:00Z. Leave
+a run or event time out to mean now.
 
 ## Layout
 

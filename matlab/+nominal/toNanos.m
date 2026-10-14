@@ -8,12 +8,11 @@ function nanos = toNanos(value)
 %       r = a.run("burn-12", int64(1735689600000000000));
 %
 %   Args:
-%       value: A zoned datetime, an int64 nanosecond count, or 0. A plain
-%           double is refused unless it is 0: doubles lose integer
-%           precision past 2^53 nanoseconds, which is 1970 plus 104 days,
-%           so any present-day timestamp passed as one would be silently
-%           rounded. Zero is allowed because it is the "now" sentinel for
-%           run and event times.
+%       value: A zoned datetime or an int64 nanosecond count, taken
+%           literally: int64(0) is 1970-01-01T00:00:00Z. A plain double is
+%           refused: doubles lose integer precision past 2^53 nanoseconds,
+%           which is 1970 plus 104 days, so any present-day timestamp passed
+%           as one would be silently rounded.
 %
 %   Returns:
 %       int64: Nanoseconds since the Unix epoch.
@@ -42,11 +41,6 @@ function nanos = toNanos(value)
                   'expected a single timestamp, got %d elements', numel(value));
         end
         nanos = value;
-        return
-    end
-
-    if isnumeric(value) && isscalar(value) && value == 0
-        nanos = int64(0);
         return
     end
 

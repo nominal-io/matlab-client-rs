@@ -58,9 +58,8 @@ fn deliver(
 
 /// Create a run on an asset.
 ///
-/// `start_nanos` is nanoseconds since the Unix epoch; pass `0` to start the run
-/// now. The run is left open: set its end with `nominal_run_set_end_time`, or
-/// through a staged update.
+/// `start_nanos` is nanoseconds since the Unix epoch. The run is left open:
+/// set its end with `nominal_run_set_end_time`, or through a staged update.
 #[no_mangle]
 pub extern "C" fn nominal_run_create(
     client_handle: ClientHandle,
@@ -111,8 +110,7 @@ pub extern "C" fn nominal_run_get_by_rid(
 /// Close a run by setting its end time, returning the updated run as a new
 /// handle.
 ///
-/// `end_nanos` is nanoseconds since the Unix epoch; pass `0` to end the run
-/// now, which is the common case at the end of a test.
+/// `end_nanos` is nanoseconds since the Unix epoch.
 #[no_mangle]
 pub extern "C" fn nominal_run_set_end_time(
     client_handle: ClientHandle,

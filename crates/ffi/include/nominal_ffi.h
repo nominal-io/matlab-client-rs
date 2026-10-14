@@ -197,14 +197,14 @@ int32_t nominal_update_clear_properties(UpdateHandle handle, ErrorHandle *error_
 int32_t nominal_update_clear_labels(UpdateHandle handle, ErrorHandle *error_out);
 
 /**
- * Stage a start time, in nanoseconds since the Unix epoch. `0` means now.
+ * Stage a start time, in nanoseconds since the Unix epoch.
  *
  * Ignored by resources that have no start time.
  */
 int32_t nominal_update_set_start(UpdateHandle handle, int64_t nanos, ErrorHandle *error_out);
 
 /**
- * Stage an end time, in nanoseconds since the Unix epoch. `0` means now.
+ * Stage an end time, in nanoseconds since the Unix epoch.
  *
  * Ignored by resources that have no end time.
  */
@@ -854,7 +854,7 @@ int32_t nominal_dataset_property(DatasetHandle handle,
  * `asset_rids` is an array of `asset_count` NUL-terminated RID strings. At
  * least one is required — an event with no asset is not created.
  *
- * `timestamp_nanos` is nanoseconds since the epoch, with `0` meaning now.
+ * `timestamp_nanos` is nanoseconds since the epoch.
  * `duration_nanos` is how long the event spans; pass `0` for an instantaneous
  * event.
  *
@@ -1073,9 +1073,8 @@ int32_t nominal_ingest_job_free(IngestJobHandle handle);
 /**
  * Create a run on an asset.
  *
- * `start_nanos` is nanoseconds since the Unix epoch; pass `0` to start the run
- * now. The run is left open: set its end with `nominal_run_set_end_time`, or
- * through a staged update.
+ * `start_nanos` is nanoseconds since the Unix epoch. The run is left open:
+ * set its end with `nominal_run_set_end_time`, or through a staged update.
  */
 int32_t nominal_run_create(ClientHandle client_handle,
                            int32_t asset_handle,
@@ -1096,8 +1095,7 @@ int32_t nominal_run_get_by_rid(ClientHandle client_handle,
  * Close a run by setting its end time, returning the updated run as a new
  * handle.
  *
- * `end_nanos` is nanoseconds since the Unix epoch; pass `0` to end the run
- * now, which is the common case at the end of a test.
+ * `end_nanos` is nanoseconds since the Unix epoch.
  */
 int32_t nominal_run_set_end_time(ClientHandle client_handle,
                                  RunHandle run_handle,

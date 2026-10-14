@@ -30,8 +30,8 @@ acquisition loop cannot stall.
 ## Timestamps
 
 Use `nominal.now()` and `int64` for streaming timestamps. `datetime` does not resolve to
-nanoseconds, so a round trip through it is lossy. Streaming timestamps are literal, including
-zero. Unlike run and event times, `0` does not mean "now".
+nanoseconds, so a round trip through it is lossy. Timestamps are literal: `int64(0)` is the
+epoch.
 
 ## Tags
 
