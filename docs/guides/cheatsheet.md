@@ -24,6 +24,7 @@ hand you other objects, so you rarely construct anything directly.
 | Get a dataset by RID | `c.datasetByRid(rid)` |
 | Create a dataset attached to no asset | `c.createDataset(name)` |
 | Get a run by RID | `c.runByRid(rid)` |
+| Create a run from tagged data, no asset | `c.createRun(name, ds, Tags=…, StartTime=…, EndTime=…)` |
 | Create an event | `c.createEvent(assetRids, name)` |
 | …with properties | `c.createEvent(rids, name, Properties=struct(status="pass"))` |
 | Upload and ingest a CSV or Parquet file | `c.ingest(path, TimestampColumn=…)` |

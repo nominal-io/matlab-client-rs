@@ -99,6 +99,19 @@ r = chamber.run("test-42");
 r = r.addAsset(dut);
 ```
 
+## A run with no asset
+
+Simulation output has no physical system behind it. Keep one dataset per model, tag each
+execution's points, and make a run per execution from the dataset. Nominal keeps the run on
+a hidden asset, so the asset list stays clean.
+
+```matlab
+tags = dictionary(["model" "execution-id"], ["A" "7"]);
+ds.write("thrust", t, V, Tags=tags);
+r = c.createRun("Model A, execution 7", ds, Tags=tags, ...
+                StartTime=int64(0), EndTime=int64(60e9));
+```
+
 ## One dataset covering several units
 
 Create it on its own, tag the points by unit, and give each unit's asset its own slice.

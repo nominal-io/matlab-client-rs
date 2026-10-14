@@ -277,6 +277,62 @@ classdef Client < nominal.Resource
             r = nominal.Run(obj, nominalmex('run_get_by_rid', obj.Handle, char(rid)));
         end
 
+        function r = createRun(obj, name, dataset, refName, options)
+            %CREATERUN  Create a run from a dataset, with no asset of its own.
+            %
+            %   r = c.createRun("Model A, execution 7", ds, ...
+            %                   Tags=dictionary(["model" "execution-id"], ["A" "7"]), ...
+            %                   StartTime=int64(0), EndTime=int64(60e9));
+            %
+            %   For data with no physical system behind it, such as one
+            %   dataset per simulation model and one run per execution. The
+            %   run sees only the series carrying every one of Tags. Nominal
+            %   keeps it on a hidden asset, so nothing is added to the asset
+            %   list.
+            %
+            %   Use asset.run for a run on an asset you have.
+            %
+            %   Args:
+            %       name: Run name.
+            %       dataset: The nominal.Dataset the run reads.
+            %       refName: The dataset's name within the run. Defaults to
+            %           "default".
+            %
+            %   Options:
+            %       Tags: A struct, or a dictionary for keys that aren't valid
+            %           field names. Omit for the whole dataset.
+            %       StartTime: Zoned datetime or int64 nanoseconds. Defaults
+            %           to now. int64(0) is the epoch.
+            %       EndTime: Zoned datetime or int64 nanoseconds. Omit to leave
+            %           the run open.
+            %
+            %   Returns:
+            %       nominal.Run: The new run.
+            %
+            %   See also NOMINAL.ASSET/RUN, NOMINAL.ASSET/ADDDATASET
+            arguments
+                obj (1,1) nominal.Client
+                name (1,1) string
+                dataset (1,1) nominal.Dataset
+                refName (1,1) string = "default"
+                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
+                options.StartTime = nominal.now()
+                options.EndTime = []
+            end
+            obj.assertLive();
+            [tagKeys, tagValues] = keyValuePairs(options.Tags, "tag");
+
+            hasEnd = ~isempty(options.EndTime);
+            endNanos = int64(0);
+            if hasEnd
+                endNanos = nominal.toNanos(options.EndTime);
+            end
+
+            r = nominal.Run(obj, nominalmex('run_create_from_dataset', obj.Handle, ...
+                char(name), nominal.toNanos(options.StartTime), endNanos, ...
+                int32(hasEnd), dataset.Handle, char(refName), tagKeys, tagValues));
+        end
+
         function job = ingest(obj, path, options)
             %INGEST  Upload a CSV or Parquet file and start ingesting it.
             %

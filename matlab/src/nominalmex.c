@@ -1158,6 +1158,36 @@ static void cmd_asset_rename_ref_name(int nrhs, const mxArray *prhs[])
     throw_if_failed(status, err);
 }
 
+/* A run made from a dataset and tags, with no asset named. hasEnd is 0 for
+ * an open run, in which case endNanos is ignored. */
+static void cmd_run_create_from_dataset(mxArray *plhs[], int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    RunHandle out = 0;
+    char *name, *ref_name;
+    StringArray keys, values;
+    int32_t status;
+
+    require_args(nrhs, 9, "run_create_from_dataset");
+    name = arg_string(prhs[2], "name");
+    ref_name = arg_string(prhs[7], "refName");
+    borrow_pairs(prhs[8], prhs[9], "tag", &keys, &values);
+
+    status = nominal_run_create_from_dataset(arg_i32(prhs[1], "client"), name,
+                                             arg_i64(prhs[3], "startNanos"),
+                                             arg_i64(prhs[4], "endNanos"),
+                                             arg_i32(prhs[5], "hasEnd") != 0,
+                                             arg_i32(prhs[6], "dataset"),
+                                             ref_name, keys.ptrs, values.ptrs,
+                                             (uint32_t)keys.count, &out, &err);
+    mxFree(name);
+    mxFree(ref_name);
+    release_string_array(&keys);
+    release_string_array(&values);
+    throw_if_failed(status, err);
+    plhs[0] = mx_i32(out);
+}
+
 /*
  * Return every data source on an asset as a struct array.
  *
@@ -1919,6 +1949,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
     /* --- run --- */
     if (IS("run_create"))         { cmd_run_create(plhs, nrhs, prhs); return; }
+    if (IS("run_create_from_dataset")) { cmd_run_create_from_dataset(plhs, nrhs, prhs); return; }
     if (IS("run_get_by_rid"))     { do_lookup(nominal_run_get_by_rid, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("run_set_end_time"))   { cmd_run_set_end_time(plhs, nrhs, prhs); return; }
     if (IS("run_add_dataset"))    { cmd_run_add_dataset(plhs, nrhs, prhs); return; }

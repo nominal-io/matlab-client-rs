@@ -101,9 +101,10 @@ linked. Intel macOS is not supported. See [BUILDING.md](BUILDING.md).
   the object you got.
 - **`Run` has no `datasources()`.** A run's data sources are its asset's, so
   use `a.datasources()`.
-- **`Run.addDataset` cannot succeed** for a run made with `asset.run()`, which
-  is the only kind this client creates. A run's data sources are its asset's,
-  live, so there is nothing to attach. Every argument returns an error.
+- **`Run.addDataset` cannot succeed** for a run made with `asset.run()`. A
+  run's data sources are its asset's, live, so there is nothing to attach.
+  Every argument returns an error. Use `c.createRun` for a run with its own
+  data.
 - **Video and connection data sources** show up in `a.datasources()` with the
   right `Type`, but nothing here can act on one beyond renaming or detaching.
 - **`a.datasources()` does not show tag filters.** The tags given to

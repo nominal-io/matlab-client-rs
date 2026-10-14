@@ -258,6 +258,8 @@ function writeTagsAndPropertiesChecked()
     assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('write: got %s', id));
     id = errorFrom(@() ds.fetch("rpm", int64(1), int64(2), Tags=struct(UUT=["A" "B"])));
     assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('fetch: got %s', id));
+    id = errorFrom(@() c.createRun("x", ds, Tags=struct(UUT=["A" "B"])));
+    assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('createRun: got %s', id));
     id = errorFrom(@() c.createEvent("ri.x", "step", Properties=dictionary("k", {[1 2]})));
     assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('event: got %s', id));
 end

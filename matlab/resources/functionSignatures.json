@@ -112,6 +112,19 @@
     "outputs": [{"name": "run", "type": "nominal.Run"}]
   },
 
+  "nominal.Client.createRun": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "name", "kind": "required", "type": ["string"], "purpose": "Run name"},
+      {"name": "dataset", "kind": "required", "type": ["nominal.Dataset"], "purpose": "Dataset the run reads"},
+      {"name": "refName", "kind": "ordered", "type": ["string"], "purpose": "Reference name (default \"default\")"},
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Only series carrying these tags"},
+      {"name": "StartTime", "kind": "namevalue", "purpose": "datetime or int64 nanoseconds; omit for now"},
+      {"name": "EndTime", "kind": "namevalue", "purpose": "datetime or int64 nanoseconds; omit to leave open"}
+    ],
+    "outputs": [{"name": "run", "type": "nominal.Run"}]
+  },
+
   "nominal.Client.createEvent": {
     "inputs": [
       {"name": "obj", "kind": "required", "type": ["nominal.Client"]},

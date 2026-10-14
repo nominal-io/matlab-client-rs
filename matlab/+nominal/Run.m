@@ -189,14 +189,14 @@ classdef Run < nominal.Resource
         function updated = addDataset(obj, refName, dataset)
             %ADDDATASET  Attach a dataset under a reference name.
             %
-            %   **This cannot succeed for a run made with nominal.Asset.run,
-            %   which is the only kind this client creates.** A run's data
-            %   sources are its asset's, live: a dataset added to the asset is
-            %   already on the run. Every reference name the asset uses errors
-            %   as Scout:RefNamesAlreadyUsed, and every other name as
-            %   Default:InvalidArgument.
+            %   **This cannot succeed for a run made with nominal.Asset.run.**
+            %   A run's data sources are its asset's, live: a dataset added to
+            %   the asset is already on the run. Every reference name the
+            %   asset uses errors as Scout:RefNamesAlreadyUsed, and every other
+            %   name as Default:InvalidArgument.
             %
-            %   Nothing needs calling to get an asset's data onto its run.
+            %   Nothing needs calling to get an asset's data onto its run. For
+            %   a run with its own data, use nominal.Client.createRun.
             arguments
                 obj (1,1) nominal.Run
                 refName (1,1) string

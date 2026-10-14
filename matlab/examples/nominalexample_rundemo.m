@@ -8,8 +8,9 @@ function results = nominalexample_rundemo(assetName)
 %   closes it.
 %
 %   Covers: create with an explicit start, get by RID, adding and removing
-%   an asset, update, all accessors, and finish. Not addDataset: a run's data
-%   sources are its asset's, so there is nothing to attach.
+%   an asset, a run from a tagged dataset with no asset, update, all
+%   accessors, and finish. Not addDataset: a run's data sources are its
+%   asset's, so there is nothing to attach.
 %
 %   See also NOMINAL.RUN, NOMINALEXAMPLE_ASSETDEMO,
 %   NOMINALEXAMPLE_EVENTDEMO, NOMINALEXAMPLE_CONNECT
@@ -74,6 +75,18 @@ function results = nominalexample_rundemo(assetName)
     soloRun = sharedRun.removeAsset(chamber);
     fprintf('  on %d asset after removeAsset\n', numel(soloRun.AssetRids));
 
+    % --- a run with no asset of its own -------------------------------
+    %
+    % For data with no physical system behind it, such as one run per
+    % simulation execution: the run reads only the series with these tags,
+    % and Nominal keeps it on a hidden asset.
+    executionRun = client.createRun(asset.Name + " execution 7", dataset, ...
+        Tags = dictionary(["model" "execution-id"], ["A" "7"]), ...
+        StartTime = int64(0), EndTime = int64(60e9));
+    fprintf('  from a dataset: %s to %s, %d visible asset(s) named after it\n', ...
+            string(executionRun.StartTime), string(executionRun.EndTime), ...
+            height(client.assets(executionRun.Name)));
+
     % --- update -------------------------------------------------------
     %
     % update accepts start and end times as well as these metadata fields.
@@ -113,6 +126,7 @@ function results = nominalexample_rundemo(assetName)
     % Each handle in the chain needs its own delete.
     delete(finishedRun);
     delete(updatedRun);
+    delete(executionRun);
     delete(soloRun);
     delete(sharedRun);
     delete(chamber);

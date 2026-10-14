@@ -12,13 +12,19 @@ use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
 use crate::scout;
-use crate::strings::{c_str_to_string, set_string, StringHandle};
+use crate::strings::{c_str_to_string, pairs_from_c, set_string, StringHandle};
 use crate::time::{instant_from_nanos, nanos_from_instant};
 use crate::update::{snapshot, UpdateHandle};
 use nominal::core::{Run, RunCreate, RunUpdate};
 use nominal_streaming::api::clients::scout::AsyncRunService;
+use nominal_streaming::api::objects::api::rids::{DatasetRid, WorkspaceRid};
+use nominal_streaming::api::objects::api::{TagName, TagValue};
+use nominal_streaming::api::objects::scout::api::DataSourceRefName;
 use nominal_streaming::api::objects::scout::rids::api::AssetRid;
-use nominal_streaming::api::objects::scout::run::api::{RunRid, UpdateRunRequest};
+use nominal_streaming::api::objects::scout::run::api::{
+    CreateRunDataSource, CreateRunRequest, DataSource, RunRid, UpdateRunRequest, UtcTimestamp,
+};
+use nominal_streaming::client::conjure::object::SafeLong;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -82,6 +88,109 @@ pub extern "C" fn nominal_run_create(
             .block_on(client.runs().create(create))
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
 
+        deliver(run, out_run, error_out)
+    })
+}
+
+/// A run time in the API's seconds-plus-nanoseconds form.
+fn utc_timestamp(
+    nanos: i64,
+    what: &str,
+    error_out: *mut ErrorHandle,
+) -> Result<UtcTimestamp, ErrorCode> {
+    let convert = |value: i64| {
+        SafeLong::try_from(value).map_err(|_| {
+            fail(
+                error_out,
+                ErrorCode::InvalidParameter,
+                format!("{what} is outside the range the API can represent"),
+            )
+        })
+    };
+    // Euclidean, so instants before the epoch keep a non-negative remainder.
+    Ok(UtcTimestamp::builder()
+        .seconds_since_epoch(convert(nanos.div_euclid(1_000_000_000))?)
+        .offset_nanoseconds(Some(convert(nanos.rem_euclid(1_000_000_000))?))
+        .build())
+}
+
+/// Create a run from a dataset, naming no asset.
+///
+/// The run's data is `dataset` under `ref_name`, narrowed to the series
+/// carrying every one of the tags: parallel arrays of `tag_count` strings, or
+/// `tag_count = 0` for the whole dataset. The server puts the run on an asset
+/// already holding exactly that, or on a hidden one it creates, so no asset
+/// appears in search. Simulation output takes this shape: one dataset per
+/// model, one run per execution, each picked out by its tags.
+///
+/// `end_nanos` is used only when `has_end` is true; otherwise the run is left
+/// open.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn nominal_run_create_from_dataset(
+    client_handle: ClientHandle,
+    name: *const c_char,
+    start_nanos: i64,
+    end_nanos: i64,
+    has_end: bool,
+    dataset_handle: i32,
+    ref_name: *const c_char,
+    tag_keys: *const *const c_char,
+    tag_values: *const *const c_char,
+    tag_count: u32,
+    out_run: *mut RunHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_run, error_out, "out_run")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let dataset = dataset_or_fail(dataset_handle, error_out)?;
+        let name = unsafe { c_str_to_string(name, "name", error_out)? };
+        let ref_name = unsafe { c_str_to_string(ref_name, "ref_name", error_out)? };
+        let tags = unsafe { pairs_from_c(tag_keys, tag_values, tag_count, "tag", error_out)? };
+
+        let source = CreateRunDataSource::builder()
+            .data_source(DataSource::Dataset(DatasetRid(scout::parse_rid(
+                dataset.rid(),
+                "dataset RID",
+                error_out,
+            )?)))
+            .series_tags(tags.into_iter().map(|(k, v)| (TagName(k), TagValue(v))))
+            .build();
+
+        let end = if has_end {
+            Some(utc_timestamp(end_nanos, "end time", error_out)?)
+        } else {
+            None
+        };
+        let workspace = match client.workspace_rid() {
+            Some(rid) => Some(WorkspaceRid(scout::parse_rid(
+                rid,
+                "workspace RID",
+                error_out,
+            )?)),
+            None => None,
+        };
+
+        let request = CreateRunRequest::builder()
+            .title(name)
+            .description(String::new())
+            .start_time(utc_timestamp(start_nanos, "start time", error_out)?)
+            .end_time(end)
+            .insert_data_sources(DataSourceRefName(ref_name), source)
+            .workspace(workspace)
+            .build();
+
+        let service = scout::run_service(&client, error_out)?;
+        let token = scout::bearer(&client, error_out)?;
+        let created = RUNTIME
+            .block_on(service.create_run(&token, &request))
+            .map_err(|e| scout::api_error(error_out, e))?;
+
+        // Re-fetched through the crate so the handle holds its Run type.
+        let run = RUNTIME
+            .block_on(client.runs().get(created.rid().0.as_str()))
+            .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
         deliver(run, out_run, error_out)
     })
 }

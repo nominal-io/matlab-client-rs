@@ -1084,6 +1084,32 @@ int32_t nominal_run_create(ClientHandle client_handle,
                            ErrorHandle *error_out);
 
 /**
+ * Create a run from a dataset, naming no asset.
+ *
+ * The run's data is `dataset` under `ref_name`, narrowed to the series
+ * carrying every one of the tags: parallel arrays of `tag_count` strings, or
+ * `tag_count = 0` for the whole dataset. The server puts the run on an asset
+ * already holding exactly that, or on a hidden one it creates, so no asset
+ * appears in search. Simulation output takes this shape: one dataset per
+ * model, one run per execution, each picked out by its tags.
+ *
+ * `end_nanos` is used only when `has_end` is true; otherwise the run is left
+ * open.
+ */
+int32_t nominal_run_create_from_dataset(ClientHandle client_handle,
+                                        const char *name,
+                                        int64_t start_nanos,
+                                        int64_t end_nanos,
+                                        bool has_end,
+                                        int32_t dataset_handle,
+                                        const char *ref_name,
+                                        const char *const *tag_keys,
+                                        const char *const *tag_values,
+                                        uint32_t tag_count,
+                                        RunHandle *out_run,
+                                        ErrorHandle *error_out);
+
+/**
  * Fetch a run by RID.
  */
 int32_t nominal_run_get_by_rid(ClientHandle client_handle,
