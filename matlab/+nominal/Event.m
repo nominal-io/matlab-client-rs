@@ -19,6 +19,7 @@ classdef Event < nominal.Resource
         Timestamp datetime  % When it occurred, UTC.
         Duration duration    % How long it spans; zero for an instant.
         AssetRids string    % Assets it is attached to.
+        Properties          % All properties, as a containers.Map.
     end
 
     methods
@@ -76,6 +77,11 @@ classdef Event < nominal.Resource
             end
             obj.assertLive();
             value = string(nominalmex('event_property', obj.Handle, char(key)));
+        end
+
+        function v = get.Properties(obj)
+            obj.assertLive();
+            v = propertyMap('event_properties', obj.Handle);
         end
     end
 

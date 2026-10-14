@@ -43,6 +43,11 @@ function results = nominalexample_datasetdemo(assetName)
         Labels      = "matlab-demo");
     fprintf('  description: %s\n', updatedDataset.Description);
 
+    % setProperty changes one key and keeps the rest.
+    notedDataset = updatedDataset.setProperty("script", "nominalexample_datasetdemo.m");
+    fprintf('  properties: %s\n', strjoin(keys(notedDataset.Properties), ", "));
+    delete(notedDataset);
+
     % --- channel metadata, before any data exists ---------------------
     %
     % setChannelMetadata is an upsert and works before any data exists. The

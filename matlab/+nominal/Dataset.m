@@ -18,6 +18,7 @@ classdef Dataset < nominal.Resource
         Name string         % Display name.
         Description string  % Description, or "" if it has none.
         Labels string       % All labels, as a string array.
+        Properties          % All properties, as a containers.Map.
     end
 
     properties (Access = private)
@@ -70,6 +71,45 @@ classdef Dataset < nominal.Resource
             end
             obj.assertLive();
             value = string(nominalmex('dataset_property', obj.Handle, char(key)));
+        end
+
+        function v = get.Properties(obj)
+            obj.assertLive();
+            v = propertyMap('dataset_properties', obj.Handle);
+        end
+
+        function updated = setProperty(obj, key, value)
+            %SETPROPERTY  Set one property, keeping the rest.
+            %
+            %   ds = ds.setProperty("script", "reduce_flight.m");
+            %
+            %   Re-reads the dataset first, so properties set since this
+            %   handle was fetched are kept.
+            %
+            %   Returns:
+            %       nominal.Dataset: The updated dataset.
+            arguments
+                obj (1,1) nominal.Dataset
+                key (1,1) string
+                value (1,1)
+            end
+            obj.assertLive();
+            updated = editProperty(obj.Client.datasetByRid(obj.Rid), key, value);
+        end
+
+        function updated = removeProperty(obj, key)
+            %REMOVEPROPERTY  Remove one property, keeping the rest.
+            %
+            %   Errors if the dataset has no such property.
+            %
+            %   Returns:
+            %       nominal.Dataset: The updated dataset.
+            arguments
+                obj (1,1) nominal.Dataset
+                key (1,1) string
+            end
+            obj.assertLive();
+            updated = editProperty(obj.Client.datasetByRid(obj.Rid), key);
         end
 
         function t = assets(obj)
@@ -132,7 +172,7 @@ classdef Dataset < nominal.Resource
                 channels (1,:) string
                 timestamps
                 values (:,:) double
-                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
+                options.Tags {mustBeA(options.Tags, ["struct" "dictionary" "containers.Map"])} = struct()
             end
             obj.assertLive();
 
@@ -226,7 +266,7 @@ classdef Dataset < nominal.Resource
                 % a default of 0 rejects every call that omits Buckets. Zero
                 % is the sentinel for "no decimation".
                 options.Buckets (1,1) double {mustBeNonnegative, mustBeInteger} = 0
-                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
+                options.Tags {mustBeA(options.Tags, ["struct" "dictionary" "containers.Map"])} = struct()
             end
             obj.assertLive();
             [tagKeys, tagValues] = keyValuePairs(options.Tags, "tag");
@@ -242,24 +282,7 @@ classdef Dataset < nominal.Resource
                     nominal.toNanos(startTime), nominal.toNanos(endTime), ...
                     tagKeys, tagValues);
             end
-
-            tt = timetable(nominal.fromNanos(nanos), values);
-
-            % A channel really can be called "Time" or "Variables", and a
-            % timetable cannot have a variable sharing either dimension name.
-            % Move the dimension rather than the channel, so the variable still
-            % answers to the name the data actually has.
-            if strcmp(char(channel), tt.Properties.DimensionNames{1})
-                tt.Properties.DimensionNames{1} = 'RowTimes';
-            end
-            if strcmp(char(channel), tt.Properties.DimensionNames{2})
-                tt.Properties.DimensionNames{2} = 'TableVariables';
-            end
-
-            % Assigned rather than passed to the constructor: channel names
-            % routinely contain dots ("engine.left.rpm"), and the constructor
-            % would quietly rewrite those into valid identifiers.
-            tt.Properties.VariableNames = {char(channel)};
+            tt = seriesTimetable(nanos, values, channel);
         end
 
         function export(obj, path, channels, startTime, endTime, options)
@@ -404,7 +427,8 @@ classdef Dataset < nominal.Resource
             %
             %   Options not passed are left alone. Labels and Properties
             %   REPLACE rather than merge: read ds.Labels first and concatenate
-            %   if you mean to add.
+            %   if you mean to add. setProperty changes one property and keeps
+            %   the rest.
             %
             %   Options:
             %       Name: New display name.
@@ -424,7 +448,7 @@ classdef Dataset < nominal.Resource
                 % which also explains why only Labels is left unconstrained.
                 options.Name (1,1) string
                 options.Description (1,1) string
-                options.Properties struct
+                options.Properties {mustBeA(options.Properties, ["struct" "dictionary" "containers.Map"])}
                 options.Labels string
             end
             obj.assertLive();

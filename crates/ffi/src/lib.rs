@@ -77,9 +77,11 @@ pub(crate) fn clear_all_registries() {
     client::clear_clients();
     asset::clear_assets();
     asset::clear_asset_lists();
+    asset::clear_scope_lists();
     dataset::clear_datasets();
     dataset::clear_dataset_lists();
     run::clear_runs();
+    run::clear_run_lists();
     event::clear_events();
     event::clear_event_services();
     write::clear_write_services();

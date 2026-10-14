@@ -703,6 +703,44 @@ static void cmd_property(int32_t (*fn)(int32_t, const char *, StringHandle, Erro
     plhs[0] = scratch_to_mx();
 }
 
+/* Every property as two cell columns, keys then values, in key order. */
+static void cmd_properties(int32_t (*count_fn)(int32_t, uint32_t *, ErrorHandle *),
+                           int32_t (*key_fn)(int32_t, uint32_t, StringHandle, ErrorHandle *),
+                           int32_t (*value_fn)(int32_t, const char *, StringHandle, ErrorHandle *),
+                           int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[],
+                           const char *command)
+{
+    ErrorHandle err = 0;
+    int32_t handle;
+    uint32_t count = 0, i;
+    mxArray *keys, *values;
+
+    require_outputs(nlhs, 2, command);
+    require_args(nrhs, 1, command);
+    handle = arg_i32(prhs[1], "handle");
+
+    throw_if_failed(count_fn(handle, &count, &err), err);
+    keys = mxCreateCellMatrix((mwSize)count, 1);
+    values = mxCreateCellMatrix((mwSize)count, 1);
+    for (i = 0; i < count; ++i) {
+        char *key;
+        mxArray *key_mx;
+        int32_t status;
+
+        throw_if_failed(key_fn(handle, i, g_scratch, &err), err);
+        key_mx = scratch_to_mx();
+        mxSetCell(keys, i, key_mx);
+
+        key = mxArrayToUTF8String(key_mx);
+        status = value_fn(handle, key, g_scratch, &err);
+        mxFree(key);
+        throw_if_failed(status, err);
+        mxSetCell(values, i, scratch_to_mx());
+    }
+    plhs[0] = keys;
+    plhs[1] = values;
+}
+
 static void cmd_label_at(int32_t (*fn)(int32_t, uint32_t, StringHandle, ErrorHandle *),
                          mxArray *plhs[], int nrhs, const mxArray *prhs[],
                          const char *command)
@@ -912,7 +950,7 @@ static const char *datasource_kind_name(int32_t kind)
         case 0:  return "dataset";
         case 1:  return "video";
         case 2:  return "connection";
-        default: return "unknown";
+        default: return "other";
     }
 }
 
@@ -1189,39 +1227,61 @@ static void cmd_run_create_from_dataset(mxArray *plhs[], int nrhs, const mxArray
 }
 
 /*
- * Return every data source on an asset as a struct array.
+ * Return every data source on an asset, read fresh from the server, as a
+ * struct array: RefName, Rid, Type, TagKeys and TagValues (cell columns of
+ * the tag filter), OffsetNanos.
  *
  * Assembled here rather than in MATLAB so the whole table costs one MEX call
- * instead of three per row. The library orders entries by reference name, so
- * the result is reproducible.
+ * instead of several per row. The library orders entries by reference name,
+ * so the result is reproducible.
  */
 static void cmd_asset_datasources(mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-    static const char *fields[] = { "RefName", "Rid", "Type" };
+    static const char *fields[] = { "RefName", "Rid", "Type", "TagKeys", "TagValues",
+                                    "OffsetNanos" };
     ErrorHandle err = 0;
-    AssetHandle asset;
-    uint32_t count = 0, i;
+    ScopeListHandle list = 0;
+    uint32_t count = 0, i, j;
     mxArray *out;
 
-    require_args(nrhs, 1, "asset_datasources");
-    asset = arg_i32(prhs[1], "asset");
+    require_args(nrhs, 2, "asset_datasources");
+    throw_if_failed(nominal_asset_scopes(arg_i32(prhs[1], "client"),
+                                         arg_i32(prhs[2], "asset"),
+                                         &list, &count, &err), err);
 
-    throw_if_failed(nominal_asset_datasource_count(asset, &count, &err), err);
-
-    out = mxCreateStructMatrix((mwSize)count, 1, 3, fields);
+    out = mxCreateStructMatrix((mwSize)count, 1, 6, fields);
     for (i = 0; i < count; ++i) {
         int32_t kind = 0;
+        int64_t offset = 0;
+        uint32_t tag_count = 0;
+        mxArray *keys, *values;
 
-        throw_if_failed(nominal_asset_datasource_ref_name_at(asset, i, g_scratch, &err), err);
+        throw_if_failed(nominal_scope_ref_name_at(list, i, g_scratch, &err), err);
         mxSetFieldByNumber(out, i, 0, scratch_to_mx());
 
-        throw_if_failed(nominal_asset_datasource_rid_at(asset, i, g_scratch, &err), err);
+        throw_if_failed(nominal_scope_rid_at(list, i, g_scratch, &err), err);
         mxSetFieldByNumber(out, i, 1, scratch_to_mx());
 
-        throw_if_failed(nominal_asset_datasource_type_at(asset, i, &kind, &err), err);
+        throw_if_failed(nominal_scope_type_at(list, i, &kind, &err), err);
         mxSetFieldByNumber(out, i, 2, mxCreateString(datasource_kind_name(kind)));
+
+        throw_if_failed(nominal_scope_tag_count_at(list, i, &tag_count, &err), err);
+        keys = mxCreateCellMatrix((mwSize)tag_count, 1);
+        values = mxCreateCellMatrix((mwSize)tag_count, 1);
+        for (j = 0; j < tag_count; ++j) {
+            throw_if_failed(nominal_scope_tag_key_at(list, i, j, g_scratch, &err), err);
+            mxSetCell(keys, j, scratch_to_mx());
+            throw_if_failed(nominal_scope_tag_value_at(list, i, j, g_scratch, &err), err);
+            mxSetCell(values, j, scratch_to_mx());
+        }
+        mxSetFieldByNumber(out, i, 3, keys);
+        mxSetFieldByNumber(out, i, 4, values);
+
+        throw_if_failed(nominal_scope_offset_at(list, i, &offset, &err), err);
+        mxSetFieldByNumber(out, i, 5, mx_i64(offset));
     }
 
+    nominal_scope_list_free(list);
     plhs[0] = out;
 }
 
@@ -1341,6 +1401,75 @@ static void cmd_asset_list(mxArray *plhs[], int nrhs, const mxArray *prhs[],
 
     nominal_asset_list_free(list);
     plhs[0] = out;
+}
+
+/*
+ * Runs matching every criterion, as six columns: names, RIDs, numbers, start
+ * nanos, end nanos and whether each has ended. MATLAB builds the table.
+ * hasStartAfter and hasEndBefore are 0 to leave that bound off.
+ */
+static void cmd_run_search(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    int32_t list = 0, status;
+    uint32_t count = 0, i;
+    char *name;
+    StringArray labels, keys, values;
+    mxArray *names, *rids, *numbers, *starts, *ends, *has_ends;
+
+    require_outputs(nlhs, 6, "run_search");
+    require_args(nrhs, 9, "run_search");
+    name = arg_string(prhs[2], "nameContains");
+    labels = borrow_string_array(prhs[3], "labels");
+    borrow_pairs(prhs[4], prhs[5], "property", &keys, &values);
+
+    status = nominal_run_search(arg_i32(prhs[1], "client"), name,
+                                labels.ptrs, (uint32_t)labels.count,
+                                keys.ptrs, values.ptrs, (uint32_t)keys.count,
+                                arg_i64(prhs[6], "startAfter"),
+                                arg_i32(prhs[7], "hasStartAfter") != 0,
+                                arg_i64(prhs[8], "endBefore"),
+                                arg_i32(prhs[9], "hasEndBefore") != 0,
+                                &list, &count, &err);
+    mxFree(name);
+    release_string_array(&labels);
+    release_string_array(&keys);
+    release_string_array(&values);
+    throw_if_failed(status, err);
+
+    names = mxCreateCellMatrix((mwSize)count, 1);
+    rids = mxCreateCellMatrix((mwSize)count, 1);
+    numbers = mxCreateDoubleMatrix((mwSize)count, 1, mxREAL);
+    starts = mxCreateNumericMatrix((mwSize)count, 1, mxINT64_CLASS, mxREAL);
+    ends = mxCreateNumericMatrix((mwSize)count, 1, mxINT64_CLASS, mxREAL);
+    has_ends = mxCreateLogicalMatrix((mwSize)count, 1);
+    for (i = 0; i < count; ++i) {
+        RunHandle run = 0;
+        uint32_t number = 0;
+        bool has_end = false;
+
+        throw_if_failed(nominal_run_list_at(list, i, &run, &err), err);
+
+        throw_if_failed(nominal_run_name(run, g_scratch, &err), err);
+        mxSetCell(names, i, scratch_to_mx());
+        throw_if_failed(nominal_run_rid(run, g_scratch, &err), err);
+        mxSetCell(rids, i, scratch_to_mx());
+        throw_if_failed(nominal_run_number(run, &number, &err), err);
+        mxGetDoubles(numbers)[i] = (double)number;
+        throw_if_failed(nominal_run_start_time(run, &mxGetInt64s(starts)[i], &err), err);
+        throw_if_failed(nominal_run_end_time(run, &mxGetInt64s(ends)[i], &has_end, &err), err);
+        mxGetLogicals(has_ends)[i] = has_end;
+
+        nominal_run_free(run);
+    }
+
+    nominal_run_list_free(list);
+    plhs[0] = names;
+    plhs[1] = rids;
+    plhs[2] = numbers;
+    plhs[3] = starts;
+    plhs[4] = ends;
+    plhs[5] = has_ends;
 }
 
 static void cmd_dataset_list(mxArray *plhs[], int nrhs, const mxArray *prhs[],
@@ -1577,6 +1706,8 @@ static void cmd_event_assets(mxArray *plhs[], int nrhs, const mxArray *prhs[])
 /* reaches MATLAB — one less thing for a caller to forget to free.      */
 /* ------------------------------------------------------------------ */
 
+static void series_to_outputs(SeriesHandle series, mxArray *plhs[]);
+
 static void cmd_dataset_fetch(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[],
                               const char *command)
 {
@@ -1585,8 +1716,6 @@ static void cmd_dataset_fetch(int nlhs, mxArray *plhs[], int nrhs, const mxArray
     char *channel;
     StringArray tag_keys, tag_values;
     int32_t status;
-    uint32_t length = 0, written = 0;
-    mxArray *times = NULL, *values = NULL;
     int decimated = (strcmp(command, "dataset_fetch_decimated") == 0);
     int tags_at = decimated ? 7 : 6;   /* tag keys, then values, come last */
 
@@ -1614,8 +1743,49 @@ static void cmd_dataset_fetch(int nlhs, mxArray *plhs[], int nrhs, const mxArray
     release_string_array(&tag_values);
     /* No series exists on failure, so there is nothing to release yet. */
     throw_if_failed(status, err);
+    series_to_outputs(series, plhs);
+}
 
-    /* From here the series must be released before anything can throw. */
+/* Read a channel through an asset's or run's data source: [nanos, values]. */
+static void cmd_scope_fetch(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
+{
+    ErrorHandle err = 0;
+    SeriesHandle series = 0;
+    char *owner, *ref_name, *channel;
+    StringArray tag_keys, tag_values;
+    int32_t status;
+
+    require_outputs(nlhs, 2, "scope_fetch");
+    require_args(nrhs, 9, "scope_fetch");
+    owner = arg_string(prhs[2], "ownerRid");
+    ref_name = arg_string(prhs[3], "refName");
+    channel = arg_string(prhs[4], "channel");
+    borrow_pairs(prhs[8], prhs[9], "tag", &tag_keys, &tag_values);
+
+    status = nominal_compute_fetch_scope(
+        arg_i32(prhs[1], "client"), owner, ref_name, channel,
+        arg_i64(prhs[5], "startNanos"), arg_i64(prhs[6], "endNanos"),
+        (uint32_t)arg_i32(prhs[7], "buckets"),
+        tag_keys.ptrs, tag_values.ptrs, (uint32_t)tag_keys.count,
+        &series, &err);
+    mxFree(owner);
+    mxFree(ref_name);
+    mxFree(channel);
+    release_string_array(&tag_keys);
+    release_string_array(&tag_values);
+    throw_if_failed(status, err);
+    series_to_outputs(series, plhs);
+}
+
+/* Copy a fetched series into [nanos, values] and release it. */
+static void series_to_outputs(SeriesHandle series, mxArray *plhs[])
+{
+    ErrorHandle err = 0;
+    int32_t status;
+    uint32_t length = 0, written = 0;
+    mxArray *times = NULL, *values = NULL;
+
+    /* The series must be released before anything can throw. */
     status = nominal_series_length(series, &length, &err);
     if (status == NOMINAL_SUCCESS) {
         times = mxCreateNumericMatrix((mwSize)length, 1, mxINT64_CLASS, mxREAL);
@@ -1925,6 +2095,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("asset_label_count"))   { do_getter_u32(nominal_asset_label_count, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("asset_label_at"))      { cmd_label_at(nominal_asset_label_at, plhs, nrhs, prhs, command); return; }
     if (IS("asset_property"))      { cmd_property(nominal_asset_property, plhs, nrhs, prhs, command); return; }
+    if (IS("asset_properties"))    { cmd_properties(nominal_asset_property_count, nominal_asset_property_key_at, nominal_asset_property, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("asset_datasources"))   { cmd_asset_datasources(plhs, nrhs, prhs); return; }
     if (IS("asset_list") || IS("asset_search") || IS("dataset_assets")) { cmd_asset_list(plhs, nrhs, prhs, command); return; }
     if (IS("asset_remove_data_source")) { cmd_asset_remove_data_source(nrhs, prhs); return; }
@@ -1946,6 +2117,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("dataset_label_count"))    { do_getter_u32(nominal_dataset_label_count, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("dataset_label_at"))       { cmd_label_at(nominal_dataset_label_at, plhs, nrhs, prhs, command); return; }
     if (IS("dataset_property"))       { cmd_property(nominal_dataset_property, plhs, nrhs, prhs, command); return; }
+    if (IS("dataset_properties"))     { cmd_properties(nominal_dataset_property_count, nominal_dataset_property_key_at, nominal_dataset_property, nlhs, plhs, nrhs, prhs, command); return; }
 
     /* --- run --- */
     if (IS("run_create"))         { cmd_run_create(plhs, nrhs, prhs); return; }
@@ -1968,6 +2140,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("run_label_count"))    { do_getter_u32(nominal_run_label_count, nlhs, plhs, nrhs, prhs, command); return; }
     if (IS("run_label_at"))       { cmd_label_at(nominal_run_label_at, plhs, nrhs, prhs, command); return; }
     if (IS("run_property"))       { cmd_property(nominal_run_property, plhs, nrhs, prhs, command); return; }
+    if (IS("run_properties"))     { cmd_properties(nominal_run_property_count, nominal_run_property_key_at, nominal_run_property, nlhs, plhs, nrhs, prhs, command); return; }
+    if (IS("run_search"))         { cmd_run_search(nlhs, plhs, nrhs, prhs); return; }
 
     /* --- staged updates --- */
     if (IS("update_begin"))            { cmd_update_begin(plhs, nrhs, prhs); return; }
@@ -2013,9 +2187,11 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     if (IS("event_duration"))  { cmd_event_i64(nominal_event_duration, plhs, nrhs, prhs, command); return; }
     if (IS("event_assets"))    { cmd_event_assets(plhs, nrhs, prhs); return; }
     if (IS("event_property"))  { cmd_property(nominal_event_property, plhs, nrhs, prhs, command); return; }
+    if (IS("event_properties")) { cmd_properties(nominal_event_property_count, nominal_event_property_key_at, nominal_event_property, nlhs, plhs, nrhs, prhs, command); return; }
 
     /* --- reading data back --- */
     if (IS("dataset_fetch") || IS("dataset_fetch_decimated")) { cmd_dataset_fetch(nlhs, plhs, nrhs, prhs, command); return; }
+    if (IS("scope_fetch"))    { cmd_scope_fetch(nlhs, plhs, nrhs, prhs); return; }
     if (IS("dataset_export") || IS("dataset_export_url"))     { cmd_dataset_export(plhs, nrhs, prhs, command); return; }
 
     /* --- ingest --- */

@@ -70,8 +70,9 @@ function results = nominalexample_eventdemo(assetName)
                                    Properties = struct(status = "pass", output = 4.2));
 
     describe(stepEvent);
-    fprintf('  status   %s, output %s\n', ...
-            stepEvent.property("status"), stepEvent.property("output"));
+    fprintf('  status   %s, output %s (%d properties)\n', ...
+            stepEvent.property("status"), stepEvent.property("output"), ...
+            stepEvent.Properties.Count);
 
     % --- results ------------------------------------------------------
     %

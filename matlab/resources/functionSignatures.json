@@ -64,6 +64,18 @@
     "outputs": [{"name": "t", "type": "table"}]
   },
 
+  "nominal.Client.runs": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
+      {"name": "filter", "kind": "ordered", "type": ["string"], "purpose": "Name substring"},
+      {"name": "Labels", "kind": "namevalue", "type": ["string"], "purpose": "The run must carry all of these"},
+      {"name": "Properties", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Every key must have this value"},
+      {"name": "StartAfter", "kind": "namevalue", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "EndBefore", "kind": "namevalue", "purpose": "datetime or int64 nanoseconds"}
+    ],
+    "outputs": [{"name": "t", "type": "table"}]
+  },
+
   "nominal.Client.getOrCreateAsset": {
     "inputs": [
       {"name": "obj", "kind": "required", "type": ["nominal.Client"]},
@@ -118,7 +130,7 @@
       {"name": "name", "kind": "required", "type": ["string"], "purpose": "Run name"},
       {"name": "dataset", "kind": "required", "type": ["nominal.Dataset"], "purpose": "Dataset the run reads"},
       {"name": "refName", "kind": "ordered", "type": ["string"], "purpose": "Reference name (default \"default\")"},
-      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Only series carrying these tags"},
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Only series carrying these tags"},
       {"name": "StartTime", "kind": "namevalue", "purpose": "datetime or int64 nanoseconds; omit for now"},
       {"name": "EndTime", "kind": "namevalue", "purpose": "datetime or int64 nanoseconds; omit to leave open"}
     ],
@@ -133,7 +145,7 @@
       {"name": "Type", "kind": "namevalue", "type": ["choices={'info','flag','error','success'}"]},
       {"name": "Timestamp", "kind": "namevalue", "purpose": "datetime or int64 nanoseconds"},
       {"name": "Duration", "kind": "namevalue", "purpose": "duration; zero marks an instant"},
-      {"name": "Properties", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "e.g. struct(status=\"pass\")"}
+      {"name": "Properties", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "e.g. struct(status=\"pass\")"}
     ],
     "outputs": [{"name": "event", "type": "nominal.Event"}]
   },
@@ -147,7 +159,7 @@
       {"name": "NewDataset", "kind": "namevalue", "type": ["string"], "purpose": "Name for a new, unattached dataset"},
       {"name": "Kind", "kind": "namevalue", "type": ["choices={'iso8601','epoch','relative'}"]},
       {"name": "Unit", "kind": "namevalue", "type": ["choices={'nanoseconds','microseconds','milliseconds','seconds','minutes','hours'}"]},
-      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Stamped on every point in the file"}
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Stamped on every point in the file"}
     ],
     "outputs": [{"name": "job", "type": "nominal.IngestJob"}]
   },
@@ -193,7 +205,7 @@
       {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
       {"name": "dataset", "kind": "required", "type": ["nominal.Dataset"], "purpose": "Dataset to attach"},
       {"name": "refName", "kind": "ordered", "type": ["string"], "purpose": "Reference name; omit and a free one is chosen"},
-      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Only series carrying these tags: struct(UUT=\"A\") or dictionary(\"test-stand\",\"3\")"}
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Only series carrying these tags: struct(UUT=\"A\") or dictionary(\"test-stand\",\"3\")"}
     ]
   },
 
@@ -210,6 +222,19 @@
       {"name": "oldName", "kind": "required", "type": ["string"], "purpose": "Reference name now"},
       {"name": "newName", "kind": "required", "type": ["string"], "purpose": "Reference name to use instead"}
     ]
+  },
+
+  "nominal.Asset.fetch": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "channel", "kind": "required", "type": ["string"], "purpose": "Channel name"},
+      {"name": "startTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "endTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
+      {"name": "RefName", "kind": "namevalue", "type": ["string"], "purpose": "Which data source (default \"default\")"},
+      {"name": "Buckets", "kind": "namevalue", "type": ["numeric"], "purpose": "Decimate to roughly this many points"},
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Narrow further"}
+    ],
+    "outputs": [{"name": "tt", "type": "timetable"}]
   },
 
   "nominal.Asset.datasources": {
@@ -237,13 +262,30 @@
     "outputs": [{"name": "value", "type": "string"}]
   },
 
+  "nominal.Asset.setProperty": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "key", "kind": "required", "type": ["string"]},
+      {"name": "value", "kind": "required", "purpose": "Stored as text"}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Asset"}]
+  },
+
+  "nominal.Asset.removeProperty": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
+      {"name": "key", "kind": "required", "type": ["string"]}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Asset"}]
+  },
+
   "nominal.Asset.update": {
     "inputs": [
       {"name": "obj", "kind": "required", "type": ["nominal.Asset"]},
       {"name": "Name", "kind": "namevalue", "type": ["string"]},
       {"name": "Description", "kind": "namevalue", "type": ["string"]},
       {"name": "Labels", "kind": "namevalue", "type": ["string"], "purpose": "Replaces, does not merge"},
-      {"name": "Properties", "kind": "namevalue", "type": ["struct"], "purpose": "Replaces, does not merge"}
+      {"name": "Properties", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Replaces, does not merge; see setProperty"}
     ],
     "outputs": [{"name": "updated", "type": "nominal.Asset"}]
   },
@@ -255,7 +297,7 @@
       {"name": "startTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
       {"name": "endTime", "kind": "required", "purpose": "datetime or int64 nanoseconds"},
       {"name": "Buckets", "kind": "namevalue", "type": ["numeric"], "purpose": "Decimate to roughly this many points"},
-      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Which tag set, if the channel has several"}
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Which tag set, if the channel has several"}
     ],
     "outputs": [{"name": "tt", "type": "timetable"}]
   },
@@ -266,7 +308,7 @@
       {"name": "channels", "kind": "required", "type": ["string"], "purpose": "One name per column of values"},
       {"name": "timestamps", "kind": "required", "purpose": "datetime column or int64 nanoseconds"},
       {"name": "values", "kind": "required", "type": ["numeric"], "purpose": "Rows by channels"},
-      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"]], "purpose": "Stamped on every point written"}
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Stamped on every point written"}
     ]
   },
 
@@ -338,13 +380,30 @@
     "outputs": [{"name": "value", "type": "string"}]
   },
 
+  "nominal.Dataset.setProperty": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "key", "kind": "required", "type": ["string"]},
+      {"name": "value", "kind": "required", "purpose": "Stored as text"}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Dataset"}]
+  },
+
+  "nominal.Dataset.removeProperty": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
+      {"name": "key", "kind": "required", "type": ["string"]}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Dataset"}]
+  },
+
   "nominal.Dataset.update": {
     "inputs": [
       {"name": "obj", "kind": "required", "type": ["nominal.Dataset"]},
       {"name": "Name", "kind": "namevalue", "type": ["string"]},
       {"name": "Description", "kind": "namevalue", "type": ["string"]},
       {"name": "Labels", "kind": "namevalue", "type": ["string"], "purpose": "Replaces, does not merge"},
-      {"name": "Properties", "kind": "namevalue", "type": ["struct"], "purpose": "Replaces, does not merge"}
+      {"name": "Properties", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Replaces, does not merge; see setProperty"}
     ],
     "outputs": [{"name": "updated", "type": "nominal.Dataset"}]
   },
@@ -372,6 +431,17 @@
       {"name": "endTime", "kind": "ordered", "purpose": "datetime or int64 nanoseconds; omit for now"}
     ],
     "outputs": [{"name": "finished", "type": "nominal.Run"}]
+  },
+
+  "nominal.Run.fetch": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Run"]},
+      {"name": "channel", "kind": "required", "type": ["string"], "purpose": "Channel name; read over the run's window"},
+      {"name": "RefName", "kind": "namevalue", "type": ["string"], "purpose": "Which data source (default \"default\")"},
+      {"name": "Buckets", "kind": "namevalue", "type": ["numeric"], "purpose": "Decimate to roughly this many points"},
+      {"name": "Tags", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Narrow further"}
+    ],
+    "outputs": [{"name": "tt", "type": "timetable"}]
   },
 
   "nominal.Run.addAsset": {
@@ -406,13 +476,30 @@
     "outputs": [{"name": "value", "type": "string"}]
   },
 
+  "nominal.Run.setProperty": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Run"]},
+      {"name": "key", "kind": "required", "type": ["string"]},
+      {"name": "value", "kind": "required", "purpose": "Stored as text"}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Run"}]
+  },
+
+  "nominal.Run.removeProperty": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": ["nominal.Run"]},
+      {"name": "key", "kind": "required", "type": ["string"]}
+    ],
+    "outputs": [{"name": "updated", "type": "nominal.Run"}]
+  },
+
   "nominal.Run.update": {
     "inputs": [
       {"name": "obj", "kind": "required", "type": ["nominal.Run"]},
       {"name": "Name", "kind": "namevalue", "type": ["string"]},
       {"name": "Description", "kind": "namevalue", "type": ["string"]},
       {"name": "Labels", "kind": "namevalue", "type": ["string"], "purpose": "Replaces, does not merge"},
-      {"name": "Properties", "kind": "namevalue", "type": ["struct"], "purpose": "Replaces, does not merge"},
+      {"name": "Properties", "kind": "namevalue", "type": [["struct"], ["dictionary"], ["containers.Map"]], "purpose": "Replaces, does not merge; see setProperty"},
       {"name": "StartTime", "kind": "namevalue"},
       {"name": "EndTime", "kind": "namevalue"}
     ],

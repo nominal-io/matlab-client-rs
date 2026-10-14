@@ -123,6 +123,55 @@ pub(crate) unsafe fn pairs_from_c(
     Ok(pairs)
 }
 
+/// Read `count` strings from a C array. Null is fine when `count` is 0.
+///
+/// # Safety
+/// When `count > 0`, `ptrs` must hold `count` pointers, each null or a
+/// NUL-terminated string.
+pub(crate) unsafe fn strings_from_c(
+    ptrs: *const *const c_char,
+    count: u32,
+    what: &str,
+    error_out: *mut ErrorHandle,
+) -> Result<Vec<String>, ErrorCode> {
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    if ptrs.is_null() {
+        return Err(fail(
+            error_out,
+            ErrorCode::InvalidParameter,
+            format!("{what} must not be null when its count is > 0"),
+        ));
+    }
+    std::slice::from_raw_parts(ptrs, count as usize)
+        .iter()
+        .enumerate()
+        .map(|(index, &ptr)| c_str_to_string(ptr, &format!("{what}[{index}]"), error_out))
+        .collect()
+}
+
+/// The key at `index` once `keys` are sorted.
+///
+/// Property maps have no order of their own, so sorting is what gives an
+/// index the same meaning on every call.
+pub(crate) fn key_at<'a>(
+    keys: impl Iterator<Item = &'a str>,
+    index: u32,
+    error_out: *mut ErrorHandle,
+) -> Result<&'a str, ErrorCode> {
+    let mut sorted: Vec<&str> = keys.collect();
+    sorted.sort_unstable();
+    let count = sorted.len();
+    sorted.get(index as usize).copied().ok_or_else(|| {
+        fail(
+            error_out,
+            ErrorCode::InvalidParameter,
+            format!("property index {index} out of range ({count} properties)"),
+        )
+    })
+}
+
 /// Read a caller-provided C string verbatim, preserving whitespace.
 ///
 /// For values the caller is storing rather than naming — a streamed string
@@ -311,6 +360,17 @@ mod tests {
         let mut err = 0;
         let pairs = unsafe { pairs_from_c(std::ptr::null(), std::ptr::null(), 2, "tag", &mut err) };
         assert_eq!(pairs.unwrap_err(), ErrorCode::InvalidParameter);
+        crate::error::nominal_error_free(err);
+    }
+
+    #[test]
+    fn keys_are_indexed_in_sorted_order() {
+        let keys = ["phase", "Operator", "build"];
+        let mut err = 0;
+        let mut read = |i| key_at(keys.iter().copied(), i, &mut err).map(str::to_owned);
+        assert_eq!(read(0).unwrap(), "Operator");
+        assert_eq!(read(2).unwrap(), "phase");
+        assert!(read(3).is_err());
         crate::error::nominal_error_free(err);
     }
 

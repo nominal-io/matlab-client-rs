@@ -3,7 +3,7 @@ use crate::client::{client_or_fail, ClientHandle};
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
 use crate::scout;
-use crate::strings::{c_str_to_string, set_string, StringHandle};
+use crate::strings::{c_str_to_string, key_at, set_string, StringHandle};
 use crate::update::{snapshot, UpdateHandle};
 use nominal::core::{Dataset, DatasetCreate, DatasetQuery, DatasetUpdate};
 use nominal_streaming::api::clients::scout::assets::AsyncAssetService;
@@ -607,6 +607,41 @@ pub extern "C" fn nominal_dataset_label_at(
             )
         })?;
         set_string(out_string, label.as_str(), error_out)
+    })
+}
+
+/// Number of properties on a dataset.
+#[no_mangle]
+pub extern "C" fn nominal_dataset_property_count(
+    handle: DatasetHandle,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_count, error_out, "out_count")?;
+        let dataset = dataset_or_fail(handle, error_out)?;
+        unsafe { *out_count = dataset.properties().len() as u32 };
+        Ok(())
+    })
+}
+
+/// Property key at `index`, in sorted order. Read its value with
+/// `nominal_dataset_property`.
+#[no_mangle]
+pub extern "C" fn nominal_dataset_property_key_at(
+    handle: DatasetHandle,
+    index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let dataset = dataset_or_fail(handle, error_out)?;
+        let key = key_at(
+            dataset.properties().keys().map(String::as_str),
+            index,
+            error_out,
+        )?;
+        set_string(out_string, key, error_out)
     })
 }
 

@@ -125,6 +125,66 @@ classdef Client < nominal.Resource
             t = structsToTable(s, ["Name" "Rid"]);
         end
 
+        function t = runs(obj, filter, options)
+            %RUNS  Runs matching every filter given, as a table.
+            %
+            %   t = c.runs("hot-fire", Labels=["hot-fire" "stand-3"], ...
+            %              Properties=struct(operator="jd"), StartAfter=t0);
+            %   r = c.runByRid(t.Rid(1));
+            %
+            %   Every label must be on the run, and every property must match.
+            %   With no filter at all it fetches EVERY run in the workspace.
+            %
+            %   Args:
+            %       filter: Keep only runs whose name contains this.
+            %
+            %   Options:
+            %       Labels: String array; the run must carry all of them.
+            %       Properties: A struct, dictionary or containers.Map; every
+            %           key must have that value.
+            %       StartAfter: Zoned datetime or int64 nanoseconds; the run
+            %           starts at or after it.
+            %       EndBefore: Zoned datetime or int64 nanoseconds; the run
+            %           ends at or before it.
+            %
+            %   Returns:
+            %       table: Variables Name, Rid, Number, StartTime and EndTime
+            %           (NaT while open), ordered by start time.
+            %
+            %   See also NOMINAL.CLIENT/RUNBYRID, NOMINAL.CLIENT/ASSETS
+            arguments
+                obj (1,1) nominal.Client
+                filter (1,1) string = ""
+                options.Labels string = string.empty
+                options.Properties {mustBeA(options.Properties, ["struct" "dictionary" "containers.Map"])} = struct()
+                options.StartAfter = []
+                options.EndBefore = []
+            end
+            obj.assertLive();
+            [propertyKeys, propertyValues] = keyValuePairs(options.Properties, "property");
+
+            startAfter = int64(0);
+            if ~isempty(options.StartAfter)
+                startAfter = nominal.toNanos(options.StartAfter);
+            end
+            endBefore = int64(0);
+            if ~isempty(options.EndBefore)
+                endBefore = nominal.toNanos(options.EndBefore);
+            end
+
+            [names, rids, numbers, starts, ends, hasEnd] = nominalmex('run_search', ...
+                obj.Handle, char(filter), cellstr(options.Labels), ...
+                propertyKeys, propertyValues, ...
+                startAfter, int32(~isempty(options.StartAfter)), ...
+                endBefore, int32(~isempty(options.EndBefore)));
+
+            endTimes = NaT(numel(ends), 1, 'TimeZone', 'UTC');
+            endTimes(hasEnd) = nominal.fromNanos(ends(hasEnd));
+            t = table(string(names), string(rids), numbers, ...
+                      nominal.fromNanos(starts), endTimes, ...
+                      'VariableNames', ["Name" "Rid" "Number" "StartTime" "EndTime"]);
+        end
+
         function a = getOrCreateAsset(obj, name)
             %GETORCREATEASSET  Fetch an asset by name, creating it if absent.
             %
@@ -242,7 +302,7 @@ classdef Client < nominal.Resource
                     ["info" "flag" "error" "success"])} = "info"
                 options.Timestamp = nominal.now()
                 options.Duration = seconds(0)
-                options.Properties (1,1) {mustBeA(options.Properties, ["struct" "dictionary"])} = struct()
+                options.Properties {mustBeA(options.Properties, ["struct" "dictionary" "containers.Map"])} = struct()
             end
             obj.assertLive();
 
@@ -315,7 +375,7 @@ classdef Client < nominal.Resource
                 name (1,1) string
                 dataset (1,1) nominal.Dataset
                 refName (1,1) string = "default"
-                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
+                options.Tags {mustBeA(options.Tags, ["struct" "dictionary" "containers.Map"])} = struct()
                 options.StartTime = nominal.now()
                 options.EndTime = []
             end
@@ -382,7 +442,7 @@ classdef Client < nominal.Resource
                 options.Unit (1,1) string {mustBeMember(options.Unit, ...
                     ["nanoseconds" "microseconds" "milliseconds" ...
                      "seconds" "minutes" "hours"])} = "seconds"
-                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
+                options.Tags {mustBeA(options.Tags, ["struct" "dictionary" "containers.Map"])} = struct()
             end
             obj.assertLive();
 

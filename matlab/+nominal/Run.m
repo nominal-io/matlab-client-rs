@@ -29,6 +29,7 @@ classdef Run < nominal.Resource
         StartTime datetime  % When the run began, UTC.
         EndTime datetime    % When it ended, or NaT while still open.
         AssetRids string    % Assets it belongs to.
+        Properties          % All properties, as a containers.Map.
     end
 
     properties (Access = private)
@@ -113,6 +114,85 @@ classdef Run < nominal.Resource
             end
             obj.assertLive();
             value = string(nominalmex('run_property', obj.Handle, char(key)));
+        end
+
+        function v = get.Properties(obj)
+            obj.assertLive();
+            v = propertyMap('run_properties', obj.Handle);
+        end
+
+        function tt = fetch(obj, channel, options)
+            %FETCH  Read one channel over this run, as a timetable.
+            %
+            %   tt = r.fetch("rpm")
+            %   tt = r.fetch("rpm", RefName="can", Buckets=2000)
+            %
+            %   The window is this run's start to its end, or to now while it
+            %   is open. Reads through one of the run's data sources, so that
+            %   source's tag filter and time offset apply without being
+            %   passed.
+            %
+            %   Options:
+            %       RefName: Which data source. Defaults to "default".
+            %       Buckets: Decimate server-side to roughly this many points.
+            %       Tags: Narrow further, if the source still holds several
+            %           tag sets.
+            %
+            %   Returns:
+            %       timetable: One variable, named after the channel.
+            %
+            %   See also NOMINAL.ASSET/FETCH, NOMINAL.DATASET/FETCH
+            arguments
+                obj (1,1) nominal.Run
+                channel (1,1) string
+                options.RefName (1,1) string = "default"
+                options.Buckets (1,1) double {mustBeNonnegative, mustBeInteger} = 0
+                options.Tags {mustBeA(options.Tags, ["struct" "dictionary" "containers.Map"])} = struct()
+            end
+            obj.assertLive();
+            % Raw nanoseconds rather than StartTime and EndTime, which are
+            % datetimes and would round the window's edges.
+            startNanos = nominalmex('run_start_time', obj.Handle);
+            [endNanos, hasEnd] = nominalmex('run_end_time', obj.Handle);
+            if ~hasEnd
+                endNanos = nominal.now();
+            end
+            tt = scopeFetch(obj.Client, obj.Rid, options.RefName, channel, ...
+                            startNanos, endNanos, options.Buckets, options.Tags);
+        end
+
+        function updated = setProperty(obj, key, value)
+            %SETPROPERTY  Set one property, keeping the rest.
+            %
+            %   r = r.setProperty("result", "pass");
+            %
+            %   Re-reads the run first, so properties set since this handle
+            %   was fetched are kept.
+            %
+            %   Returns:
+            %       nominal.Run: The updated run.
+            arguments
+                obj (1,1) nominal.Run
+                key (1,1) string
+                value (1,1)
+            end
+            obj.assertLive();
+            updated = editProperty(obj.Client.runByRid(obj.Rid), key, value);
+        end
+
+        function updated = removeProperty(obj, key)
+            %REMOVEPROPERTY  Remove one property, keeping the rest.
+            %
+            %   Errors if the run has no such property.
+            %
+            %   Returns:
+            %       nominal.Run: The updated run.
+            arguments
+                obj (1,1) nominal.Run
+                key (1,1) string
+            end
+            obj.assertLive();
+            updated = editProperty(obj.Client.runByRid(obj.Rid), key);
         end
 
         function updated = addAsset(obj, asset)
@@ -216,7 +296,8 @@ classdef Run < nominal.Resource
             %
             %   Options not passed are left alone. Labels and Properties
             %   REPLACE rather than merge: read r.Labels first and concatenate
-            %   if you mean to add.
+            %   if you mean to add. setProperty changes one property and keeps
+            %   the rest.
             %
             %   Options:
             %       Name: New display name.
@@ -240,7 +321,7 @@ classdef Run < nominal.Resource
                 % "clear" for them, so [] simply means unset.
                 options.Name (1,1) string
                 options.Description (1,1) string
-                options.Properties struct
+                options.Properties {mustBeA(options.Properties, ["struct" "dictionary" "containers.Map"])}
                 options.Labels string
                 options.StartTime = []
                 options.EndTime = []

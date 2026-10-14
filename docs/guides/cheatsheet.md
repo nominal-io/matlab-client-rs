@@ -16,6 +16,7 @@ hand you other objects, so you rarely construct anything directly.
 | Who am I (also a credential check) | `c.whoAmI()` |
 | Search assets by name | `c.assets("engine")` |
 | Search datasets by name | `c.datasets("telemetry")` |
+| Search runs | `c.runs("hot-fire", Labels=…, Properties=…, StartAfter=t0)` |
 | List *every* asset (slow, unpaginated) | `c.assets()` |
 | List *every* dataset (slow, unpaginated) | `c.datasets()` |
 | Get an asset by RID | `c.assetByRid(rid)` |
@@ -41,8 +42,11 @@ hand you other objects, so you rarely construct anything directly.
 |---|---|
 | Identity and metadata | `a.Rid`, `a.Name`, `a.Description`, `a.Url`, `a.Labels` |
 | Read one property | `a.property("phase")` |
-| Everything attached to it | `a.datasources()` |
+| All properties, as a `containers.Map` | `a.Properties` |
+| Set or remove one, keeping the rest | `a = a.setProperty("serial", "SN-1")`, `a.removeProperty(k)` |
+| Everything attached to it, with tag filters | `a.datasources()` |
 | …re-read from the server | `a.datasources(Refresh=true)` |
+| Read a channel as the asset sees it | `a.fetch("rpm", t0, t1)`, `a.fetch(…, RefName="can")` |
 | A dataset already on it, by name | `a.getAttachedDataset(name)` |
 | Attach a dataset you already have | `a.addDataset(ds)`, `a.addDataset(ds, "can")` |
 | …only the series with these tags | `a.addDataset(ds, Tags=struct(UUT="A"))` |
@@ -55,8 +59,8 @@ hand you other objects, so you rarely construct anything directly.
 | Change metadata | `a.update(Name=…, Description=…, Labels=…, Properties=…)` |
 
 An asset handle is a **snapshot** taken when it was fetched. `update()` returns a new object
-instead of changing the one you have, and `datasources()` does not show a dataset attached
-since the fetch until you pass `Refresh=true`.
+instead of changing the one you have. `datasources()` asks the server once and reuses the
+answer until you pass `Refresh=true`.
 
 Dataset names are not unique in Nominal, so `getOrCreateDataset` resolves in three steps and
 prints which one it took:
@@ -87,6 +91,8 @@ to the new `refName`; with different `Tags` it is added alongside.
 |---|---|
 | Identity and metadata | `ds.Rid`, `ds.Name`, `ds.Description`, `ds.Labels` |
 | Read one property | `ds.property("script")` |
+| All properties, as a `containers.Map` | `ds.Properties` |
+| Set or remove one, keeping the rest | `ds = ds.setProperty(k, v)`, `ds.removeProperty(k)` |
 | What channels are in it | `ds.channels()` |
 | Which assets hold it | `ds.assets()` |
 | Open a live stream | `ds.stream()` |
@@ -113,8 +119,11 @@ to the new `refName`; with different `Tags` it is added alongside.
 | Put it on another asset too | `r = r.addAsset(dut)` |
 | Take it off one | `r = r.removeAsset(dut)` |
 | Read one property | `r.property("operator")` |
+| All properties, as a `containers.Map` | `r.Properties` |
+| Set or remove one, keeping the rest | `r = r.setProperty("result", "pass")`, `r.removeProperty(k)` |
 | Attach a dataset (see [Known gaps](behavior.md#known-gaps)) | `r.addDataset(refName, ds)` |
 | Close it | `r.finish()`, `r.finish(endTime)` |
+| Read a channel over the run's window | `r.fetch("rpm")`, `r.fetch("rpm", RefName="can")` |
 | Change metadata | `r.update(Name=…, Labels=…, Properties=…)` |
 
 ## Stream and Channel
@@ -137,6 +146,7 @@ to the new `refName`; with different `Tags` it is added alongside.
 |---|---|
 | Read it back | `e.Rid`, `e.Name`, `e.Type`, `e.Timestamp`, `e.Duration`, `e.AssetRids` |
 | Read one property | `e.property("status")` |
+| All properties, as a `containers.Map` | `e.Properties` |
 
 ## IngestJob
 

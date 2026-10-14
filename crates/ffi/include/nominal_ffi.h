@@ -20,6 +20,11 @@ typedef int32_t DatasetHandle;
  */
 typedef int32_t AssetListHandle;
 
+/**
+ * A fetched list of data sources, held so that indices stay stable.
+ */
+typedef int32_t ScopeListHandle;
+
 typedef int32_t ChannelMetadataHandle;
 
 /**
@@ -42,6 +47,11 @@ typedef int32_t EventHandle;
 typedef int32_t IngestJobHandle;
 
 typedef int32_t RunHandle;
+
+/**
+ * A fetched list of runs, held so that indices stay stable.
+ */
+typedef int32_t RunListHandle;
 
 typedef int32_t QueryResultHandle;
 
@@ -401,6 +411,87 @@ int32_t nominal_asset_list_at(AssetListHandle list_handle,
 int32_t nominal_asset_list_free(AssetListHandle handle);
 
 /**
+ * Every data source on an asset, read fresh from the server, ordered by
+ * reference name.
+ *
+ * Where `nominal_asset_datasource_count` and its getters read the handle's
+ * snapshot, this asks the server, and reports each source's tag filter and
+ * time offset too. Read it with the `nominal_scope_*_at` getters and release
+ * it with `nominal_scope_list_free`.
+ */
+int32_t nominal_asset_scopes(ClientHandle client_handle,
+                             AssetHandle asset_handle,
+                             ScopeListHandle *out_list,
+                             uint32_t *out_count,
+                             ErrorHandle *error_out);
+
+/**
+ * Reference name of the data source at `index`.
+ */
+int32_t nominal_scope_ref_name_at(ScopeListHandle list,
+                                  uint32_t index,
+                                  StringHandle out_string,
+                                  ErrorHandle *error_out);
+
+/**
+ * RID of the data source at `index`.
+ */
+int32_t nominal_scope_rid_at(ScopeListHandle list,
+                             uint32_t index,
+                             StringHandle out_string,
+                             ErrorHandle *error_out);
+
+/**
+ * Kind of the data source at `index`: 0 dataset, 1 video, 2 connection,
+ * 3 anything else.
+ */
+int32_t nominal_scope_type_at(ScopeListHandle list,
+                              uint32_t index,
+                              int32_t *out_kind,
+                              ErrorHandle *error_out);
+
+/**
+ * Time offset of the data source at `index`, in nanoseconds; 0 for none.
+ */
+int32_t nominal_scope_offset_at(ScopeListHandle list,
+                                uint32_t index,
+                                int64_t *out_nanos,
+                                ErrorHandle *error_out);
+
+/**
+ * Number of tags in the filter of the data source at `index`; 0 when it
+ * sees the whole source.
+ */
+int32_t nominal_scope_tag_count_at(ScopeListHandle list,
+                                   uint32_t index,
+                                   uint32_t *out_count,
+                                   ErrorHandle *error_out);
+
+/**
+ * Key of tag `tag_index` in the filter of the data source at `index`, in
+ * key order.
+ */
+int32_t nominal_scope_tag_key_at(ScopeListHandle list,
+                                 uint32_t index,
+                                 uint32_t tag_index,
+                                 StringHandle out_string,
+                                 ErrorHandle *error_out);
+
+/**
+ * Value of tag `tag_index` in the filter of the data source at `index`.
+ */
+int32_t nominal_scope_tag_value_at(ScopeListHandle list,
+                                   uint32_t index,
+                                   uint32_t tag_index,
+                                   StringHandle out_string,
+                                   ErrorHandle *error_out);
+
+/**
+ * Release a scope list.
+ */
+int32_t nominal_scope_list_free(ScopeListHandle handle);
+
+/**
  * Number of data sources attached to an asset.
  *
  * Pair with the `_at` getters, which address them by index in reference-name
@@ -439,6 +530,22 @@ int32_t nominal_asset_datasource_type_at(AssetHandle handle,
                                          uint32_t index,
                                          int32_t *out_kind,
                                          ErrorHandle *error_out);
+
+/**
+ * Number of properties on an asset.
+ */
+int32_t nominal_asset_property_count(AssetHandle handle,
+                                     uint32_t *out_count,
+                                     ErrorHandle *error_out);
+
+/**
+ * Property key at `index`, in sorted order. Read its value with
+ * `nominal_asset_property`.
+ */
+int32_t nominal_asset_property_key_at(AssetHandle handle,
+                                      uint32_t index,
+                                      StringHandle out_string,
+                                      ErrorHandle *error_out);
 
 /**
  * Value of a property, or an error if the asset has no such key.
@@ -650,6 +757,31 @@ int32_t nominal_compute_fetch(ClientHandle client_handle,
                               ErrorHandle *error_out);
 
 /**
+ * Fetch a channel as an asset or run sees it, through one of its data
+ * sources.
+ *
+ * `owner_rid` is an asset or run RID; `ref_name` picks the data source. The
+ * server applies that source's tag filter and time offset, so the caller
+ * need not know either. `tag_keys`/`tag_values` narrow it further, as for
+ * [`nominal_compute_fetch_decimated`].
+ *
+ * `buckets` decimates as for [`nominal_compute_fetch_decimated`]; 0 reads
+ * every point, as [`nominal_compute_fetch`] does.
+ */
+int32_t nominal_compute_fetch_scope(ClientHandle client_handle,
+                                    const char *owner_rid,
+                                    const char *ref_name,
+                                    const char *channel,
+                                    int64_t start_nanos,
+                                    int64_t end_nanos,
+                                    uint32_t buckets,
+                                    const char *const *tag_keys,
+                                    const char *const *tag_values,
+                                    uint32_t tag_count,
+                                    SeriesHandle *out_series,
+                                    ErrorHandle *error_out);
+
+/**
  * Release a fetched series. Freeing an unknown handle is a no-op.
  */
 int32_t nominal_series_free(SeriesHandle handle);
@@ -841,6 +973,22 @@ int32_t nominal_dataset_label_at(DatasetHandle handle,
                                  ErrorHandle *error_out);
 
 /**
+ * Number of properties on a dataset.
+ */
+int32_t nominal_dataset_property_count(DatasetHandle handle,
+                                       uint32_t *out_count,
+                                       ErrorHandle *error_out);
+
+/**
+ * Property key at `index`, in sorted order. Read its value with
+ * `nominal_dataset_property`.
+ */
+int32_t nominal_dataset_property_key_at(DatasetHandle handle,
+                                        uint32_t index,
+                                        StringHandle out_string,
+                                        ErrorHandle *error_out);
+
+/**
  * Value of a property, or an error if the dataset has no such key.
  */
 int32_t nominal_dataset_property(DatasetHandle handle,
@@ -920,6 +1068,22 @@ int32_t nominal_event_asset_at(EventHandle handle,
                                uint32_t index,
                                StringHandle out_string,
                                ErrorHandle *error_out);
+
+/**
+ * Number of properties on an event.
+ */
+int32_t nominal_event_property_count(EventHandle handle,
+                                     uint32_t *out_count,
+                                     ErrorHandle *error_out);
+
+/**
+ * Property key at `index`, in sorted order. Read its value with
+ * `nominal_event_property`.
+ */
+int32_t nominal_event_property_key_at(EventHandle handle,
+                                      uint32_t index,
+                                      StringHandle out_string,
+                                      ErrorHandle *error_out);
 
 /**
  * Value of a property, or an error if the event has no such key.
@@ -1110,6 +1274,47 @@ int32_t nominal_run_create_from_dataset(ClientHandle client_handle,
                                         ErrorHandle *error_out);
 
 /**
+ * Runs matching every given criterion, ordered by start time.
+ *
+ * - `name_contains`: case-insensitive substring of the name; "" for any.
+ * - `labels`: every one must be on the run.
+ * - `property_keys`/`property_values`: every pair must be among its
+ *   properties.
+ * - `start_after_nanos`, when `has_start_after`: starts at or after this.
+ * - `end_before_nanos`, when `has_end_before`: ends at or before this.
+ *
+ * With no criteria at all, every run is returned. Pages internally. Read the
+ * list with `nominal_run_list_at` and release it with `nominal_run_list_free`.
+ */
+int32_t nominal_run_search(ClientHandle client_handle,
+                           const char *name_contains,
+                           const char *const *labels,
+                           uint32_t label_count,
+                           const char *const *property_keys,
+                           const char *const *property_values,
+                           uint32_t property_count,
+                           int64_t start_after_nanos,
+                           bool has_start_after,
+                           int64_t end_before_nanos,
+                           bool has_end_before,
+                           RunListHandle *out_list,
+                           uint32_t *out_count,
+                           ErrorHandle *error_out);
+
+/**
+ * The run at `index`, as its own handle that outlives the list.
+ */
+int32_t nominal_run_list_at(RunListHandle list_handle,
+                            uint32_t index,
+                            RunHandle *out_run,
+                            ErrorHandle *error_out);
+
+/**
+ * Release a run list. Handles taken from it stay valid.
+ */
+int32_t nominal_run_list_free(RunListHandle handle);
+
+/**
  * Fetch a run by RID.
  */
 int32_t nominal_run_get_by_rid(ClientHandle client_handle,
@@ -1249,6 +1454,20 @@ int32_t nominal_run_label_at(RunHandle handle,
                              uint32_t index,
                              StringHandle out_string,
                              ErrorHandle *error_out);
+
+/**
+ * Number of properties on a run.
+ */
+int32_t nominal_run_property_count(RunHandle handle, uint32_t *out_count, ErrorHandle *error_out);
+
+/**
+ * Property key at `index`, in sorted order. Read its value with
+ * `nominal_run_property`.
+ */
+int32_t nominal_run_property_key_at(RunHandle handle,
+                                    uint32_t index,
+                                    StringHandle out_string,
+                                    ErrorHandle *error_out);
 
 /**
  * Value of a property, or an error if the run has no such key.

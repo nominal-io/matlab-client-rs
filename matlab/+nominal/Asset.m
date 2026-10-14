@@ -19,10 +19,12 @@ classdef Asset < nominal.Resource
         Description string  % Description, or "" if it has none.
         Url string          % Web URL in the Nominal app.
         Labels string       % All labels, as a string array.
+        Properties          % All properties, as a containers.Map.
     end
 
     properties (Access = private)
         Client nominal.Client
+        DataSourceCache = []    % datasources() table, read on first use
     end
 
     methods
@@ -78,50 +80,100 @@ classdef Asset < nominal.Resource
             value = string(nominalmex('asset_property', obj.Handle, char(key)));
         end
 
+        function v = get.Properties(obj)
+            obj.assertLive();
+            v = propertyMap('asset_properties', obj.Handle);
+        end
+
+        function updated = setProperty(obj, key, value)
+            %SETPROPERTY  Set one property, keeping the rest.
+            %
+            %   a = a.setProperty("serial", "SN-0042");
+            %
+            %   Re-reads the asset first, so properties set since this handle
+            %   was fetched are kept.
+            %
+            %   Returns:
+            %       nominal.Asset: The updated asset.
+            arguments
+                obj (1,1) nominal.Asset
+                key (1,1) string
+                value (1,1)
+            end
+            obj.assertLive();
+            updated = editProperty(obj.Client.assetByRid(obj.Rid), key, value);
+        end
+
+        function updated = removeProperty(obj, key)
+            %REMOVEPROPERTY  Remove one property, keeping the rest.
+            %
+            %   Errors if the asset has no such property.
+            %
+            %   Returns:
+            %       nominal.Asset: The updated asset.
+            arguments
+                obj (1,1) nominal.Asset
+                key (1,1) string
+            end
+            obj.assertLive();
+            updated = editProperty(obj.Client.assetByRid(obj.Rid), key);
+        end
+
         function t = datasources(obj, options)
             %DATASOURCES  Everything attached to this asset, as a table.
             %
-            %   s = a.datasources();                % what this handle knows
-            %   s = a.datasources(Refresh=true);    % ask the server
+            %   s = a.datasources();                % read once, then reused
+            %   s = a.datasources(Refresh=true);    % ask the server again
             %   tlm = s(s.Type == "dataset", :);    % datasets only
+            %   s.Tags{1}                           % one source's tag filter
             %
-            %   **By default this reads the snapshot taken when the asset was
-            %   fetched.** A dataset attached since then, by getOrCreateDataset
-            %   or from the web app, is not listed until you pass Refresh=true:
-            %
-            %       a.getOrCreateDataset("telemetry", "tlm");
-            %       height(a.datasources())              % unchanged
-            %       height(a.datasources(Refresh=true))  % +1
+            %   **The first call asks the server and keeps the answer; later
+            %   calls on this handle reuse it.** A dataset attached since, by
+            %   addDataset or from the web app, is not listed until you pass
+            %   Refresh=true.
             %
             %   Options:
-            %       Refresh: Ask the server instead of reading the snapshot.
-            %           Costs one request and does not change this object.
+            %       Refresh: Ask the server again. Costs one request.
             %
             %   Returns:
-            %       table: Variables RefName, Rid and Type, ordered by
-            %       reference name. Type is "dataset", "video" or
-            %       "connection"; only a dataset RID can open a stream.
+            %       table: Variables RefName, Rid, Type, Tags and Offset,
+            %       ordered by reference name. Type is "dataset", "video",
+            %       "connection" or "other"; only a dataset RID can open a
+            %       stream. Tags holds each source's tag filter as a
+            %       containers.Map, empty when it sees the whole source.
+            %       Offset is a duration.
             %
-            %   See also NOMINAL.CLIENT/ASSETBYRID
+            %   See also NOMINAL.ASSET/FETCH, NOMINAL.ASSET/ADDDATASET
             arguments
                 obj (1,1) nominal.Asset
                 options.Refresh (1,1) logical = false
             end
             obj.assertLive();
 
-            if options.Refresh
-                % A throwaway handle on the same asset. The table is plain
-                % data by the time it comes back, so releasing the handle
-                % straight away is safe — and an exception on the way would
-                % release it anyway, when the local goes out of scope.
-                fresh = obj.Client.assetByRid(obj.Rid);
-                t = fresh.datasources();
-                delete(fresh);
-                return
+            % [] until the first read; a table, possibly empty, after.
+            if options.Refresh || isnumeric(obj.DataSourceCache)
+                s = nominalmex('asset_datasources', obj.Client.Handle, obj.Handle);
+                n = numel(s);
+                refNames = strings(n, 1);
+                rids = strings(n, 1);
+                types = strings(n, 1);
+                tags = cell(n, 1);
+                offsets = seconds(zeros(n, 1));
+                for i = 1:n
+                    refNames(i) = s(i).RefName;
+                    rids(i) = s(i).Rid;
+                    types(i) = s(i).Type;
+                    tags{i} = containers.Map('KeyType', 'char', 'ValueType', 'char');
+                    for k = 1:numel(s(i).TagKeys)
+                        tags{i}(s(i).TagKeys{k}) = s(i).TagValues{k};
+                    end
+                    % Exact to 2^53 ns, about 104 days; offsets are far smaller.
+                    offsets(i) = seconds(double(s(i).OffsetNanos) / 1e9);
+                end
+                obj.DataSourceCache = table(refNames, rids, types, tags, offsets, ...
+                    'VariableNames', ["RefName" "Rid" "Type" "Tags" "Offset"]);
             end
-
-            t = structsToTable(nominalmex('asset_datasources', obj.Handle), ...
-                               ["RefName" "Rid" "Type"]);
+            t = obj.DataSourceCache;
         end
 
         function addDataset(obj, dataset, refName, options)
@@ -171,7 +223,7 @@ classdef Asset < nominal.Resource
                 obj (1,1) nominal.Asset
                 dataset (1,1) nominal.Dataset
                 refName (1,1) string = ""
-                options.Tags (1,1) {mustBeA(options.Tags, ["struct" "dictionary"])} = struct()
+                options.Tags {mustBeA(options.Tags, ["struct" "dictionary" "containers.Map"])} = struct()
             end
             obj.assertLive();
 
@@ -240,6 +292,44 @@ classdef Asset < nominal.Resource
                 obj.rethrowAttachError(renameError, newName, ...
                     sprintf('a.renameRefName("%s", "other")', oldName));
             end
+        end
+
+        function tt = fetch(obj, channel, startTime, endTime, options)
+            %FETCH  Read one channel as this asset sees it, as a timetable.
+            %
+            %   tt = a.fetch("rpm", t0, t1)
+            %   tt = a.fetch("rpm", t0, t1, RefName="can", Buckets=2000)
+            %
+            %   Reads through one of the asset's data sources, so that
+            %   source's tag filter and time offset apply without being
+            %   passed. Otherwise as nominal.Dataset.fetch.
+            %
+            %   Args:
+            %       startTime: Zoned datetime or int64 nanoseconds.
+            %       endTime: Zoned datetime or int64 nanoseconds.
+            %
+            %   Options:
+            %       RefName: Which data source. Defaults to "default".
+            %       Buckets: Decimate server-side to roughly this many points.
+            %       Tags: Narrow further, if the source still holds several
+            %           tag sets.
+            %
+            %   Returns:
+            %       timetable: One variable, named after the channel.
+            %
+            %   See also NOMINAL.ASSET/DATASOURCES, NOMINAL.DATASET/FETCH
+            arguments
+                obj (1,1) nominal.Asset
+                channel (1,1) string
+                startTime
+                endTime
+                options.RefName (1,1) string = "default"
+                options.Buckets (1,1) double {mustBeNonnegative, mustBeInteger} = 0
+                options.Tags {mustBeA(options.Tags, ["struct" "dictionary" "containers.Map"])} = struct()
+            end
+            obj.assertLive();
+            tt = scopeFetch(obj.Client, obj.Rid, options.RefName, channel, ...
+                            startTime, endTime, options.Buckets, options.Tags);
         end
 
         function d = getAttachedDataset(obj, name)
@@ -378,7 +468,7 @@ classdef Asset < nominal.Resource
             %   Options not passed are left alone. Labels and Properties
             %   REPLACE rather than merge: passing Labels discards whatever the
             %   asset had, so read a.Labels first and concatenate if you mean
-            %   to add.
+            %   to add. setProperty changes one property and keeps the rest.
             %
             %   Options:
             %       Name: New display name.
@@ -404,7 +494,7 @@ classdef Asset < nominal.Resource
                 % and the shape is the only thing that says which is meant.
                 options.Name (1,1) string
                 options.Description (1,1) string
-                options.Properties struct
+                options.Properties {mustBeA(options.Properties, ["struct" "dictionary" "containers.Map"])}
                 options.Labels string
             end
             obj.assertLive();

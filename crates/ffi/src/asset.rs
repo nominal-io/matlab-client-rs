@@ -3,7 +3,7 @@ use crate::dataset::{dataset_or_fail, DatasetHandle};
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
 use crate::scout;
-use crate::strings::{c_str_to_string, pairs_from_c, set_string, StringHandle};
+use crate::strings::{c_str_to_string, key_at, pairs_from_c, set_string, StringHandle};
 use crate::update::{snapshot, UpdateHandle};
 use nominal::core::{Asset, AssetCreate, AssetQuery, AssetUpdate};
 use nominal_streaming::api::clients::scout::assets::AsyncAssetService;
@@ -12,6 +12,7 @@ use nominal_streaming::api::objects::scout::asset::api::{
     CreateAssetDataScope, UpdateAssetRefNamesRequest, UpdateAssetRequest,
 };
 use nominal_streaming::api::objects::scout::rids::api::AssetRid;
+use nominal_streaming::api::objects::scout::run::api::DataSource as RunDataSource;
 use std::collections::BTreeSet;
 use std::os::raw::c_char;
 use std::sync::Arc;
@@ -598,10 +599,275 @@ pub extern "C" fn nominal_asset_list_free(handle: AssetListHandle) -> i32 {
 /// Kept as a separate enum from the C side's other codes because it is data,
 /// not a status: these are the variants Nominal attaches to an asset.
 #[repr(i32)]
+#[derive(Clone, Copy)]
 pub enum DataSourceKind {
     Dataset = 0,
     Video = 1,
     Connection = 2,
+    /// A kind this client does not model, such as a log set.
+    Other = 3,
+}
+
+/// One data source on an asset, as the server holds it. Unlike the crate's
+/// `Asset`, this keeps the tag filter and time offset.
+pub(crate) struct Scope {
+    ref_name: String,
+    rid: String,
+    kind: DataSourceKind,
+    offset_nanos: i64,
+    tags: Vec<(String, String)>,
+}
+
+/// A fetched list of data sources, held so that indices stay stable.
+pub type ScopeListHandle = i32;
+
+handle_registry!(
+    SCOPE_LISTS,
+    Vec<Scope>,
+    alloc_scope_list,
+    get_scope_list,
+    free_scope_list_entry,
+    clear_scope_lists
+);
+
+/// Every data source on an asset, read fresh from the server, ordered by
+/// reference name.
+///
+/// Where `nominal_asset_datasource_count` and its getters read the handle's
+/// snapshot, this asks the server, and reports each source's tag filter and
+/// time offset too. Read it with the `nominal_scope_*_at` getters and release
+/// it with `nominal_scope_list_free`.
+#[no_mangle]
+pub extern "C" fn nominal_asset_scopes(
+    client_handle: ClientHandle,
+    asset_handle: AssetHandle,
+    out_list: *mut ScopeListHandle,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_list, error_out, "out_list")?;
+        require_out(out_count, error_out, "out_count")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let asset = asset_or_fail(asset_handle, error_out)?;
+
+        let service = scout::asset_service(&client, error_out)?;
+        let token = scout::bearer(&client, error_out)?;
+        let rid = AssetRid(scout::parse_rid(asset.rid(), "asset RID", error_out)?);
+        let fresh = RUNTIME
+            .block_on(service.get_assets(&token, &BTreeSet::from([rid.clone()])))
+            .map_err(|e| scout::api_error(error_out, e))?
+            .remove(&rid)
+            .ok_or_else(|| fail(error_out, ErrorCode::NominalError, "asset not found"))?;
+
+        let mut scopes: Vec<Scope> = fresh
+            .data_scopes()
+            .iter()
+            .map(|s| {
+                let (kind, rid) = match s.data_source() {
+                    RunDataSource::Dataset(r) => (DataSourceKind::Dataset, r.to_string()),
+                    RunDataSource::Video(r) => (DataSourceKind::Video, r.to_string()),
+                    RunDataSource::Connection(r) => (DataSourceKind::Connection, r.to_string()),
+                    RunDataSource::LogSet(r) => (DataSourceKind::Other, r.to_string()),
+                    RunDataSource::Spatial(r) => (DataSourceKind::Other, r.to_string()),
+                    _ => (DataSourceKind::Other, String::new()),
+                };
+                Scope {
+                    ref_name: s.data_scope_name().0.clone(),
+                    rid,
+                    kind,
+                    offset_nanos: s
+                        .offset()
+                        .map(|d| *d.seconds() * 1_000_000_000 + *d.nanos())
+                        .unwrap_or(0),
+                    tags: s
+                        .series_tags()
+                        .iter()
+                        .map(|(k, v)| (k.0.clone(), v.0.clone()))
+                        .collect(),
+                }
+            })
+            .collect();
+        scopes.sort_by(|a, b| a.ref_name.cmp(&b.ref_name));
+
+        let count = scopes.len() as u32;
+        let handle = alloc_scope_list(scopes);
+        if handle == 0 {
+            return Err(fail(
+                error_out,
+                ErrorCode::NoCapacity,
+                "scope list handle space exhausted",
+            ));
+        }
+        unsafe {
+            *out_list = handle;
+            *out_count = count;
+        }
+        Ok(())
+    })
+}
+
+/// Run `read` on the data source at `index` of a scope list.
+fn with_scope<T>(
+    list_handle: ScopeListHandle,
+    index: u32,
+    error_out: *mut ErrorHandle,
+    read: impl FnOnce(&Scope) -> Result<T, ErrorCode>,
+) -> Result<T, ErrorCode> {
+    let list = get_scope_list(list_handle).ok_or_else(|| {
+        fail(
+            error_out,
+            ErrorCode::InvalidHandle,
+            format!("unknown scope list handle {list_handle}"),
+        )
+    })?;
+    let scope = list.get(index as usize).ok_or_else(|| {
+        fail(
+            error_out,
+            ErrorCode::InvalidParameter,
+            format!("scope index {index} out of range ({} attached)", list.len()),
+        )
+    })?;
+    read(scope)
+}
+
+/// Reference name of the data source at `index`.
+#[no_mangle]
+pub extern "C" fn nominal_scope_ref_name_at(
+    list: ScopeListHandle,
+    index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        with_scope(list, index, error_out, |s| {
+            set_string(out_string, s.ref_name.as_str(), error_out)
+        })
+    })
+}
+
+/// RID of the data source at `index`.
+#[no_mangle]
+pub extern "C" fn nominal_scope_rid_at(
+    list: ScopeListHandle,
+    index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        with_scope(list, index, error_out, |s| {
+            set_string(out_string, s.rid.as_str(), error_out)
+        })
+    })
+}
+
+/// Kind of the data source at `index`: 0 dataset, 1 video, 2 connection,
+/// 3 anything else.
+#[no_mangle]
+pub extern "C" fn nominal_scope_type_at(
+    list: ScopeListHandle,
+    index: u32,
+    out_kind: *mut i32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_kind, error_out, "out_kind")?;
+        let kind = with_scope(list, index, error_out, |s| Ok(s.kind as i32))?;
+        unsafe { *out_kind = kind };
+        Ok(())
+    })
+}
+
+/// Time offset of the data source at `index`, in nanoseconds; 0 for none.
+#[no_mangle]
+pub extern "C" fn nominal_scope_offset_at(
+    list: ScopeListHandle,
+    index: u32,
+    out_nanos: *mut i64,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_nanos, error_out, "out_nanos")?;
+        let nanos = with_scope(list, index, error_out, |s| Ok(s.offset_nanos))?;
+        unsafe { *out_nanos = nanos };
+        Ok(())
+    })
+}
+
+/// Number of tags in the filter of the data source at `index`; 0 when it
+/// sees the whole source.
+#[no_mangle]
+pub extern "C" fn nominal_scope_tag_count_at(
+    list: ScopeListHandle,
+    index: u32,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_count, error_out, "out_count")?;
+        let count = with_scope(list, index, error_out, |s| Ok(s.tags.len() as u32))?;
+        unsafe { *out_count = count };
+        Ok(())
+    })
+}
+
+fn scope_tag(
+    scope: &Scope,
+    tag_index: u32,
+    error_out: *mut ErrorHandle,
+) -> Result<&(String, String), ErrorCode> {
+    scope.tags.get(tag_index as usize).ok_or_else(|| {
+        fail(
+            error_out,
+            ErrorCode::InvalidParameter,
+            format!(
+                "tag index {tag_index} out of range ({} tags)",
+                scope.tags.len()
+            ),
+        )
+    })
+}
+
+/// Key of tag `tag_index` in the filter of the data source at `index`, in
+/// key order.
+#[no_mangle]
+pub extern "C" fn nominal_scope_tag_key_at(
+    list: ScopeListHandle,
+    index: u32,
+    tag_index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        with_scope(list, index, error_out, |s| {
+            let (key, _) = scope_tag(s, tag_index, error_out)?;
+            set_string(out_string, key.as_str(), error_out)
+        })
+    })
+}
+
+/// Value of tag `tag_index` in the filter of the data source at `index`.
+#[no_mangle]
+pub extern "C" fn nominal_scope_tag_value_at(
+    list: ScopeListHandle,
+    index: u32,
+    tag_index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        with_scope(list, index, error_out, |s| {
+            let (_, value) = scope_tag(s, tag_index, error_out)?;
+            set_string(out_string, value.as_str(), error_out)
+        })
+    })
+}
+
+/// Release a scope list.
+#[no_mangle]
+pub extern "C" fn nominal_scope_list_free(handle: ScopeListHandle) -> i32 {
+    free_scope_list_entry(handle);
+    ErrorCode::Success as i32
 }
 
 /// Data sources attached to an asset, ordered by reference name.
@@ -709,6 +975,41 @@ pub extern "C" fn nominal_asset_datasource_type_at(
         };
         unsafe { *out_kind = kind as i32 };
         Ok(())
+    })
+}
+
+/// Number of properties on an asset.
+#[no_mangle]
+pub extern "C" fn nominal_asset_property_count(
+    handle: AssetHandle,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_count, error_out, "out_count")?;
+        let asset = asset_or_fail(handle, error_out)?;
+        unsafe { *out_count = asset.properties().len() as u32 };
+        Ok(())
+    })
+}
+
+/// Property key at `index`, in sorted order. Read its value with
+/// `nominal_asset_property`.
+#[no_mangle]
+pub extern "C" fn nominal_asset_property_key_at(
+    handle: AssetHandle,
+    index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let asset = asset_or_fail(handle, error_out)?;
+        let key = key_at(
+            asset.properties().keys().map(String::as_str),
+            index,
+            error_out,
+        )?;
+        set_string(out_string, key, error_out)
     })
 }
 

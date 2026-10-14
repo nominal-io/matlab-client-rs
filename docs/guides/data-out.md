@@ -50,6 +50,16 @@ both = synchronize(rpm, egt);
 Only numeric channels (double, int64, uint64) can be fetched or exported. A string channel in
 an export list fails the whole request.
 
+## Through an asset or a run
+
+`a.fetch` and `r.fetch` read one of their data sources, applying its tag filter and time
+offset, so you don't need to know either. `r.fetch` covers the run's own start to end.
+
+```matlab
+tt = a.fetch("rpm", t0, t1);               % the source called "default"
+tt = r.fetch("rpm", RefName="can");
+```
+
 ## Everything under a run, in a `.mat` file
 
 Export moves the whole window in one request. A run's data sources are its asset's, so get

@@ -23,10 +23,11 @@
 //! out to be common — but a batch shares nothing except the connection, so the
 //! saving is latency, not work.
 
-use crate::client::{client_or_fail, ClientHandle};
+use crate::client::{client_or_fail, ClientEntry, ClientHandle};
 use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
+use crate::scout;
 use crate::strings::{c_str_to_string, pairs_from_c};
 
 use nominal_streaming::api::clients::scout::compute::api::{
@@ -34,10 +35,11 @@ use nominal_streaming::api::clients::scout::compute::api::{
 };
 use nominal_streaming::api::objects::api::Timestamp;
 use nominal_streaming::api::objects::scout::compute::api::{
-    ComputableNode, ComputeNodeRequest, ComputeNodeResponse, Context, Dataset, DecimateStrategy,
-    DecimateWithBuckets, Grouping, NumericSeries, NumericTagFilterSeries, PageInfo, PageStrategy,
-    PageToken, SavedDataset, SelectSeries, Series, StringConstant, StringSetConstantV2,
-    SummarizationStrategy, SummarizeSeries, TagAnd, TagIn, TagPredicate,
+    Asset as ComputeAsset, ComputableNode, ComputeNodeRequest, ComputeNodeResponse, Context,
+    Dataset, DecimateStrategy, DecimateWithBuckets, Grouping, NumericSeries,
+    NumericTagFilterSeries, PageInfo, PageStrategy, PageToken, Run as ComputeRun, SavedDataset,
+    SelectSeries, Series, StringConstant, StringSetConstantV2, SummarizationStrategy,
+    SummarizeSeries, TagAnd, TagIn, TagPredicate,
 };
 use nominal_streaming::client::conjure::http::client::{AsyncService, ConjureRuntime};
 use nominal_streaming::client::conjure::object::SafeLong;
@@ -144,15 +146,13 @@ fn nanos_from_timestamp(timestamp: &Timestamp) -> i64 {
     *timestamp.seconds() * 1_000_000_000 + *timestamp.nanos()
 }
 
-/// The channel selection shared by both fetch modes, narrowed to the series
+/// The channel selection shared by every fetch, narrowed to the series
 /// carrying every one of `tags` when any are given.
-fn select(dataset_rid: &str, channel: &str, tags: &[(String, String)]) -> Series {
+fn select(source: &Dataset, channel: &str, tags: &[(String, String)]) -> Series {
     let selected = NumericSeries::SelectNumeric(
         SelectSeries::builder()
             .name(StringConstant::Literal(channel.to_owned()))
-            .dataset(Dataset::Saved(SavedDataset::new(StringConstant::Literal(
-                dataset_rid.to_owned(),
-            ))))
+            .dataset(source.clone())
             .build(),
     );
 
@@ -336,29 +336,104 @@ pub extern "C" fn nominal_compute_fetch_decimated(
             ));
         }
 
+        let series = fetch_from(
+            &client,
+            &saved(dataset.rid()),
+            &channel,
+            &tags,
+            (start_nanos, end_nanos),
+            buckets,
+            error_out,
+        )?;
+        deliver(series, out_series, error_out)
+    })
+}
+
+/// A dataset by RID, as the compute API names one.
+fn saved(dataset_rid: &str) -> Dataset {
+    Dataset::Saved(SavedDataset::new(StringConstant::Literal(
+        dataset_rid.to_owned(),
+    )))
+}
+
+/// Read one channel from `source`, decimated to `buckets` points, or every
+/// point when `buckets` is 0. `window` is (start, end) in nanoseconds.
+fn fetch_from(
+    client: &ClientEntry,
+    source: &Dataset,
+    channel: &str,
+    tags: &[(String, String)],
+    window: (i64, i64),
+    buckets: u32,
+    error_out: *mut ErrorHandle,
+) -> Result<FetchedSeries, ErrorCode> {
+    let token = BearerToken::new(client.token()).map_err(|e| {
+        fail(
+            error_out,
+            ErrorCode::InvalidParameter,
+            format!("invalid bearer token: {e}"),
+        )
+    })?;
+    let service = service_for(client.base_url(), error_out)?;
+
+    if buckets > 0 {
         let node = SummarizeSeries::builder()
-            .input(select(dataset.rid(), &channel, &tags))
+            .input(select(source, channel, tags))
             .summarization_strategy(SummarizationStrategy::Decimate(Box::new(
                 DecimateStrategy::Buckets(DecimateWithBuckets::new(buckets as i32)),
             )))
             .build();
-
-        let token = BearerToken::new(client.token()).map_err(|e| {
-            fail(
-                error_out,
-                ErrorCode::InvalidParameter,
-                format!("invalid bearer token: {e}"),
-            )
-        })?;
-        let service = service_for(client.base_url(), error_out)?;
-        let request = request(node, start_nanos, end_nanos, error_out)?;
-
+        let request = request(node, window.0, window.1, error_out)?;
         let response = RUNTIME
             .block_on(async { service.compute(&token, &request).await })
             .map_err(|e| fail(error_out, ErrorCode::NominalError, format!("{e:?}")))?;
-
         let (timestamps, values, _) = take_numeric(response, error_out)?;
-        deliver(FetchedSeries { timestamps, values }, out_series, error_out)
+        return Ok(FetchedSeries { timestamps, values });
+    }
+
+    let mut all_timestamps = Vec::new();
+    let mut all_values = Vec::new();
+    let mut page_token: Option<PageToken> = None;
+
+    for page in 0..MAX_PAGES {
+        let mut info = PageInfo::builder().page_size(PAGE_SIZE);
+        if let Some(token) = page_token.clone() {
+            info = info.page_token(token);
+        }
+
+        let node = SummarizeSeries::builder()
+            .input(select(source, channel, tags))
+            .summarization_strategy(SummarizationStrategy::Page(Box::new(
+                PageStrategy::PageInfo(info.build()),
+            )))
+            .build();
+
+        let request = request(node, window.0, window.1, error_out)?;
+        let response = RUNTIME
+            .block_on(async { service.compute(&token, &request).await })
+            .map_err(|e| {
+                fail(
+                    error_out,
+                    ErrorCode::NominalError,
+                    format!("page {page} failed: {e:?}"),
+                )
+            })?;
+
+        let (timestamps, values, next) = take_numeric(response, error_out)?;
+        all_timestamps.extend(timestamps);
+        all_values.extend(values);
+
+        // A token only arrives when the page came back full, so its absence
+        // is the end of the series.
+        match next {
+            Some(token) => page_token = Some(token),
+            None => break,
+        }
+    }
+
+    Ok(FetchedSeries {
+        timestamps: all_timestamps,
+        values: all_values,
     })
 }
 
@@ -394,63 +469,80 @@ pub extern "C" fn nominal_compute_fetch(
         let channel = unsafe { c_str_to_string(channel, "channel", error_out)? };
         let tags = unsafe { pairs_from_c(tag_keys, tag_values, tag_count, "tag", error_out)? };
 
-        let token = BearerToken::new(client.token()).map_err(|e| {
-            fail(
-                error_out,
-                ErrorCode::InvalidParameter,
-                format!("invalid bearer token: {e}"),
-            )
-        })?;
-        let service = service_for(client.base_url(), error_out)?;
-
-        let mut all_timestamps = Vec::new();
-        let mut all_values = Vec::new();
-        let mut page_token: Option<PageToken> = None;
-
-        for page in 0..MAX_PAGES {
-            let mut info = PageInfo::builder().page_size(PAGE_SIZE);
-            if let Some(token) = page_token.clone() {
-                info = info.page_token(token);
-            }
-
-            let node = SummarizeSeries::builder()
-                .input(select(dataset.rid(), &channel, &tags))
-                .summarization_strategy(SummarizationStrategy::Page(Box::new(
-                    PageStrategy::PageInfo(info.build()),
-                )))
-                .build();
-
-            let request = request(node, start_nanos, end_nanos, error_out)?;
-            let response = RUNTIME
-                .block_on(async { service.compute(&token, &request).await })
-                .map_err(|e| {
-                    fail(
-                        error_out,
-                        ErrorCode::NominalError,
-                        format!("page {page} failed: {e:?}"),
-                    )
-                })?;
-
-            let (timestamps, values, next) = take_numeric(response, error_out)?;
-            all_timestamps.extend(timestamps);
-            all_values.extend(values);
-
-            // A token only arrives when the page came back full, so its absence
-            // is the end of the series.
-            match next {
-                Some(token) => page_token = Some(token),
-                None => break,
-            }
-        }
-
-        deliver(
-            FetchedSeries {
-                timestamps: all_timestamps,
-                values: all_values,
-            },
-            out_series,
+        let series = fetch_from(
+            &client,
+            &saved(dataset.rid()),
+            &channel,
+            &tags,
+            (start_nanos, end_nanos),
+            0,
             error_out,
-        )
+        )?;
+        deliver(series, out_series, error_out)
+    })
+}
+
+/// Fetch a channel as an asset or run sees it, through one of its data
+/// sources.
+///
+/// `owner_rid` is an asset or run RID; `ref_name` picks the data source. The
+/// server applies that source's tag filter and time offset, so the caller
+/// need not know either. `tag_keys`/`tag_values` narrow it further, as for
+/// [`nominal_compute_fetch_decimated`].
+///
+/// `buckets` decimates as for [`nominal_compute_fetch_decimated`]; 0 reads
+/// every point, as [`nominal_compute_fetch`] does.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn nominal_compute_fetch_scope(
+    client_handle: ClientHandle,
+    owner_rid: *const c_char,
+    ref_name: *const c_char,
+    channel: *const c_char,
+    start_nanos: i64,
+    end_nanos: i64,
+    buckets: u32,
+    tag_keys: *const *const c_char,
+    tag_values: *const *const c_char,
+    tag_count: u32,
+    out_series: *mut SeriesHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_series, error_out, "out_series")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let owner = unsafe { c_str_to_string(owner_rid, "owner_rid", error_out)? };
+        let ref_name = unsafe { c_str_to_string(ref_name, "ref_name", error_out)? };
+        let channel = unsafe { c_str_to_string(channel, "channel", error_out)? };
+        let mut tags = unsafe { pairs_from_c(tag_keys, tag_values, tag_count, "tag", error_out)? };
+
+        let parsed = scout::parse_rid(&owner, "owner_rid", error_out)?;
+        let literal = StringConstant::Literal(owner.clone());
+        let source = match parsed.type_() {
+            "asset" => Dataset::Asset(ComputeAsset::new(literal)),
+            "run" => Dataset::Run(ComputeRun::new(literal)),
+            other => {
+                return Err(fail(
+                    error_out,
+                    ErrorCode::InvalidParameter,
+                    format!("owner_rid must be an asset or run RID, not a {other}"),
+                ))
+            }
+        };
+        // Each data source's series carry its reference name under this
+        // reserved key, which is how one source is picked out of several.
+        tags.push(("DATA_SCOPE".to_owned(), ref_name));
+
+        let series = fetch_from(
+            &client,
+            &source,
+            &channel,
+            &tags,
+            (start_nanos, end_nanos),
+            buckets,
+            error_out,
+        )?;
+        deliver(series, out_series, error_out)
     })
 }
 

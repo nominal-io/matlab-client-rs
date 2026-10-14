@@ -188,6 +188,17 @@ function results = nominalexample_uploaddemo(assetName)
         tagged = ingestTarget.fetch("csvrpm", startTime, endTime, ...
                                     Tags=struct(source="csv"));
         fprintf('  %d points carry source=csv\n', height(tagged));
+
+        % Through the asset, and through a run over the same window. Either
+        % applies that data source's tag filter and offset on the way.
+        viaAsset = asset.fetch("csvrpm", startTime, endTime, RefName="ingested");
+        openWindow = asset.run("upload window", startTime);
+        uploadWindow = openWindow.finish(endTime);
+        viaRun = uploadWindow.fetch("csvrpm", RefName="ingested");
+        fprintf('  through the asset: %d points; through a run over it: %d\n', ...
+                height(viaAsset), height(viaRun));
+        delete(uploadWindow);
+        delete(openWindow);
     end
 
     % 5 -------------------------------------------------------- teardown

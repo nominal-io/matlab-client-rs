@@ -35,11 +35,11 @@ which is 1970 plus 104 days, so a present-day timestamp would be silently rounde
 `int64(0)` is the epoch, 1970-01-01T00:00:00Z. Leave a run or event time out to mean now.
 
 **Handles are snapshots.** `update()` returns a new object instead of changing the one you
-have. `a.datasources()` does not show a dataset attached since the handle was fetched until
-you pass `Refresh=true`.
+have. `a.datasources()` asks the server once and reuses the answer, so a dataset attached
+since its first call is not listed until you pass `Refresh=true`.
 
 **Labels and Properties replace, they do not merge.** Read the existing ones first if you mean
-to add.
+to add. To change one property, use `setProperty` or `removeProperty`, which keep the rest.
 
 ## Requirements
 
@@ -60,10 +60,8 @@ if you need it. Nothing below R2026a has actually been tested.
   `c.createRun` for a run with its own data.
 - **Video and connection data sources** show up in `a.datasources()` with the right `Type`,
   but nothing here can act on one beyond renaming or detaching.
-- **`a.datasources()` does not show tag filters.** The tags given to `addDataset` are stored
-  but not read back.
-- **Not available here:** time offsets on attached datasets, asset types, numeric properties,
-  and compositions.
+- **Not available here:** setting time offsets on attached datasets (they can be read), asset
+  types, numeric properties, and compositions.
 - **Listings cannot be limited or paged.** `c.assets()` and `c.datasets()` with no filter
   return everything, which on a large workspace is tens of thousands of rows and several
   seconds. Pass a name filter instead.

@@ -55,7 +55,7 @@ function nominaltest_smoketest()
     [passed, failed] = check('wrong argument type is rejected', ...
         @wrongTypeRejected, passed, failed);
 
-    [passed, failed] = check('tags take a struct or a dictionary, nothing else', ...
+    [passed, failed] = check('tags take a struct, dictionary or Map, nothing else', ...
         @tagTypes, passed, failed);
 
     [passed, failed] = check('a tag with two values is refused', ...
@@ -66,6 +66,9 @@ function nominaltest_smoketest()
 
     [passed, failed] = check('run assets take an Asset or a RID', ...
         @runAssetArgument, passed, failed);
+
+    [passed, failed] = check('properties take a struct, dictionary or Map', ...
+        @propertyArguments, passed, failed);
 
     fprintf('\n%d passed, %d failed\n', passed, failed);
     if failed > 0
@@ -229,9 +232,25 @@ function tagTypes()
     assertTrue(strcmp(id, reachedLibrary), sprintf('struct: got %s', id));
     id = attachError(dictionary(["test-stand" "UUT"], ["3" "A"]));
     assertTrue(strcmp(id, reachedLibrary), sprintf('dictionary: got %s', id));
+    % A Map's size is its entry count, so two entries must not trip a size check.
+    id = attachError(containers.Map({'test-stand', 'UUT'}, {'3', 'A'}));
+    assertTrue(strcmp(id, reachedLibrary), sprintf('containers.Map: got %s', id));
     id = attachError("UUT=A");
     assertTrue(~isempty(id) && ~strcmp(id, reachedLibrary), ...
                'a string should be refused before the library');
+    id = attachError(struct(UUT={"A", "B"}));
+    assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('struct array: got %s', id));
+end
+
+function propertyArguments()
+    % Validation that happens before anything is sent.
+    c = offlineClient();
+    id = errorFrom(@() c.runs(Properties=struct(k=[1 2])));
+    assertTrue(strcmp(id, 'nominal:invalidParameter'), sprintf('runs: got %s', id));
+    % A Map reaches the library for an update, which rejects the fake run.
+    r = nominal.Run(c, int32(1));
+    id = errorFrom(@() r.update(Properties=containers.Map({'test-id', 'k'}, {'42', 'v'})));
+    assertTrue(strcmp(id, 'nominal:invalidHandle'), sprintf('update: got %s', id));
 end
 
 function multiValuedTagRefused()

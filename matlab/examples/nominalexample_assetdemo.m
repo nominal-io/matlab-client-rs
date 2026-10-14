@@ -56,6 +56,11 @@ function results = nominalexample_assetdemo(assetName)
     fprintf('  description:   %s\n', updatedAsset.Description);
     fprintf('  property source = %s\n', updatedAsset.property("source"));
 
+    % setProperty changes one key and keeps the rest.
+    notedAsset = updatedAsset.setProperty("test-stand", "3");
+    fprintf('  properties: %s\n', strjoin(keys(notedAsset.Properties), ", "));
+    delete(notedAsset);
+
     % update returns a new object; the original handle still shows the old
     % state.
     fprintf('  original handle still shows: "%s"\n', asset.Description);

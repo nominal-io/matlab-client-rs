@@ -12,10 +12,12 @@ use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
 use crate::scout;
-use crate::strings::{c_str_to_string, pairs_from_c, set_string, StringHandle};
+use crate::strings::{
+    c_str_to_string, key_at, pairs_from_c, set_string, strings_from_c, StringHandle,
+};
 use crate::time::{instant_from_nanos, nanos_from_instant};
 use crate::update::{snapshot, UpdateHandle};
-use nominal::core::{Run, RunCreate, RunUpdate};
+use nominal::core::{Run, RunCreate, RunQuery, RunUpdate};
 use nominal_streaming::api::clients::scout::AsyncRunService;
 use nominal_streaming::api::objects::api::rids::{DatasetRid, WorkspaceRid};
 use nominal_streaming::api::objects::api::{TagName, TagValue};
@@ -193,6 +195,145 @@ pub extern "C" fn nominal_run_create_from_dataset(
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
         deliver(run, out_run, error_out)
     })
+}
+
+/// A fetched list of runs, held so that indices stay stable.
+pub type RunListHandle = i32;
+
+handle_registry!(
+    RUN_LISTS,
+    Vec<Run>,
+    alloc_run_list,
+    get_run_list,
+    free_run_list_entry,
+    clear_run_lists
+);
+
+/// Runs matching every given criterion, ordered by start time.
+///
+/// - `name_contains`: case-insensitive substring of the name; "" for any.
+/// - `labels`: every one must be on the run.
+/// - `property_keys`/`property_values`: every pair must be among its
+///   properties.
+/// - `start_after_nanos`, when `has_start_after`: starts at or after this.
+/// - `end_before_nanos`, when `has_end_before`: ends at or before this.
+///
+/// With no criteria at all, every run is returned. Pages internally. Read the
+/// list with `nominal_run_list_at` and release it with `nominal_run_list_free`.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn nominal_run_search(
+    client_handle: ClientHandle,
+    name_contains: *const c_char,
+    labels: *const *const c_char,
+    label_count: u32,
+    property_keys: *const *const c_char,
+    property_values: *const *const c_char,
+    property_count: u32,
+    start_after_nanos: i64,
+    has_start_after: bool,
+    end_before_nanos: i64,
+    has_end_before: bool,
+    out_list: *mut RunListHandle,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_list, error_out, "out_list")?;
+        require_out(out_count, error_out, "out_count")?;
+        let client = client_or_fail(client_handle, error_out)?;
+        let name = unsafe { c_str_to_string(name_contains, "name_contains", error_out)? };
+        let labels = unsafe { strings_from_c(labels, label_count, "labels", error_out)? };
+        let properties = unsafe {
+            pairs_from_c(
+                property_keys,
+                property_values,
+                property_count,
+                "property",
+                error_out,
+            )?
+        };
+
+        let mut criteria = Vec::new();
+        if !name.is_empty() {
+            criteria.push(RunQuery::substring_match(name));
+        }
+        criteria.extend(labels.into_iter().map(RunQuery::label));
+        criteria.extend(
+            properties
+                .into_iter()
+                .map(|(k, v)| RunQuery::property(k, v)),
+        );
+        if has_start_after {
+            criteria.push(RunQuery::start_time_inclusive(instant_from_nanos(
+                start_after_nanos,
+            )));
+        }
+        if has_end_before {
+            criteria.push(RunQuery::end_time_inclusive(instant_from_nanos(
+                end_before_nanos,
+            )));
+        }
+
+        let mut runs = if criteria.is_empty() {
+            RUNTIME.block_on(client.runs().list())
+        } else {
+            RUNTIME.block_on(client.runs().search(RunQuery::and(criteria)))
+        }
+        .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
+
+        // Server order is unspecified; sort so `_at` means the same thing twice.
+        runs.sort_by(|a, b| a.start().cmp(b.start()));
+        let count = runs.len() as u32;
+        let handle = alloc_run_list(runs);
+        if handle == 0 {
+            return Err(fail(
+                error_out,
+                ErrorCode::NoCapacity,
+                "run list handle space exhausted",
+            ));
+        }
+        unsafe {
+            *out_list = handle;
+            *out_count = count;
+        }
+        Ok(())
+    })
+}
+
+/// The run at `index`, as its own handle that outlives the list.
+#[no_mangle]
+pub extern "C" fn nominal_run_list_at(
+    list_handle: RunListHandle,
+    index: u32,
+    out_run: *mut RunHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_run, error_out, "out_run")?;
+        let list = get_run_list(list_handle).ok_or_else(|| {
+            fail(
+                error_out,
+                ErrorCode::InvalidHandle,
+                format!("unknown run list handle {list_handle}"),
+            )
+        })?;
+        let run = list.get(index as usize).ok_or_else(|| {
+            fail(
+                error_out,
+                ErrorCode::InvalidParameter,
+                format!("run index {index} out of range ({} runs)", list.len()),
+            )
+        })?;
+        deliver(run.clone(), out_run, error_out)
+    })
+}
+
+/// Release a run list. Handles taken from it stay valid.
+#[no_mangle]
+pub extern "C" fn nominal_run_list_free(handle: RunListHandle) -> i32 {
+    free_run_list_entry(handle);
+    ErrorCode::Success as i32
 }
 
 /// Fetch a run by RID.
@@ -630,6 +771,41 @@ pub extern "C" fn nominal_run_label_at(
             )
         })?;
         set_string(out_string, label.as_str(), error_out)
+    })
+}
+
+/// Number of properties on a run.
+#[no_mangle]
+pub extern "C" fn nominal_run_property_count(
+    handle: RunHandle,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_count, error_out, "out_count")?;
+        let run = run_or_fail(handle, error_out)?;
+        unsafe { *out_count = run.properties().len() as u32 };
+        Ok(())
+    })
+}
+
+/// Property key at `index`, in sorted order. Read its value with
+/// `nominal_run_property`.
+#[no_mangle]
+pub extern "C" fn nominal_run_property_key_at(
+    handle: RunHandle,
+    index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let run = run_or_fail(handle, error_out)?;
+        let key = key_at(
+            run.properties().keys().map(String::as_str),
+            index,
+            error_out,
+        )?;
+        set_string(out_string, key, error_out)
     })
 }
 

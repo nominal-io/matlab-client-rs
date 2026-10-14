@@ -140,16 +140,12 @@ classdef (Abstract) Resource < handle
             end
 
             if isfield(options, 'Properties')
-                keys = {};
-                if ~isempty(options.Properties)
-                    keys = fieldnames(options.Properties);
-                end
+                [keys, values] = keyValuePairs(options.Properties, "property");
                 if isempty(keys)
                     nominalmex('update_clear_properties', u);
                 end
                 for i = 1:numel(keys)
-                    value = options.Properties.(keys{i});
-                    nominalmex('update_set_property', u, keys{i}, char(string(value)));
+                    nominalmex('update_set_property', u, keys{i}, values{i});
                 end
             end
             if isfield(options, 'Labels')

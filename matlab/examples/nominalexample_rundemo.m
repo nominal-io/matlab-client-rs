@@ -8,9 +8,9 @@ function results = nominalexample_rundemo(assetName)
 %   closes it.
 %
 %   Covers: create with an explicit start, get by RID, adding and removing
-%   an asset, a run from a tagged dataset with no asset, update, all
-%   accessors, and finish. Not addDataset: a run's data sources are its
-%   asset's, so there is nothing to attach.
+%   an asset, a run from a tagged dataset with no asset, update, setting one
+%   property, all accessors, finish, and searching for it. Not addDataset: a
+%   run's data sources are its asset's, so there is nothing to attach.
 %
 %   See also NOMINAL.RUN, NOMINALEXAMPLE_ASSETDEMO,
 %   NOMINALEXAMPLE_EVENTDEMO, NOMINALEXAMPLE_CONNECT
@@ -32,7 +32,7 @@ function results = nominalexample_rundemo(assetName)
     % the argument to start now.
     %
     % Each mutation below returns a new object: openRun -> sharedRun ->
-    % soloRun -> updatedRun -> finishedRun. Earlier handles keep reporting
+    % soloRun -> updatedRun -> notedRun -> finishedRun. Earlier handles keep reporting
     % their older state.
     runStartTime = datetime("now", TimeZone="UTC") - minutes(1);
     openRun = asset.run("matlab-demo-run", runStartTime);
@@ -100,12 +100,25 @@ function results = nominalexample_rundemo(assetName)
     fprintf('  labels:      %s\n', join(updatedRun.Labels, " "));
     fprintf('  operator:    %s\n', updatedRun.property("operator"));
 
+    % setProperty changes one key and keeps the rest. Properties is a
+    % containers.Map of all of them.
+    notedRun = updatedRun.setProperty("result", "pass");
+    fprintf('  properties:  %s\n', strjoin(keys(notedRun.Properties), ", "));
+
     % --- close it -----------------------------------------------------
     %
     % No argument means end now.
-    finishedRun = updatedRun.finish();
+    finishedRun = notedRun.finish();
     fprintf('  end    %s (closed)\n', string(finishedRun.EndTime));
     fprintf('  span   %s\n', string(finishedRun.EndTime - finishedRun.StartTime));
+
+    % --- find it again ------------------------------------------------
+    %
+    % Every label and property given must match. StartAfter keeps this
+    % search to runs from this demo.
+    found = client.runs("matlab-demo-run", Labels = "smoke", ...
+                        Properties = struct(result = "pass"), StartAfter = runStartTime);
+    fprintf('  found by name, label and property: %d run(s)\n', height(found));
 
     % --- results ------------------------------------------------------
     %
@@ -125,6 +138,7 @@ function results = nominalexample_rundemo(assetName)
     %
     % Each handle in the chain needs its own delete.
     delete(finishedRun);
+    delete(notedRun);
     delete(updatedRun);
     delete(executionRun);
     delete(soloRun);

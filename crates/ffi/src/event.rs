@@ -25,7 +25,7 @@
 use crate::client::{client_or_fail, ClientHandle};
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
-use crate::strings::{c_str_to_string, pairs_from_c, set_string, StringHandle};
+use crate::strings::{c_str_to_string, key_at, pairs_from_c, set_string, StringHandle};
 use crate::time::instant_from_nanos;
 
 use nominal_streaming::api::clients::event::{AsyncEventService, AsyncEventServiceClient};
@@ -431,6 +431,41 @@ pub extern "C" fn nominal_event_asset_at(
                 )
             })?;
         set_string(out_string, rid.0.as_str(), error_out)
+    })
+}
+
+/// Number of properties on an event.
+#[no_mangle]
+pub extern "C" fn nominal_event_property_count(
+    handle: EventHandle,
+    out_count: *mut u32,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        require_out(out_count, error_out, "out_count")?;
+        let event = event_or_fail(handle, error_out)?;
+        unsafe { *out_count = event.properties().len() as u32 };
+        Ok(())
+    })
+}
+
+/// Property key at `index`, in sorted order. Read its value with
+/// `nominal_event_property`.
+#[no_mangle]
+pub extern "C" fn nominal_event_property_key_at(
+    handle: EventHandle,
+    index: u32,
+    out_string: StringHandle,
+    error_out: *mut ErrorHandle,
+) -> i32 {
+    ffi_guard(error_out, || {
+        let event = event_or_fail(handle, error_out)?;
+        let key = key_at(
+            event.properties().keys().map(|k| k.0.as_str()),
+            index,
+            error_out,
+        )?;
+        set_string(out_string, key, error_out)
     })
 }
 
