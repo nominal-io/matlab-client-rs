@@ -36,7 +36,7 @@ function text = describe(value)
         text = "(empty)";
 
     elseif ~isscalar(value)
-        % Preview short string arrays; otherwise report size and type.
+        % Preview short string arrays. Report size and type for anything else.
         if isstring(value) && numel(value) <= 6
             text = sprintf('1x%d string: %s', numel(value), join(value(:)', ", "));
         else

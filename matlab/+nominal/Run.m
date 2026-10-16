@@ -38,7 +38,7 @@ classdef Run < nominal.Resource
 
     methods
         function obj = Run(client, handle)
-            % Constructed by nominal.Client or nominal.Asset; not called directly.
+            % Constructed by nominal.Client or nominal.Asset, not called directly.
             arguments
                 client (1,1) nominal.Client
                 handle (1,1) int32
@@ -269,14 +269,11 @@ classdef Run < nominal.Resource
         function updated = addDataset(obj, refName, dataset)
             %ADDDATASET  Attach a dataset under a reference name.
             %
-            %   **This cannot succeed for a run made with nominal.Asset.run.**
-            %   A run's data sources are its asset's, live: a dataset added to
-            %   the asset is already on the run. Every reference name the
-            %   asset uses errors as Scout:RefNamesAlreadyUsed, and every other
-            %   name as Default:InvalidArgument.
+            %   **This fails for a run made with nominal.Asset.run.** That run
+            %   already shows every data source on its asset, including ones
+            %   added later, so there is nothing to attach.
             %
-            %   Nothing needs calling to get an asset's data onto its run. For
-            %   a run with its own data, use nominal.Client.createRun.
+            %   For a run with its own data, use nominal.Client.createRun.
             arguments
                 obj (1,1) nominal.Run
                 refName (1,1) string

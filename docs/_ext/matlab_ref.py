@@ -55,8 +55,8 @@ def generate(app: Sphinx) -> None:
     toc = "".join(f"{n}\n" for n, _ in classes) + "functions\n"
     _write(
         out / "index.md",
-        "# Reference\n\nEvery class and function, generated from the help text in `+nominal`. "
-        "The same text is available in MATLAB with `help nominal.Client` and friends.\n\n"
+        "# Reference\n\nEvery class and function in the toolbox. MATLAB shows the same text with "
+        "`help`, as in `help nominal.Client`.\n\n"
         f"## Classes\n\n{rows}\n## Functions\n\n{frows}\n"
         f"```{{toctree}}\n:hidden:\n\n{toc}```\n",
     )

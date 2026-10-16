@@ -22,9 +22,15 @@ extensions = [
     "sphinx.ext.napoleon",
     "matlab_ref",
     "examples",
+    "sphinx.ext.extlinks",
 ]
 myst_enable_extensions = ["colon_fence", "deflist", "attrs_inline", "attrs_block", "fieldlist"]
 myst_heading_anchors = 6
+
+# Links into the Nominal docs hub, as {hub}`text <path/>`. The hub's address is set once here,
+# so moving it to its own domain is a one-line change.
+HUB = "https://nominal-io.github.io/pub-docs/"
+extlinks = {"hub": (HUB + "%s", None)}
 
 # -- MATLAB domain -------------------------------------------------------------
 matlab_src_dir = str(HERE.parent / "matlab")

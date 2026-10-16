@@ -29,7 +29,7 @@ classdef Asset < nominal.Resource
 
     methods
         function obj = Asset(client, handle)
-            % Constructed by nominal.Client; not called directly.
+            % Constructed by nominal.Client, not called directly.
             arguments
                 client (1,1) nominal.Client
                 handle (1,1) int32
@@ -127,7 +127,7 @@ classdef Asset < nominal.Resource
             %   tlm = s(s.Type == "dataset", :);    % datasets only
             %   s.Tags{1}                           % one source's tag filter
             %
-            %   **The first call asks the server and keeps the answer; later
+            %   **The first call asks Nominal and keeps the answer, and later
             %   calls on this handle reuse it.** A dataset attached since, by
             %   addDataset or from the web app, is not listed until you pass
             %   Refresh=true.
@@ -138,7 +138,7 @@ classdef Asset < nominal.Resource
             %   Returns:
             %       table: Variables RefName, Rid, Type, Tags and Offset,
             %       ordered by reference name. Type is "dataset", "video",
-            %       "connection" or "other"; only a dataset RID can open a
+            %       "connection" or "other", and only a dataset RID can open a
             %       stream. Tags holds each source's tag filter as a
             %       containers.Map, empty when it sees the whole source.
             %       Offset is a duration.
@@ -190,10 +190,10 @@ classdef Asset < nominal.Resource
             %       assetA.addDataset(ds, Tags=struct(UUT="A"));
             %       assetB.addDataset(ds, Tags=struct(UUT="B"));
             %
-            %   An asset holds a dataset once per tag filter. Attaching it again
-            %   with the same Tags *moves* it to the new reference name; with
-            %   different Tags it is added alongside, so one dataset can appear
-            %   twice, split by tag:
+            %   An asset holds a dataset once per tag filter. Attaching the same
+            %   dataset again with the same Tags *moves* it to the new reference
+            %   name. Attaching it with different Tags adds it alongside, so one
+            %   dataset can appear twice, split by tag:
             %
             %       a.addDataset(ds, "drone",  Tags=struct(source="drone"));
             %       a.addDataset(ds, "remote", Tags=struct(source="remote"));
@@ -216,7 +216,7 @@ classdef Asset < nominal.Resource
             %       Tags: Limit this asset to the dataset's series carrying
             %           every one of these tags. A struct, or a dictionary
             %           (R2022b+) for a key that is not a valid field name.
-            %           Values are strings; numbers are converted.
+            %           Values are strings, and numbers are converted.
             %
             %   See also NOMINAL.ASSET/GETORCREATEDATASET, NOMINAL.ASSET/DATASOURCES
             arguments
@@ -380,7 +380,7 @@ classdef Asset < nominal.Resource
             %
             %   Args:
             %       refName: The dataset's name within this asset, used only
-            %           when attaching. Omit it and a free one is chosen; see
+            %           when attaching. Omit it and a free one is chosen, as for
             %           addDataset.
             %
             %   Options:
@@ -436,7 +436,7 @@ classdef Asset < nominal.Resource
             %   r = a.run("burn-12");                                 % starts now
             %   r = a.run("burn-12", datetime("now", TimeZone="UTC") - minutes(5));
             %
-            %   The run is left open; close it with r.finish().
+            %   The run is left open. Close it with r.finish().
             %
             %   Args:
             %       startTime: Zoned datetime or int64 nanoseconds since the

@@ -28,7 +28,7 @@ classdef Stream < nominal.Resource
 
     methods
         function obj = Stream(handle)
-            % Constructed by nominal.Dataset.stream; not called directly.
+            % Constructed by nominal.Dataset.stream, not called directly.
             arguments
                 handle (1,1) int32
             end
@@ -38,7 +38,7 @@ classdef Stream < nominal.Resource
         function ch = channel(obj, name)
             %CHANNEL  A write address for a named channel on this stream.
             %
-            %   Performs no API call; the channel appears in Nominal when the
+            %   Sends nothing to Nominal. The channel appears in Nominal when the
             %   first point arrives.
             %
             %   Returns:

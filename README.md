@@ -6,55 +6,23 @@ A MATLAB client for [Nominal](https://nominal.io), built on the Nominal Rust SDK
 addpath('matlab')
 
 c  = nominal.Client.fromProfile();
-a  = c.getOrCreateAsset("engine-3");
-ds = a.getOrCreateDataset("telemetry", "tlm");
+a  = c.getOrCreateAsset("<asset name>");
+ds = a.getOrCreateDataset("<dataset name>");
 
-ds.write(["rpm" "egt" "psi"], t, V);       % push a matrix
-tt = ds.fetch("rpm", t0, t1);              % get a timetable back
+ds.write(["<channel 1>" "<channel 2>"], t, V);   % one column of V per channel
+tt = ds.fetch("<channel 1>", t0, t1);            % a timetable
 ```
 
 | | |
 |---|---|
-| **[Documentation](https://dev.nominal.io/matlab/client/)** | Quickstart, guides, examples and the full reference. Source in [docs/](docs/). |
+| **[Documentation](https://nominal-io.github.io/pub-docs/matlab/client/)** | Quickstart, guides, examples and the full reference. Source in [docs/](docs/). |
 | **[BUILDING.md](BUILDING.md)** | Prerequisites, building the gateway, installing it, packaging a `.mltbx` |
 | **[PACKAGING.md](PACKAGING.md)** | Building on Windows, macOS and Linux and shipping one multi-platform `.mltbx` |
 | **[matlab/examples/](matlab/examples/)** | Runnable demos. `nominalexample_alldemos` runs them all. |
 | **[docs/](docs/)** | The Sphinx site: `just build-docs`, `just serve-docs`. See [BUILDING.md](BUILDING.md#docs). |
 
-## How it behaves
-
-**Objects free themselves.** Every object is a handle that releases its native
-resource when it goes out of scope. Copies alias the same resource.
-
-**Errors are exceptions.** Failures raise `MException`s with the library's
-message and an identifier you can catch on:
-
-```matlab
-try
-    a = c.getOrCreateAsset("engine-3");
-catch e
-    switch e.identifier
-        case 'nominal:apiError',      % the server rejected it
-        case 'nominal:invalidHandle', % used after release or shutdown
-    end
-end
-```
-
-**Wrong-type arguments fail at the call site.** Passing a `Dataset` where a
-`Stream` belongs is an immediate error naming both.
-
-**Results are tables and timetables.** Listings return a `table`; `fetch`
-returns a `timetable`, so `sortrows`, `retime` and `synchronize` work directly.
-
-**Times are `datetime`.** Anything taking an instant accepts a zoned `datetime`
-or an `int64` nanosecond count. Times coming back are UTC `datetime`.
-`datetime` does not resolve to nanoseconds, so use `nominal.now()` and raw
-`int64` when full precision matters.
-
-Plain doubles are refused for timestamps: they lose integer precision past
-2^53 nanoseconds, which is 1970 plus 104 days, so a present-day timestamp
-would be silently rounded. `int64(0)` is the epoch, 1970-01-01T00:00:00Z. Leave
-a run or event time out to mean now.
+How the objects behave, from errors to timestamps, is in the documentation's
+[How it behaves](https://nominal-io.github.io/pub-docs/matlab/client/guides/behavior/) page.
 
 ## Layout
 
@@ -87,44 +55,15 @@ classes, not the gateway.
 
 ## Requirements
 
-**MATLAB R2021a or newer.** The floor is the `Name=Value` call syntax, as in
-`ds.fetch("rpm", t0, t1, Buckets=2000)`. The older `'Buckets', 2000` form works
-in any release if you need it. Nothing below R2026a has actually been tested.
-
-**Windows x86-64, Apple silicon and Linux x86-64** have all been built and
-linked. Intel macOS is not supported. See [BUILDING.md](BUILDING.md).
-
-## Known gaps
-
-- **String channels.** Streams carry doubles only.
-- **Events cannot be listed or searched.** You can create one and read back
-  the object you got.
-- **`Run` has no `datasources()`.** A run's data sources are its asset's, so
-  use `a.datasources()`.
-- **`Run.addDataset` cannot succeed** for a run made with `asset.run()`. A
-  run's data sources are its asset's, live, so there is nothing to attach.
-  Every argument returns an error. Use `c.createRun` for a run with its own
-  data.
-- **Video and connection data sources** show up in `a.datasources()` with the
-  right `Type`, but nothing here can act on one beyond renaming or detaching.
-- **Not available here:** setting time offsets on attached datasets (they can
-  be read), asset types, numeric properties, and compositions.
-- **Listings cannot be limited or paged.** `c.assets()` and `c.datasets()`
-  with no filter return everything, which on a large workspace is tens of
-  thousands of rows and several seconds. Pass a name filter instead.
-- **`count(*)` and other unmapped SQL types** come back as empty strings.
-  Float, integer, boolean, string and timestamp columns are supported.
+MATLAB R2021a or newer, on Windows x86-64, Apple silicon or Linux x86-64. See
+[BUILDING.md](BUILDING.md) to build it.
 
 ## Status
 
-Built on R2026a with MSVC and verified against a live deployment: auth,
-listings, `datasetByRid`, channel metadata, `write`, streaming, `ingest`,
-`fetch` in both modes, `export`, and SQL query and export.
-
-`just lint` runs clippy and MATLAB's `checkcode`; `just test` runs the Rust
-suite; `just mex-test` runs the offline MATLAB smoke test.
-
 All three platforms have run the full demo suite against a live deployment:
-Windows x86-64 (MSVC), Apple silicon (clang) and Linux x86-64 (gcc).
+Windows x86-64 (MSVC), Apple silicon (clang) and Linux x86-64 (gcc). Every
+build so far used MATLAB R2026a.
 
-No MATLAB release below R2026a has been tested.
+- `just lint` runs clippy and MATLAB's `checkcode`.
+- `just test` runs the Rust suite.
+- `just mex-test` runs the offline MATLAB smoke test.

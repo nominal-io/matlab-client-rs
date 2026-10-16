@@ -24,7 +24,7 @@ classdef ChannelMetadata < nominal.Resource
 
     methods
         function obj = ChannelMetadata(handle)
-            % Constructed by nominal.Dataset; not called directly.
+            % Constructed by nominal.Dataset, not called directly.
             arguments
                 handle (1,1) int32
             end

@@ -27,7 +27,7 @@ classdef Dataset < nominal.Resource
 
     methods
         function obj = Dataset(client, handle)
-            % Constructed by nominal.Client or nominal.Asset; not called directly.
+            % Constructed by nominal.Client or nominal.Asset, not called directly.
             arguments
                 client (1,1) nominal.Client
                 handle (1,1) int32
@@ -131,7 +131,7 @@ classdef Dataset < nominal.Resource
             %STREAM  Open a stream that writes into this dataset.
             %
             %   Data is buffered and sent in the background. The stream flushes
-            %   when released; call delete(s) to make that happen at a known
+            %   when released. Call delete(s) to make that happen at a known
             %   point.
             %
             %   Returns:
@@ -148,9 +148,9 @@ classdef Dataset < nominal.Resource
             %   ds.write(["rpm" "egt"], t, V)
             %   ds.write(["rpm" "egt"], t, V, Tags=struct(UUT="A"))
             %
-            %   Returns once the write has been accepted; nothing to flush or
-            %   close. Use this for data already in memory, and stream() for
-            %   continuous acquisition.
+            %   Returns once Nominal has accepted the write, with nothing to
+            %   flush or close. Use this for data already in memory, and
+            %   stream() for continuous acquisition.
             %
             %   Keep a call to roughly 50,000 points and at most 10 channels.
             %   Past that, use a stream.
@@ -234,8 +234,8 @@ classdef Dataset < nominal.Resource
             %       plot(tt.Time, tt.("rpm"))
             %       retime(tt, "regular", "linear", TimeStep=seconds(1))
             %
-            %   Without Buckets the whole window is fetched, which can be many
-            %   round trips over a wide window; use export when the destination
+            %   Without Buckets the whole window is fetched, which can take many
+            %   round trips over a wide window. Use export when the destination
             %   is a file.
             %
             %   Args:
@@ -252,7 +252,7 @@ classdef Dataset < nominal.Resource
             %
             %   Returns:
             %       timetable: One variable, named after the channel. Row times
-            %       are datetimes, which do not resolve to nanoseconds; use
+            %       are datetimes, which do not resolve to nanoseconds. Use
             %       export if you need the exact instants.
             %
             %   See also NOMINAL.DATASET/EXPORT, RETIME, SYNCHRONIZE

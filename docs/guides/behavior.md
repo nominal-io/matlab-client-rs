@@ -1,69 +1,41 @@
 # How it behaves
 
 {.lead}
-The rules that hold across every object, and the gaps you may hit.
+Rules that hold for every object in the toolbox.
 
-**Objects free themselves.** Every object is a handle that releases its native resource when
-it goes out of scope. Copies alias the same resource.
+**Objects free themselves.** Every object is a handle that releases its resources when it goes
+out of scope. A copy refers to the same object.
 
-**Errors are exceptions.** Failures raise `MException`s with the library's message and an
-identifier you can catch on:
+**Errors are exceptions.** A failure raises an `MException` with Nominal's message and an
+identifier you can catch:
 
 ```matlab
 try
-    a = c.getOrCreateAsset("engine-3");
+    a = c.getOrCreateAsset("<asset name>");
 catch e
     switch e.identifier
-        case 'nominal:apiError',      % the server rejected it
-        case 'nominal:invalidHandle', % used after release or shutdown
+        case 'nominal:apiError'          % Nominal rejected the request
+        case 'nominal:released'          % the object was deleted
+        case 'nominal:invalidHandle'     % the object was used after nominal.shutdown()
     end
 end
 ```
 
-**Wrong-type arguments fail at the call site.** Passing a `Dataset` where a `Stream` belongs
-is an immediate error naming both.
+**Wrong-type arguments fail at the call site.** Passing a `Dataset` where a `Stream` belongs is
+an immediate error that names both.
 
-**Results are tables and timetables.** Listings return a `table`; `fetch` returns a
-`timetable`, so `sortrows`, `retime` and `synchronize` work directly.
+**Results are tables and timetables.** Listings return a `table`, and `fetch` returns a
+`timetable`.
 
-**Times are `datetime`.** Anything taking an instant accepts a zoned `datetime` or an `int64`
-nanosecond count. Times coming back are UTC `datetime`. `datetime` does not resolve to
-nanoseconds, so use `nominal.now()` and raw `int64` when full precision matters.
+**Times are `datetime` or `int64` nanoseconds.** Anything that takes an instant accepts a zoned
+`datetime` or an `int64` nanosecond count, and times come back as UTC `datetime`. `datetime`
+doesn't hold nanoseconds, so use `nominal.now()` and `int64` when you need full precision.
+Plain doubles are refused for timestamps because they can't hold a present-day nanosecond count
+exactly. `int64(0)` is the epoch. Leave a run or event time out to mean now.
 
-Plain doubles are refused for timestamps: they lose integer precision past 2^53 nanoseconds,
-which is 1970 plus 104 days, so a present-day timestamp would be silently rounded.
-`int64(0)` is the epoch, 1970-01-01T00:00:00Z. Leave a run or event time out to mean now.
-
-**Handles are snapshots.** `update()` returns a new object instead of changing the one you
-have. `a.datasources()` asks the server once and reuses the answer, so a dataset attached
-since its first call is not listed until you pass `Refresh=true`.
+**Handles are snapshots.** `update()` returns a new object and leaves the one you have
+unchanged. `a.datasources()` asks Nominal once and reuses the answer, so a dataset attached
+after that first call is not listed until you pass `Refresh=true`.
 
 **Labels and Properties replace, they do not merge.** Read the existing ones first if you mean
-to add. To change one property, use `setProperty` or `removeProperty`, which keep the rest.
-
-## Requirements
-
-**MATLAB R2021a or newer.** The floor is the `Name=Value` call syntax, as in
-`ds.fetch("rpm", t0, t1, Buckets=2000)`. The older `'Buckets', 2000` form works in any release
-if you need it. Nothing below R2026a has actually been tested.
-
-**Windows x86-64, Apple silicon and Linux x86-64.** Intel macOS is not supported.
-
-## Known gaps
-
-- **String channels.** Streams carry doubles only.
-- **Events cannot be listed or searched.** You can create one and read back the object you got.
-- **`Run` has no `datasources()`.** A run's data sources are its asset's, so use
-  `a.datasources()`.
-- **`Run.addDataset` cannot succeed** for a run made with `asset.run()`. A run's data sources
-  are its asset's, live, so there is nothing to attach. Every argument returns an error. Use
-  `c.createRun` for a run with its own data.
-- **Video and connection data sources** show up in `a.datasources()` with the right `Type`,
-  but nothing here can act on one beyond renaming or detaching.
-- **Not available here:** setting time offsets on attached datasets (they can be read), asset
-  types, numeric properties, and compositions.
-- **Listings cannot be limited or paged.** `c.assets()` and `c.datasets()` with no filter
-  return everything, which on a large workspace is tens of thousands of rows and several
-  seconds. Pass a name filter instead.
-- **`count(*)` and other unmapped SQL types** come back as empty strings. Float, integer,
-  boolean, string and timestamp columns are supported.
+to add. To change one property and keep the rest, use `setProperty` or `removeProperty`.

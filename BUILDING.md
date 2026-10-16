@@ -4,7 +4,7 @@ Building produces one file: `matlab/+nominal/private/nominalmex.mexw64` (or
 `.mexa64` / `.mexmaca64`), with the Rust library linked in. Installing means
 getting `matlab/` onto the MATLAB path.
 
-Once it is built, see the [documentation](https://dev.nominal.io/matlab/client/).
+Once it is built, see the [documentation](https://nominal-io.github.io/pub-docs/matlab/client/).
 
 ## Prerequisites
 
@@ -24,7 +24,7 @@ sudo dnf install alsa-lib atk at-spi2-atk at-spi2-core mesa-libgbm \
                  libglvnd-glx libXcomposite libXdamage libXfixes libXrandr
 ```
 
-Nothing here needs OpenSSL; TLS is rustls throughout. A build that fails in
+Nothing here needs OpenSSL, because TLS is rustls throughout. A build that fails in
 `openssl-sys` means a dependency has re-enabled reqwest's `default-tls`
 feature. Fix the feature flags, do not install OpenSSL.
 
@@ -49,7 +49,7 @@ export MATLAB_ROOT=/Applications/MATLAB_R2026a.app     # macOS
 ```
 
 For an install that does not follow the usual `<root>/bin/matlab` layout, set
-`MATLAB_BIN` to the executable itself; it takes precedence. The recipes run
+`MATLAB_BIN` to the executable itself. It takes precedence. The recipes run
 through bash, so use forward slashes. A one-off works too:
 
 ```
@@ -76,7 +76,7 @@ just mex-win64-fast     just mex-macos-arm64-fast
 ```
 
 Windows x86-64, Apple silicon and Linux x86-64 have all been built and linked.
-Intel macOS is not a target; `build.m` errors on one.
+Intel macOS is not a target, and `build.m` errors on one.
 
 The system-library lists in `platformSettings()` are hand maintained, because
 a Rust staticlib does not record its own dependencies. On a new host, after a
@@ -91,7 +91,7 @@ just native-libs
 
 `release` uses fat LTO, which re-optimises the whole dependency graph on every
 edit, around two minutes per rebuild. The `fast` profile turns LTO off and
-drops to `opt-level = 2`. Use it while iterating; ship the release build.
+drops to `opt-level = 2`. Use it while iterating, and ship the release build.
 
 ### Regenerating the header
 
@@ -113,9 +113,9 @@ just header
 Then `just lint` (clippy and MATLAB `checkcode`), `just test` (Rust), and
 `just mex-test` (the offline MATLAB smoke test).
 
-`just header` before the rebuild is the step people forget. The C gateway
-includes the generated header, so a new `nominal_*` export does not exist as
-far as the compiler is concerned until cbindgen has run.
+Run `just header` before the rebuild. The C gateway includes the generated
+header, so a new `nominal_*` export does not exist as far as the compiler is
+concerned until cbindgen has run.
 
 ### MATLAB caches compiled functions
 
@@ -149,7 +149,7 @@ Add the **parent** folder, not `matlab\+nominal`. MATLAB warns if you path a
 ### Every session, on this machine
 
 Put the same line in `startup.m`, in your `userpath` folder (run `userpath` to
-find it, typically `~/Documents/MATLAB`):
+find it, by default `~/Documents/MATLAB`):
 
 ```matlab
 % <userpath>/startup.m
@@ -171,7 +171,7 @@ just package
 
 That builds a release gateway, then runs `tools/package.m` to write
 `dist/NominalForMATLAB-<version>.mltbx`. Install it with
-`matlab.addons.install("dist/NominalForMATLAB-0.1.0.mltbx")` or by
+`matlab.addons.install("dist/NominalForMATLAB-<version>.mltbx")` or by
 double-clicking.
 
 The version comes from the workspace `Cargo.toml`, so bump it there. The
@@ -187,8 +187,8 @@ in [tools/package.m](tools/package.m).
 
 ## Docs
 
-The site at [https://dev.nominal.io/matlab/client/](https://dev.nominal.io/matlab/client/) is built from `docs/` and needs
-[uv](https://docs.astral.sh/uv/):
+The [documentation site](https://nominal-io.github.io/pub-docs/matlab/client/) is built from
+`docs/` and needs [uv](https://docs.astral.sh/uv/):
 
 ```
 just build-docs     # docs/_build/dirhtml; warnings fail the build, as in CI
@@ -196,7 +196,7 @@ just serve-docs     # live preview on http://127.0.0.1:8000
 ```
 
 The reference pages come from the help text in `matlab/+nominal`, so edit the help text, not
-the docs. `docs/_ext/matlab_help.py` renders MathWorks-style help as reST; `matlab_ref.py` and
+the docs. `docs/_ext/matlab_help.py` renders MathWorks-style help as reST. `matlab_ref.py` and
 `examples.py` generate `docs/ref/` and `docs/examples/`, which are gitignored.
 
 Help text keeps MathWorks style: a one-line `%NAME  Summary.`, usage lines under it, prose,

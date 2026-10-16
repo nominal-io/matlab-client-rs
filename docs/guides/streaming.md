@@ -1,13 +1,12 @@
 # Streaming
 
 {.lead}
-Push a matrix per block, not a point at a time. And what happens at shutdown.
+Push samples to a dataset while a test runs, one block at a time.
 
-## Prefer the matrix push
+## Pushing a block
 
-`nominal.Stream.push` takes an N-by-C matrix, one column per channel, with one shared
-timestamp column. MATLAB stores matrices column-major, so the data goes to the library with
-no copy. Preallocate a matrix, fill it in a loop, push it.
+`push` takes an N-by-C matrix, one column per channel, and one timestamp column shared by all
+of them. Fill a preallocated matrix and push it whole.
 
 ```matlab
 s     = ds.stream();
@@ -20,36 +19,39 @@ for i = 1:1000
     v(i, :) = readSample();
 end
 s.push(chans, t, v);
-delete(s);                                 % flushes; blocks until it lands
+delete(s);                                 % flushes and waits until the data lands
 ```
 
-`push` blocks when the stream saturates. If points arrive faster than the network drains
-them, it waits instead of queueing without bound. Produce on a separate thread if your
-acquisition loop cannot stall.
+`push` blocks when points arrive faster than the network can send them. If your acquisition
+loop can't stall, produce the data on a separate thread.
 
 ## Timestamps
 
-Use `nominal.now()` and `int64` for streaming timestamps. `datetime` does not resolve to
-nanoseconds, so a round trip through it is lossy. Timestamps are literal: `int64(0)` is the
-epoch.
+Use `nominal.now()` and `int64` nanoseconds for streaming timestamps. `datetime` doesn't hold
+nanoseconds, so a round trip through it loses precision. Timestamps are taken as given:
+`int64(0)` is the epoch.
 
 ## Tags
 
-`ch.tag("bank", "1")` stamps every point pushed through that channel from then on. Tags belong
-to points, not to the channel, so earlier points keep the tags they were sent with. Keep tag
-cardinality low: anything that changes every point belongs in its own channel.
+Tag a channel to stamp every point pushed through it from then on:
 
-## Flush and close
+```matlab
+chans(1).tag("bank", "1");
+```
 
-Deleting the stream flushes what is still buffered and blocks until it has landed. MATLAB does
-not promise when a variable is collected, so call `delete(s)` yourself if you need the data to
-be there before moving on. Points take a moment to appear in Nominal afterwards.
+Points pushed earlier keep the tags they were sent with. Keep the number of distinct tag values
+low: a value that changes with every point belongs in its own channel.
+
+## Closing the stream
+
+Deleting the stream sends what is still buffered and waits until it has landed. MATLAB doesn't
+promise when it clears a variable, so call `delete(s)` yourself when the data must be in Nominal
+before you move on. The points can take a moment to appear in Nominal after that.
 
 ## Shutdown
 
-You do not need to call `nominal.shutdown()`. `clear mex`, `clear all` and quitting MATLAB all
-shut the library down cleanly first.
+You don't need to call `nominal.shutdown()`. `clear mex`, `clear all` and quitting MATLAB all
+shut the library down first.
 
-Call it when you want the teardown at a known point, such as the end of a long script. It
-invalidates every outstanding handle. The next call builds a fresh runtime, so the library is
-usable again immediately.
+Call it to tear everything down at a known point, such as the end of a long script. Every
+`nominal` object you hold stops working, and the next call starts the library again.

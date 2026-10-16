@@ -37,7 +37,7 @@ function results = nominalexample_datasetdemo(assetName)
 
     % --- update -------------------------------------------------------
     %
-    % update returns a new object; everything below uses updatedDataset.
+    % update returns a new object, and everything below uses updatedDataset.
     updatedDataset = dataset.update( ...
         Description = "Created by the Nominal MATLAB demo", ...
         Labels      = "matlab-demo");
@@ -72,7 +72,7 @@ function results = nominalexample_datasetdemo(assetName)
         delete(channelMetadata);
     end
 
-    % A string channel; no unit.
+    % A string channel, with no unit.
     modeMetadata = updatedDataset.setChannelMetadata("mode", "string", ...
                                                      Description = "vehicle mode");
     fprintf('  %-6s %-6s %s\n', modeMetadata.Name, "(none)", ...

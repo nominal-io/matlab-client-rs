@@ -43,7 +43,7 @@ function results = nominalexample_rundemo(assetName)
     fprintf('  url    %s\n', openRun.Url);
     fprintf('  start  %s\n', string(openRun.StartTime));
 
-    % An open run's EndTime is NaT. Test for it; fprintf cannot format
+    % An open run's EndTime is NaT. Test for it, since fprintf cannot format
     % string(NaT).
     if isnat(openRun.EndTime)
         fprintf('  end    (none yet - the run is open)\n');
@@ -67,8 +67,8 @@ function results = nominalexample_rundemo(assetName)
     % --- more than one asset ------------------------------------------
     %
     % A run can span several assets, say a test chamber and the unit in it.
-    % createAsset always makes a new asset; getOrCreateAsset would reuse one
-    % of the same name.
+    % createAsset always makes a new asset, where getOrCreateAsset would reuse
+    % one of the same name.
     chamber = client.createAsset(asset.Name + " chamber");
     sharedRun = openRun.addAsset(chamber);
     fprintf('  on %d assets after addAsset\n', numel(sharedRun.AssetRids));

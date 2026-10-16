@@ -3,19 +3,21 @@
 {.lead}
 From a `.mltbx` file to running code.
 
+You need MATLAB R2021a or newer, on Windows x86-64, Apple silicon or Linux x86-64.
+
 ## 1. Install
 
 Download `NominalForMATLAB-<version>.mltbx` from the latest release on the
 [releases page](https://github.com/nominal-io/matlab-client-rs/releases), then install it:
 
 ```matlab
-matlab.addons.install("C:\path\to\NominalForMATLAB-<version>.mltbx")
+matlab.addons.install("<folder>\NominalForMATLAB-<version>.mltbx")
 ```
 
-Double-clicking the file does the same thing. An installed toolbox manages its own path, so
-there is no `addpath` to run. It survives restarts.
+Double-clicking the file does the same thing. The installed toolbox puts itself on the MATLAB
+path and stays installed across restarts.
 
-Check it took:
+To check the install:
 
 ```matlab
 matlab.addons.toolbox.installedToolboxes
@@ -27,36 +29,21 @@ matlab.addons.toolbox.installedToolboxes
        Guid: 'b7e4c2a1-5d3f-4e88-9a12-6f0c3d7b8e45'
 ```
 
-MATLAB R2021a or newer, on Windows x86-64, Apple silicon or Linux x86-64. Intel macOS is not
-supported.
-
 ## 2. Credentials
 
-The client reads the same profile the `nom` CLI and the Python client use:
-
-| | |
-|---|---|
-| Linux, macOS | `~/.config/nominal/config.yml` |
-| Windows | `%USERPROFILE%\.config\nominal\config.yml` |
-
-If you have none, set one up once in a terminal:
-
-```shell
-nom config profile add default -t <api-token>
-```
-
-`NOMINAL_TOKEN` is a fallback for machines with no profile, mostly CI. It warns when used.
-See [Authenticating](guides/authenticating.md) for the details.
+The toolbox reads its credentials from a profile, the same config file Nominal's other
+clients use. If you don't have a profile yet, follow
+{hub}`API keys setup <quickstart/quickstart/api-keys-setup/>` to create one.
 
 ## 3. Hello world
 
 ```matlab
-client = nominal.Client.connect();
+client = nominal.Client.fromProfile();
 disp(client.whoAmI())
 delete(client)
 ```
 
-If that prints your name, everything works.
+If that prints your name, the toolbox can reach Nominal.
 
 ## 4. Your own code
 
@@ -64,7 +51,7 @@ Connect, find an asset, add a dataset, push a matrix, read it back. The toolbox'
 Started guide in the Add-On Manager runs the same loop a section at a time.
 
 ```matlab
-client = nominal.Client.connect();
+client = nominal.Client.fromProfile();
 
 % --- find an asset, or create one ---------------------------------------
 asset = client.getOrCreateAsset("engine-3");
@@ -126,10 +113,8 @@ delete(asset);
 delete(client);
 ```
 
-Every object is a handle with a native resource behind it. `delete` releases it immediately;
-otherwise MATLAB does so when it collects the variable. `nominal.shutdown()` releases
-everything and stops the worker threads. Call it at the end of a long script if you like; it
-is not needed otherwise.
+`delete` frees each object straight away. MATLAB also frees them when the variables are
+cleared, so the `delete` calls are optional.
 
 ## Next
 

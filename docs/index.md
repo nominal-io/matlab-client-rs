@@ -1,7 +1,7 @@
 # Nominal for MATLAB
 
 {.lead}
-Get data into and out of [Nominal](https://nominal.io) from MATLAB. 
+Get data into and out of [Nominal](https://nominal.io) from MATLAB.
 
 ```{toctree}
 :hidden:
@@ -33,11 +33,11 @@ ref/index
 
 ```matlab
 c  = nominal.Client.fromProfile();
-a  = c.getOrCreateAsset("engine-3");
-ds = a.getOrCreateDataset("telemetry", "tlm");
+a  = c.getOrCreateAsset("<asset name>");
+ds = a.getOrCreateDataset("<dataset name>");
 
-ds.write(["rpm" "egt" "psi"], t, V);       % push a matrix
-tt = ds.fetch("rpm", t0, t1);              % get a timetable back
+ds.write(["<channel 1>" "<channel 2>"], t, V);   % one column of V per channel
+tt = ds.fetch("<channel 1>", t0, t1);            % a timetable
 ```
 
 ::::{grid} 2
@@ -72,7 +72,7 @@ Every class and method, from the same help text MATLAB shows.
 Runnable demos that ship inside the toolbox.
 :::
 :::{grid-item-card} All Nominal docs
-:link: https://dev.nominal.io/
+:link: https://nominal-io.github.io/pub-docs/
 
 Every language and product.
 :::

@@ -1,8 +1,8 @@
 # Cheat sheet
 
 {.lead}
-Every object and method on one page. Everything starts from a `nominal.Client`; objects
-hand you other objects, so you rarely construct anything directly.
+Every object and method on one page. Everything starts from a `nominal.Client`, and each
+object hands you the next, so you rarely construct anything directly.
 
 ## Client
 
@@ -14,9 +14,9 @@ hand you other objects, so you rarely construct anything directly.
 | Connect from a token | `nominal.Client.fromToken(token)` |
 | Either, whichever is available | `nominal.Client.connect()` |
 | Who am I (also a credential check) | `c.whoAmI()` |
-| Search assets by name | `c.assets("engine")` |
-| Search datasets by name | `c.datasets("telemetry")` |
-| Search runs | `c.runs("hot-fire", Labels=…, Properties=…, StartAfter=t0)` |
+| Search assets by name | `c.assets("<part of a name>")` |
+| Search datasets by name | `c.datasets("<part of a name>")` |
+| Search runs | `c.runs("<part of a name>", Labels=…, Properties=…, StartAfter=t0)` |
 | List *every* asset (slow, unpaginated) | `c.assets()` |
 | List *every* dataset (slow, unpaginated) | `c.datasets()` |
 | Get an asset by RID | `c.assetByRid(rid)` |
@@ -36,23 +36,23 @@ hand you other objects, so you rarely construct anything directly.
 
 ## Asset
 
-`a = c.getOrCreateAsset("engine-3")`
+`a = c.getOrCreateAsset("<asset name>")`
 
 | Action | MATLAB |
 |---|---|
 | Identity and metadata | `a.Rid`, `a.Name`, `a.Description`, `a.Url`, `a.Labels` |
-| Read one property | `a.property("phase")` |
+| Read one property | `a.property("<key>")` |
 | All properties, as a `containers.Map` | `a.Properties` |
-| Set or remove one, keeping the rest | `a = a.setProperty("serial", "SN-1")`, `a.removeProperty(k)` |
+| Set or remove one, keeping the rest | `a = a.setProperty("<key>", "<value>")`, `a.removeProperty("<key>")` |
 | Everything attached to it, with tag filters | `a.datasources()` |
 | …re-read from the server | `a.datasources(Refresh=true)` |
-| Read a channel as the asset sees it | `a.fetch("rpm", t0, t1)`, `a.fetch(…, RefName="can")` |
+| Read a channel as the asset sees it | `a.fetch("<channel>", t0, t1)`, `a.fetch(…, RefName="<ref name>")` |
 | A dataset already on it, by name | `a.getAttachedDataset(name)` |
-| Attach a dataset you already have | `a.addDataset(ds)`, `a.addDataset(ds, "can")` |
+| Attach a dataset you already have | `a.addDataset(ds)`, `a.addDataset(ds, "<ref name>")` |
 | …only the series with these tags | `a.addDataset(ds, Tags=struct(UUT="A"))` |
 | …a tag key that isn't a field name | `a.addDataset(ds, Tags=dictionary("test-stand", "3"))` |
-| Rename a reference name | `a.renameRefName("default", "tlm")` |
-| Detach a data source | `a.removeDataset("can")` |
+| Rename a reference name | `a.renameRefName("<old>", "<new>")` |
+| Detach a data source | `a.removeDataset("<ref name>")` |
 | Ensure it has a dataset of that name | `a.getOrCreateDataset(name)` |
 | …without adopting an existing one | `a.getOrCreateDataset(name, AttachExisting=false)` |
 | Start a run on it | `a.run(name)`, `a.run(name, startTime)` |
@@ -80,30 +80,30 @@ leave it out: a free one is chosen (`"default"` on an asset with none, otherwise
 own name). Supply one when an asset has two sources measuring the same thing, such as a CAN
 log and a test rig both reporting `engine temp`, and you want to tell them apart.
 
-An asset holds a dataset once per tag filter. Attaching it again with the same `Tags` moves it
-to the new `refName`; with different `Tags` it is added alongside.
+An asset holds a dataset once per tag filter. Attaching the same dataset again with the same
+`Tags` moves it to the new `refName`. Attaching it with different `Tags` adds it alongside.
 
 ## Dataset
 
-`ds = a.getOrCreateDataset("telemetry", "tlm")`
+`ds = a.getOrCreateDataset("<dataset name>")`
 
 | Action | MATLAB |
 |---|---|
 | Identity and metadata | `ds.Rid`, `ds.Name`, `ds.Description`, `ds.Labels` |
-| Read one property | `ds.property("script")` |
+| Read one property | `ds.property("<key>")` |
 | All properties, as a `containers.Map` | `ds.Properties` |
-| Set or remove one, keeping the rest | `ds = ds.setProperty(k, v)`, `ds.removeProperty(k)` |
+| Set or remove one, keeping the rest | `ds = ds.setProperty("<key>", "<value>")`, `ds.removeProperty("<key>")` |
 | What channels are in it | `ds.channels()` |
 | Which assets hold it | `ds.assets()` |
 | Open a live stream | `ds.stream()` |
 | Write a block already in memory | `ds.write(channels, t, V)` |
 | …tagging every point | `ds.write(channels, t, V, Tags=struct(UUT="A"))` |
-| Read one channel back | `ds.fetch("rpm", t0, t1)` |
-| Read it decimated, for plotting | `ds.fetch("rpm", t0, t1, Buckets=2000)` |
-| …one tag set, when it has several | `ds.fetch("rpm", t0, t1, Tags=struct(UUT="A"))` |
+| Read one channel back | `ds.fetch("<channel>", t0, t1)` |
+| Read it decimated, for plotting | `ds.fetch("<channel>", t0, t1, Buckets=2000)` |
+| …one tag set, when it has several | `ds.fetch("<channel>", t0, t1, Tags=struct(UUT="A"))` |
 | Export channels to a file | `ds.export("out.mat", channels, t0, t1)` |
 | Export to a download link instead | `ds.exportUrl(channels, t0, t1)` |
-| Read one channel's units | `ds.channelMetadata("rpm")` |
+| Read one channel's units | `ds.channelMetadata("<channel>")` |
 | Declare a channel's units | `ds.setChannelMetadata("rpm", "double", Unit="1/min")` |
 | Change metadata | `ds.update(Name=…, Labels=…, Properties=…)` |
 
@@ -118,12 +118,11 @@ to the new `refName`; with different `Tags` it is added alongside.
 | Assets it belongs to | `r.AssetRids` |
 | Put it on another asset too | `r = r.addAsset(dut)` |
 | Take it off one | `r = r.removeAsset(dut)` |
-| Read one property | `r.property("operator")` |
+| Read one property | `r.property("<key>")` |
 | All properties, as a `containers.Map` | `r.Properties` |
-| Set or remove one, keeping the rest | `r = r.setProperty("result", "pass")`, `r.removeProperty(k)` |
-| Attach a dataset (see [Known gaps](behavior.md#known-gaps)) | `r.addDataset(refName, ds)` |
+| Set or remove one, keeping the rest | `r = r.setProperty("<key>", "<value>")`, `r.removeProperty("<key>")` |
 | Close it | `r.finish()`, `r.finish(endTime)` |
-| Read a channel over the run's window | `r.fetch("rpm")`, `r.fetch("rpm", RefName="can")` |
+| Read a channel over the run's window | `r.fetch("<channel>")`, `r.fetch("<channel>", RefName="<ref name>")` |
 | Change metadata | `r.update(Name=…, Labels=…, Properties=…)` |
 
 ## Stream and Channel
@@ -145,7 +144,7 @@ to the new `refName`; with different `Tags` it is added alongside.
 | Action | MATLAB |
 |---|---|
 | Read it back | `e.Rid`, `e.Name`, `e.Type`, `e.Timestamp`, `e.Duration`, `e.AssetRids` |
-| Read one property | `e.property("status")` |
+| Read one property | `e.property("<key>")` |
 | All properties, as a `containers.Map` | `e.Properties` |
 
 ## IngestJob

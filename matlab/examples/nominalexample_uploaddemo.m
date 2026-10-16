@@ -23,7 +23,7 @@ function results = nominalexample_uploaddemo(assetName)
 %     write    - a matrix in the workspace, or loaded from a .mat. One call,
 %                no stream, returns when the data has landed.
 %
-%     ingest   - a CSV or Parquet file on disk. Nominal parses it; you get a
+%     ingest   - a CSV or Parquet file on disk. Nominal parses it, and you get a
 %                job to wait on.
 %
 %   Also shows declaring units before any data exists, and recording which
@@ -36,7 +36,7 @@ function results = nominalexample_uploaddemo(assetName)
         assetName (1,1) string = "nominal-matlab-demo-" + string(posixtime(datetime("now")))
     end
 
-    % Filled in as the demo goes; a failed step still leaves every field.
+    % Filled in as the demo goes. A failed step still leaves every field.
     results = struct( ...
         'AssetRid',           "", ...
         'AssetName',          "", ...
@@ -120,7 +120,7 @@ function results = nominalexample_uploaddemo(assetName)
     % that produced the data.
     fprintf('--- Provenance ---\n');
 
-    % update returns a new object; the original handle still reports the
+    % update returns a new object. The original handle still reports the
     % pre-update state.
     annotatedDataset = dataset.update( ...
         Properties=struct(script="nominalexample_uploaddemo.m", ...
@@ -141,7 +141,7 @@ function results = nominalexample_uploaddemo(assetName)
     %
     % The dataset is created under the asset first and passed as Dataset=,
     % which is the simpler path. NewDataset= instead creates an unattached
-    % dataset; attach it afterwards with
+    % dataset. Attach it afterwards with
     % asset.addDataset(client.datasetByRid(job.DatasetRid)).
     fprintf('--- Ingest a CSV ---\n');
     csvFilePath = fullfile(tempdir, "nominal-uploaddemo.csv");
@@ -167,8 +167,8 @@ function results = nominalexample_uploaddemo(assetName)
     fprintf('  landing in %s\n', ingestJob.DatasetRid);
     fprintf('  status now: %s\n', ingestJob.status());
 
-    % The upload finished when ingest returned; wait() waits for server-side
-    % processing. It raises on a failed ingest, so wrap it to report instead
+    % The upload finished when ingest returned. wait() waits for Nominal to
+    % finish processing the file. It raises on a failed ingest, so wrap it to report instead
     % of throwing.
     finalStatus = "failed";
     try
@@ -184,7 +184,7 @@ function results = nominalexample_uploaddemo(assetName)
                 ingestTarget.Name, height(ingestTarget.channels()));
 
         % Read back by tag. A channel with several tag sets needs Tags to
-        % pick one; with a single set it is optional.
+        % pick one. With a single set, Tags is optional.
         tagged = ingestTarget.fetch("csvrpm", startTime, endTime, ...
                                     Tags=struct(source="csv"));
         fprintf('  %d points carry source=csv\n', height(tagged));

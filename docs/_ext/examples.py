@@ -36,15 +36,15 @@ HELPERS = {
 INTRO = """# Examples
 
 {.lead}
-Runnable demos, one task each. They ship inside the toolbox but are **not** on the path, so
-their names cannot shadow anything in your session. Add them:
+Runnable demos, one task each. They ship inside the toolbox but aren't on the MATLAB path. Add
+them:
 
 ```matlab
 addpath(fullfile(fileparts(fileparts(which('nominal.Client'))), 'examples'))
 ```
 
-Every demo needs credentials (see [Authenticating](../guides/authenticating.md)) and leaves
-its results in the base workspace as a struct, so there is something to inspect afterwards:
+Every demo connects with your default profile (see [Authenticating](../guides/authenticating.md))
+and leaves its results in the base workspace as a struct:
 
 ```matlab
 nominalexample_uploaddemo
@@ -53,8 +53,8 @@ nominalexample_analysisdemo(nominalUpload.WrittenDatasetRid)
 plot(nominalAnalysis.Samples.Time, nominalAnalysis.Samples.(1))
 ```
 
-The demos create throwaway assets named `nominal-matlab-demo-<timestamp>`, so they are safe
-to run repeatedly. Pass an asset name to use an existing one: `nominalexample_assetdemo("engine-3")`.
+The demos create throwaway assets named `nominal-matlab-demo-<timestamp>`, so you can run them
+repeatedly. Pass an asset name to use an existing one: `nominalexample_assetdemo("<asset name>")`.
 
 """
 

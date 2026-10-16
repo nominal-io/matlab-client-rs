@@ -5,7 +5,7 @@ function nominalexample_alldemos()
 %   and runs all seven demos against it. The write demos run first, then
 %   streaming, then analysis last so it has something to read back.
 %
-%   Each demo also runs standalone; see their own help.
+%   Each demo also runs on its own, and has its own help.
 %
 %   See also NOMINALEXAMPLE_ASSETDEMO, NOMINALEXAMPLE_DATASETDEMO,
 %   NOMINALEXAMPLE_RUNDEMO, NOMINALEXAMPLE_EVENTDEMO,
@@ -40,7 +40,7 @@ function nominalexample_alldemos()
         client = nominalexample_connect();
         asset = client.getOrCreateAsset(assetName);
 
-        % An asset handle is a snapshot; Refresh=true picks up the datasets the
+        % An asset handle is a snapshot, so Refresh=true picks up the datasets the
         % demos above attached. datasources() also lists videos and
         % connections, and only a dataset RID can open a stream.
         dataSources = asset.datasources(Refresh=true);
@@ -85,7 +85,7 @@ function nominalexample_alldemos()
             runAll(demosNeedingADataset, failedDemoNames, publishedNames);
     end
 
-    % Skipped demos are reported separately; they do not count as passed.
+    % Skipped demos are reported separately and do not count as passed.
     if isempty(failedDemoNames) && isempty(skippedDemoNames)
         fprintf('All demos completed.\n');
     else
@@ -114,7 +114,7 @@ end
 function [failed, published] = runAll(demos, failed, published)
 %RUNALL  Run a table of demos, recording which failed and which published.
 %
-%   Each demo publishes its own results; only the variable name is noted
+%   Each demo publishes its own results. Only the variable name is noted
 %   here, and only when the demo completed.
 
     for demoIndex = 1:size(demos, 1)

@@ -2,7 +2,7 @@ classdef IngestJob < nominal.Resource
     % INGESTJOB  A file upload that Nominal is still working through.
     %
     %   Returned by nominal.Client.ingest. The upload has finished by the time
-    %   you hold one of these; the server-side ingest is still running.
+    %   you hold one of these, and the ingest itself is still running.
     %
     %       job = c.ingest("flight12.csv", TimestampColumn="time", ...
     %                      NewDataset="Flight 12");
@@ -27,7 +27,7 @@ classdef IngestJob < nominal.Resource
 
     methods
         function obj = IngestJob(client, handle, datasetRid)
-            % Constructed by nominal.Client.ingest; not called directly.
+            % Constructed by nominal.Client.ingest, not called directly.
             arguments
                 client (1,1) nominal.Client
                 handle (1,1) int32
@@ -57,13 +57,13 @@ classdef IngestJob < nominal.Resource
         function s = wait(obj)
             %WAIT  Block until the job finishes.
             %
-            %   RAISES nominal:nominalError when the ingest fails. Wrap it if a
+            %   **Raises nominal:apiError when the ingest fails.** Wrap it if a
             %   failure is something you want to report rather than throw:
             %
             %       try
             %           job.wait();
             %       catch e
-            %           % the ingest failed; e.message says why
+            %           % the ingest failed, and e.message says why
             %       end
             %
             %   Or poll status() in a loop. No timeout, so a stuck job blocks

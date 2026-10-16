@@ -1,49 +1,38 @@
 # Authenticating
 
 {.lead}
-Credentials come from a profile on disk, shared with the `nom` CLI and the Python client.
+Connect with a profile: your API key, base URL and workspace, stored in the config file that
+Nominal's other clients also read.
 
-The profile lives in `~/.config/nominal/config.yml` (`%USERPROFILE%\.config\nominal\config.yml`
-on Windows), the same file the
-[Python client](https://docs.nominal.io/core/sdk/python-client/authentication) uses. Set it up
-once, in a terminal:
-
-```shell
-nom config profile add default -t <api-token>
-
-# or, if `nom` is not on the path:
-python -m nominal.cli config profile add default
-```
-
-Then:
+If you don't have a profile yet, follow
+{hub}`API keys setup <quickstart/quickstart/api-keys-setup/>` to create one. If Nominal's
+Python client or command line tool already works on this machine, the profile is already there.
 
 ```matlab
-c = nominal.Client.fromProfile();          % Python: NominalClient.from_profile("default")
-c = nominal.Client.fromProfile("staging"); % any named profile
+c = nominal.Client.fromProfile();            % the profile called "default"
+c = nominal.Client.fromProfile("staging");   % any other profile
 ```
 
-A profile carries the base URL, the token, and optionally a workspace RID. If you already use
-the Python client or the CLI on this machine, MATLAB is already set up.
+## With an API key in code
 
-## A token directly
-
-Prefer the profile: a token in a script ends up in version control.
+A key written into a script ends up in version control, so use a profile where you can.
+Without a profile, pass all three values:
 
 ```matlab
-c = nominal.Client.fromToken("<api-token>");   % Python: NominalClient.from_token(...)
+c = nominal.Client.fromToken("<api-key>", BaseUrl="<base-url>", Workspace="<workspace-rid>");
 ```
 
-## Either, for CI
+## In CI
 
-For code that runs both on a workstation and in CI:
+`connect` reads the profile when there is one, and otherwise the API key in the
+`NOMINAL_TOKEN` environment variable:
 
 ```matlab
-c = nominal.Client.connect();              % profile, else NOMINAL_TOKEN
+c = nominal.Client.connect();
 ```
 
-The profile wins. `NOMINAL_TOKEN` carries no base URL or workspace, so the fallback means
-**Nominal production with no workspace scope**, whatever the profile said. It raises a
-`nominal:profileFallback` warning when that happens.
+`NOMINAL_TOKEN` holds only the key, so without a profile the client reaches Nominal's default
+instance with no workspace. It raises a `nominal:profileFallback` warning when it falls back.
 
 :::{dropdown} Migrating from the old config file
 If this machine still has `~/.nominal.yml` with an `environments:` block, `fromProfile`
@@ -54,10 +43,10 @@ nom config migrate
 ```
 :::
 
-## Checking it worked
+## Checking the connection
 
 ```matlab
 c.whoAmI()
 ```
 
-Calls the API, so a bad token fails here rather than at the first real call.
+`whoAmI` makes a request to Nominal, so a bad key fails here instead of at the first real call.

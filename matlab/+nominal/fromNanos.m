@@ -10,7 +10,7 @@ function dt = fromNanos(nanos)
 %       nanos: int64 nanoseconds since the Unix epoch.
 %
 %   Returns:
-%       datetime: Always UTC; set its TimeZone to view it locally.
+%       datetime: Always UTC. Set its TimeZone to view it locally.
 %
 %   See also NOMINAL.TONANOS, NOMINAL.NOW
 

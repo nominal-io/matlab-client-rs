@@ -4,7 +4,7 @@ classdef Event < nominal.Resource
     %   Events flag a moment or interval: a fault, a phase boundary, an
     %   anomaly. Created from a client:
     %
-    %       e = c.createEvent(["ri.scout...asset..."], "overspeed", ...
+    %       e = c.createEvent("<asset rid>", "overspeed", ...
     %                         Type="error", Duration=seconds(10));
     %
     %   Events attach to **assets**, not to runs or datasets. A run shows the
@@ -24,7 +24,7 @@ classdef Event < nominal.Resource
 
     methods
         function obj = Event(handle)
-            % Constructed by nominal.Client.createEvent; not called directly.
+            % Constructed by nominal.Client.createEvent, not called directly.
             arguments
                 handle (1,1) int32
             end

@@ -103,7 +103,7 @@ function results = nominalexample_eventdemo(assetName)
 end
 
 function describe(event)
-    % Timestamp is a datetime and Duration a duration; string() converts them
+    % Timestamp is a datetime and Duration a duration, and string() converts them
     % for %s.
     fprintf('Event "%s" [%s]\n', event.Name, event.Type);
     fprintf('  rid      %s\n', event.Rid);

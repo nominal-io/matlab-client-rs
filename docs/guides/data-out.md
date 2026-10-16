@@ -1,99 +1,92 @@
 # Getting data out
 
 {.lead}
-Search by name, fetch a channel as a timetable, export a window to a file, or run SQL.
+Find a dataset, read a channel into a timetable, export a time window to a file, or run SQL.
 
-## Finding a RID
+## Finding a dataset
 
-Search by name. Both return tables.
+`c.assets` and `c.datasets` search by name and return a table that includes each match's RID.
 
 ```matlab
-c.assets("engine")                         % name contains "engine"
-ds = c.datasetByRid(c.datasets("telemetry").Rid(1));
-ds.channels()                              % what is inside it
+c.assets("<part of a name>")
+ds = c.datasetByRid(c.datasets("<part of a name>").Rid(1));
+ds.channels()                              % the channels in the dataset
 ```
 
-Always pass a filter. With no argument, `c.assets()` and `c.datasets()` fetch every asset or
-dataset in the workspace in one call, and there is no page size to pass.
+Always pass a name. With no argument, `c.assets()` and `c.datasets()` return every asset or
+dataset in the workspace in one call.
 
 ## A channel in your workspace
 
-`fetch` returns a timetable, so it plots and resamples directly.
+`fetch` reads one channel into a timetable.
 
 ```matlab
 t1 = datetime("now", TimeZone="UTC");
 t0 = t1 - hours(2);
 
-tt = ds.fetch("rpm", t0, t1);
-plot(tt.Time, tt.("rpm"))
-
-hourly = retime(tt, "regular", "mean", TimeStep=minutes(1));
+tt = ds.fetch("<channel>", t0, t1);
+plot(tt.Time, tt.(1))
 ```
 
-For plotting a wide window, let the server decimate:
+To plot a wide window, have Nominal reduce it to roughly a given number of points:
 
 ```matlab
-tt = ds.fetch("rpm", t0, t1, Buckets=2000);
+tt = ds.fetch("<channel>", t0, t1, Buckets=2000);
 ```
 
-Decimated points are bucket **means**, so the extremes are gone. Use the undecimated fetch if
-you need them.
+Each of those points is the mean of its bucket, so short spikes are smoothed out. Fetch without
+`Buckets` when you need them.
 
-Several channels line up with `synchronize`:
+`synchronize` lines up channels on one time axis:
 
 ```matlab
-rpm = ds.fetch("rpm", t0, t1);
-egt = ds.fetch("egt", t0, t1);
-both = synchronize(rpm, egt);
+ch1  = ds.fetch("<channel 1>", t0, t1);
+ch2  = ds.fetch("<channel 2>", t0, t1);
+both = synchronize(ch1, ch2);
 ```
 
-Only numeric channels (double, int64, uint64) can be fetched or exported. A string channel in
-an export list fails the whole request.
+`fetch` and `export` read numeric channels. A string channel in an export list fails the whole
+export.
 
 ## Through an asset or a run
 
-`a.fetch` and `r.fetch` read one of their data sources, applying its tag filter and time
-offset, so you don't need to know either. `r.fetch` covers the run's own start to end.
+`a.fetch` and `r.fetch` read a channel from one of their data sources, with that source's tag
+filter and time offset applied. `r.fetch` reads from the run's start to its end.
 
 ```matlab
-tt = a.fetch("rpm", t0, t1);               % the source called "default"
-tt = r.fetch("rpm", RefName="can");
+tt = a.fetch("<channel>", t0, t1);         % from the data source called "default"
+tt = r.fetch("<channel>", RefName="<ref name>");
 ```
 
-## Everything under a run, in a `.mat` file
+## A run's data in a `.mat` file
 
-Export moves the whole window in one request. A run's data sources are its asset's, so get
-the dataset from the asset.
+`export` writes a time window to a file in one request. A run shows its asset's data sources,
+so get the dataset from the asset.
 
 ```matlab
-r  = c.runByRid(runRid);
-a  = c.assetByRid(assetRid);
+r  = c.runByRid("<run rid>");
+a  = c.assetByRid(r.AssetRids(1));
 ds = c.datasetByRid(a.datasources().Rid(1));
 
-ds.export("burn12.mat", ds.channels().Name', r.StartTime, r.EndTime);
+ch      = ds.channels();
+numeric = ch.Name(ismember(ch.DataType, ["double" "int" "uint"]))';
+ds.export("run.mat", numeric, r.StartTime, r.EndTime);
 ```
 
-CSV and Arrow are the other formats: `Format="csv"`. `ds.exportUrl(...)` returns a time-limited
-download URL instead of a file, for handing to a browser or something that is not MATLAB.
+Pass `Format="csv"` or `Format="arrow"` for the other formats. `ds.exportUrl` returns a
+time-limited download link instead of a file.
 
 ## SQL
 
-Results come back as a table.
+`c.query` runs a query and returns a table.
 
 ```matlab
 t = c.query("SELECT ts, channel, value FROM points_double " + ...
-            "WHERE dataset_rid = '" + ds.Rid + "' ORDER BY ts LIMIT 1000");
-t.ts = nominal.fromNanos(t.ts);          % timestamps arrive as int64 ns
+            "WHERE dataset_rid = '" + ds.Rid + "' ORDER BY ts LIMIT 100");
+t.ts = nominal.fromNanos(t.ts);            % timestamps come back as int64 nanoseconds
 ```
 
-The SQL tables are the warehouse's own, so the column names differ from the MATLAB classes.
+Queries on telemetry tables must filter on `dataset_rid`. The
+{hub}`SQL reference <sql/reference/schema/>` lists the tables and their columns.
 
-**Telemetry tables** (`points_double`, `points_int`, `points_string`, `points_struct`, `logs`,
-`channels`) *must* filter on `dataset_rid` or the query is rejected. `points_double` has `ts`,
-`channel`, `value` and `dataset_rid`.
-
-**Metadata tables** (`assets`, `runs`, `run_assets`, `datasets`, `events`) have no such
-requirement, so `datasets` is another way to find a RID. They are capped at 10,000 rows.
-
-Results over 1 GiB need `c.queryExportUrl(sql)`, which returns a CSV download link with no
-size cap.
+Results over 1 GiB need `c.queryExportUrl(sql)`, which returns a download link to a CSV file.

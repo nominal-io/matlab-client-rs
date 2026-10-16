@@ -1,43 +1,37 @@
 # Getting data in
 
 {.lead}
-A matrix in memory, a file on disk, or a live stream. Plus units, provenance, runs and events.
+Write a matrix from memory, ingest a file from disk, or stream while a test runs. Then add
+units, provenance, runs and events.
 
 ## A `.mat` file
 
-Load it and push the matrix. No intermediate file, no ingest job.
+Load the file and write its matrix to a dataset.
 
 ```matlab
 load("flight12.mat");                      % gives t (datetime) and V (N-by-3)
 c  = nominal.Client.fromProfile();
 a  = c.getOrCreateAsset("airframe-7");
-ds = a.getOrCreateDataset("Flight 12", "flight12");
+ds = a.getOrCreateDataset("Flight 12");
 ds.write(["rpm" "egt" "psi"], t, V);
 ```
 
 ## A CSV or Parquet file
 
-Hand Nominal the path and let it parse.
+Nominal parses the file, so pass its path and the name of its time column.
 
 ```matlab
-a  = c.getOrCreateAsset("airframe-7");
-ds = a.getOrCreateDataset("Flight 12", "flight12");
-
+ds  = a.getOrCreateDataset("Flight 12");
 job = c.ingest("flight12.csv", TimestampColumn="time", Dataset=ds);
 job.wait();                                % raises if the ingest fails
 ```
 
-Create the dataset under the asset first and pass `Dataset=`. `NewDataset=` also works but
-creates a dataset attached to no asset; attach it afterwards with
-`a.addDataset(c.datasetByRid(job.DatasetRid))`. `job.wait()` **raises** when the ingest fails,
-so wrap it in `try` if you want to report the failure instead.
-
-Timestamps default to ISO 8601. For a numeric column:
-`c.ingest(path, TimestampColumn="t", Kind="epoch", Unit="milliseconds", …)`.
+Timestamps default to ISO 8601. For a numeric time column, say how to read it:
+`c.ingest(path, TimestampColumn="t", Kind="epoch", Unit="milliseconds", Dataset=ds)`.
 
 ## A live stream
 
-Open a stream once, push blocks as they fill.
+Open a stream once and push blocks as they fill.
 
 ```matlab
 s     = ds.stream();
@@ -46,14 +40,14 @@ while acquiring
     [t, block] = readFromDAQ();            % t is N-by-1, block is N-by-3
     s.push(chans, t, block);
 end
-delete(s);                                 % flushes; blocks until it lands
+delete(s);                                 % flushes and waits until the data lands
 ```
 
-See [Streaming](streaming.md) for the matrix-push pattern and backpressure.
+[Streaming](streaming.md) covers timestamps, tags and closing the stream.
 
-## Which script produced this data
+## Which script produced the data
 
-Properties and labels are free text, so record the provenance on the dataset.
+Record provenance as properties and labels on the dataset.
 
 ```matlab
 ds.update(Properties=struct(script="reduce_flight.m", ...
@@ -65,34 +59,31 @@ ds.update(Properties=struct(script="reduce_flight.m", ...
 
 ## Units on channels
 
-`setChannelMetadata` is an upsert and works before any data exists, so declare units ahead of
-a stream and the first plot comes out labelled.
+Declare units before writing, so the first plot comes out labelled. `setChannelMetadata` works
+on channels that have no data yet.
 
 ```matlab
 ds.setChannelMetadata("rpm", "double", Unit="1/min");
 ds.setChannelMetadata("egt", "double", Unit="Cel", Description="Exhaust gas temp");
 ```
 
-Units are UCUM symbols, not free text: `Cel` not `C` (which is coulomb), `1/min` not `rpm`,
-`[psi]` in brackets. A symbol UCUM cannot parse is accepted but stored display-only, with no
-conversions.
+Units are UCUM symbols: `Cel` not `C`, `1/min` not `rpm`, and `[psi]` in brackets. Nominal keeps
+a symbol that isn't UCUM for display, but can't convert it.
 
 ## Bracketing a test as a run
 
-A run is a time window over an asset.
+A run marks the time window of a test on an asset.
 
 ```matlab
-r = a.run("burn-12", datetime("now", TimeZone="UTC"));
-% ... test happens ...
-r = r.finish();
+r = a.run("burn-12");                      % starts now
+% ... the test runs ...
+r = r.finish();                            % ends now
 ```
 
-Nothing attaches the data. A run's data sources **are** its asset's, live, so a dataset added
-to the asset after the run was created is already on the run. `r.addDataset(...)` exists but
-cannot succeed for a run made this way; see [Known gaps](behavior.md#known-gaps).
+The run shows every data source on its asset, including datasets added later, so there is
+nothing to attach.
 
-A run can cover more than one asset, such as a test chamber and the unit in it. `removeAsset`
-refuses to take off the last one.
+A run can cover more than one asset, such as a test chamber and the unit in it:
 
 ```matlab
 r = chamber.run("test-42");
@@ -102,8 +93,7 @@ r = r.addAsset(dut);
 ## A run with no asset
 
 Simulation output has no physical system behind it. Keep one dataset per model, tag each
-execution's points, and make a run per execution from the dataset. Nominal keeps the run on
-a hidden asset, so the asset list stays clean.
+execution's points, and create a run per execution from the dataset.
 
 ```matlab
 tags = dictionary(["model" "execution-id"], ["A" "7"]);
@@ -114,7 +104,8 @@ r = c.createRun("Model A, execution 7", ds, Tags=tags, ...
 
 ## One dataset covering several units
 
-Create it on its own, tag the points by unit, and give each unit's asset its own slice.
+Create the dataset on its own, tag the points by unit, and give each unit's asset its own
+slice.
 
 ```matlab
 ds = c.createDataset("bench telemetry");

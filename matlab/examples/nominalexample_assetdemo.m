@@ -61,7 +61,7 @@ function results = nominalexample_assetdemo(assetName)
     fprintf('  properties: %s\n', strjoin(keys(notedAsset.Properties), ", "));
     delete(notedAsset);
 
-    % update returns a new object; the original handle still shows the old
+    % update returns a new object. The original handle still shows the old
     % state.
     fprintf('  original handle still shows: "%s"\n', asset.Description);
 
@@ -69,7 +69,7 @@ function results = nominalexample_assetdemo(assetName)
     %
     % createDataset makes a dataset attached to nothing. Each addDataset then
     % shows only the series carrying its tags. A struct holds keys that are
-    % valid field names; a dictionary holds any key. write stamps the same
+    % valid field names, and a dictionary holds any key. write stamps the same
     % tags on points.
     dataset = client.createDataset("assetdemo shared");
     updatedAsset.addDataset(dataset, "unit-a", Tags=struct(UUT="A"));

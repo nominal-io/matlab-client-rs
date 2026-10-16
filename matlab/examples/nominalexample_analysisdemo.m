@@ -26,7 +26,7 @@ function results = nominalexample_analysisdemo(datasetRid)
 %   The other demos put data in. This one takes it back out:
 %
 %     Discovery   - a dataset and its channels, as tables.
-%     Fetch       - one channel into a timetable; decimated for wide windows.
+%     Fetch       - one channel into a timetable, decimated for wide windows.
 %     Export      - the whole window to a .mat file in one request.
 %     SQL         - a query against the warehouse, returned as a table.
 %
@@ -37,7 +37,7 @@ function results = nominalexample_analysisdemo(datasetRid)
         datasetRid (1,1) string
     end
 
-    % Every field starts empty; a failed or skipped step leaves it that way.
+    % Every field starts empty, and a failed or skipped step leaves it that way.
     results = struct( ...
         'Dataset',    "", ...
         'Channels',   table(), ...
@@ -70,10 +70,9 @@ function results = nominalexample_analysisdemo(datasetRid)
     end
     disp(head(results.Channels, 10));
 
-    % Only numeric channels (double, int64, uint64) can be fetched or exported.
-    % Anything else is rejected with Compute:ChannelHasWrongType.
+    % fetch and export read numeric channels only.
     numericChannels = results.Channels( ...
-        ismember(results.Channels.DataType, ["double" "int64" "uint64"]), :);
+        ismember(results.Channels.DataType, ["double" "int" "uint"]), :);
 
     if isempty(numericChannels)
         fprintf('\nNo numeric channels — nothing here can be fetched.\n');
@@ -89,7 +88,7 @@ function results = nominalexample_analysisdemo(datasetRid)
     % 2 ----------------------------------------------------------- fetch
     %
     % A day-wide window to catch whatever the write demos left. The window is
-    % inclusive at both ends; a second of slack past now catches a sample
+    % inclusive at both ends, and a second of slack past now catches a sample
     % written moments ago.
     results.StopTime  = datetime("now", TimeZone="UTC") + seconds(1);
     results.StartTime = results.StopTime - days(1);
@@ -116,7 +115,7 @@ function results = nominalexample_analysisdemo(datasetRid)
         fprintf('   points take a moment to land)\n');
     end
 
-    % Window for anything bucketed; narrowed below once the samples show where
+    % Window for anything bucketed, narrowed below once the samples show where
     % the data is. Also used by the synchronize step.
     bucketStart = results.StartTime;
     bucketStop = results.StopTime;
@@ -224,7 +223,7 @@ function results = nominalexample_analysisdemo(datasetRid)
             "WHERE dataset_rid = '" + datasetRid + "' " + timeFilter + ...
             "ORDER BY ts LIMIT 100");
 
-        % ts arrives as int64 nanoseconds; convert in place with nominal.fromNanos.
+        % ts arrives as int64 nanoseconds. Convert it in place with nominal.fromNanos.
         if height(results.Points) > 0
             results.Points.ts = nominal.fromNanos(results.Points.ts);
         end
@@ -235,7 +234,7 @@ function results = nominalexample_analysisdemo(datasetRid)
     end
 
     % For a result too large for memory, ask for a CSV download link instead.
-    % Telemetry tables only; some deployments have no export bucket.
+    % Telemetry tables only. Some deployments have no export bucket.
     try
         csvDownloadUrl = client.queryExportUrl( ...
             "SELECT ts, channel, value FROM points_double " + ...

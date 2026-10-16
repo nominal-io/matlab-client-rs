@@ -3,8 +3,8 @@ classdef Channel < nominal.Resource
     %
     %   A channel is a named series within a dataset, roughly a column. This
     %   object is where points for it are written: a stream, a name, and the
-    %   tags to stamp on each point. Creating one makes no API call; the
-    %   channel appears in Nominal when the first point arrives.
+    %   tags to stamp on each point. Creating one sends nothing to Nominal.
+    %   The channel appears in Nominal when the first point arrives.
     %
     %       ch = s.channel("rpm");
     %       ch.tag("bank", "1");
@@ -25,7 +25,7 @@ classdef Channel < nominal.Resource
 
     methods
         function obj = Channel(handle)
-            % Constructed by nominal.Stream.channel; not called directly.
+            % Constructed by nominal.Stream.channel, not called directly.
             arguments
                 handle (1,1) int32
             end

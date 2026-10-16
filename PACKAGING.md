@@ -3,11 +3,12 @@
 How to get one `.mltbx` that installs on Windows, macOS and Linux.
 
 MEX binaries cannot be cross-compiled, so each gateway is built on its own
-machine. One `.mltbx` can then carry all of them; MATLAB picks the right one by
-`mexext` at call time.
+machine. One `.mltbx` can then carry all of them, and MATLAB picks the right one
+by `mexext` at call time.
 
-For installing the finished file, see the [Quickstart](https://dev.nominal.io/matlab/client/quickstart/). For what
-the build is doing, see [BUILDING.md](BUILDING.md).
+For installing the finished file, see the
+[Quickstart](https://nominal-io.github.io/pub-docs/matlab/client/quickstart/). For what the
+build is doing, see [BUILDING.md](BUILDING.md).
 
 ## Before you start
 
@@ -39,7 +40,7 @@ All three land in `matlab/+nominal/private/`.
 
 Don't run bare `just` off Windows. The default recipe is `mex-win64`.
 
-Intel macOS is not supported; `build.m` refuses to run on one.
+Intel macOS is not supported, and `build.m` refuses to run on one.
 
 Sanity-check each build before moving on, no network needed:
 
@@ -71,9 +72,9 @@ just package-only
 Writes `dist/NominalForMATLAB-<version>.mltbx` and prints what it included:
 
 ```
-Packaging Nominal for MATLAB 0.1.0
+Packaging Nominal for MATLAB <version>
   platforms: Win64, Glnxa64, Mac
-Wrote .../dist/NominalForMATLAB-0.1.0.mltbx (…)
+Wrote .../dist/NominalForMATLAB-<version>.mltbx (…)
 ```
 
 Expect it to be large. Each gateway is around 35 MB with the Rust library
@@ -96,8 +97,8 @@ there.
 Install on each platform and check the gateway loads:
 
 ```matlab
-matlab.addons.install("NominalForMATLAB-0.1.0.mltbx")
-nominal.now()          % reaches native code; fails loudly if the MEX is wrong
+matlab.addons.install("NominalForMATLAB-<version>.mltbx")
+nominal.now()          % reaches native code, and fails loudly if the MEX is wrong
 ```
 
 `nominal.now()` is the cheapest call that crosses into the library, so it
@@ -106,7 +107,7 @@ tells "installed" from "works" without credentials or a network.
 ## Platform status
 
 All three gateways have been built and linked on real hardware, and all three
-have run the full demo suite against the live API.
+have run the full demo suite against a live Nominal deployment.
 
 If a MEX link fails with unresolved symbols, the hand-maintained library list
 in `platformSettings()` in `matlab/build.m` is out of date for that host. Get

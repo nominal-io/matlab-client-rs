@@ -11,7 +11,7 @@ classdef Client < nominal.Resource
     %   script.
     %
     %   nominal.Client(token, Workspace=rid, BaseUrl=url) is the underlying
-    %   constructor. Both options are optional; an unset base URL means
+    %   constructor. Both options are optional. An unset base URL means
     %   Nominal production. Surrounding whitespace is trimmed from all three.
     %
     %   Example:
@@ -55,7 +55,7 @@ classdef Client < nominal.Resource
         function name = whoAmI(obj)
             %WHOAMI  Display name of the authenticated user.
             %
-            %   Calls the API, so it doubles as a credential check.
+            %   Makes a request to Nominal, so it doubles as a credential check.
             %
             %   Returns:
             %       string: The user's display name.
@@ -128,8 +128,7 @@ classdef Client < nominal.Resource
         function t = runs(obj, filter, options)
             %RUNS  Runs matching every filter given, as a table.
             %
-            %   t = c.runs("hot-fire", Labels=["hot-fire" "stand-3"], ...
-            %              Properties=struct(operator="jd"), StartAfter=t0);
+            %   t = c.runs("<part of a name>", Labels="<label>", StartAfter=t0);
             %   r = c.runByRid(t.Rid(1));
             %
             %   Every label must be on the run, and every property must match.
@@ -139,13 +138,13 @@ classdef Client < nominal.Resource
             %       filter: Keep only runs whose name contains this.
             %
             %   Options:
-            %       Labels: String array; the run must carry all of them.
-            %       Properties: A struct, dictionary or containers.Map; every
-            %           key must have that value.
-            %       StartAfter: Zoned datetime or int64 nanoseconds; the run
-            %           starts at or after it.
-            %       EndBefore: Zoned datetime or int64 nanoseconds; the run
-            %           ends at or before it.
+            %       Labels: String array. Keeps runs carrying all of them.
+            %       Properties: A struct, dictionary or containers.Map. Keeps
+            %           runs where every key has that value.
+            %       StartAfter: Zoned datetime or int64 nanoseconds. Keeps runs
+            %           starting at or after it.
+            %       EndBefore: Zoned datetime or int64 nanoseconds. Keeps runs
+            %           ending at or before it.
             %
             %   Returns:
             %       table: Variables Name, Rid, Number, StartTime and EndTime
@@ -189,7 +188,7 @@ classdef Client < nominal.Resource
             %GETORCREATEASSET  Fetch an asset by name, creating it if absent.
             %
             %   A typo creates a new empty asset rather than erroring, so
-            %   check the name. Names are not unique in Nominal; if several
+            %   check the name. Names are not unique in Nominal, and if several
             %   match, the first is returned. Use assetByRid when you know the
             %   RID, and assets(name) to look without creating.
             %
@@ -401,8 +400,8 @@ classdef Client < nominal.Resource
             %   job = c.ingest("run.parquet", TimestampColumn="t", ...
             %                  Dataset=ds, Kind="epoch", Unit="milliseconds");
             %
-            %   Blocks while the file uploads. The server-side ingest continues
-            %   afterwards; call job.wait() if you need it finished.
+            %   Blocks while the file uploads. The ingest itself continues
+            %   afterwards. Call job.wait() if you need it finished.
             %
             %   Args:
             %       path: The file. .parquet is read as Parquet, anything else
@@ -412,8 +411,8 @@ classdef Client < nominal.Resource
             %       TimestampColumn: Name of the column holding time. Required.
             %       Dataset: An existing dataset to add to. Give either this or
             %           NewDataset.
-            %       NewDataset: Name of a dataset to create. It is attached to
-            %           no asset; attach it afterwards with asset.addDataset.
+            %       NewDataset: Name of a dataset to create, attached to no
+            %           asset. Attach it afterwards with asset.addDataset.
             %       Kind: How to read the timestamp column: "iso8601" (the
             %           default), "epoch" or "relative".
             %       Unit: For "epoch" and "relative" timestamps:
@@ -498,7 +497,7 @@ classdef Client < nominal.Resource
             %
             %   Returns:
             %       table: One variable per column. Timestamp columns come back
-            %       as int64 nanoseconds; pass them through nominal.fromNanos
+            %       as int64 nanoseconds. Pass them through nominal.fromNanos
             %       for a datetime.
             %
             %   See also NOMINAL.CLIENT/QUERYEXPORTURL, NOMINAL.FROMNANOS
@@ -543,13 +542,12 @@ classdef Client < nominal.Resource
             %
             %   For results too large for query, which is capped at 1 GiB.
             %
-            %   CSV only, and only for queries on telemetry tables; one
-            %   touching assets, runs, or datasets cannot be exported this way.
-            %   Fails on deployments with no export bucket configured.
+            %   Exports queries on telemetry tables, as CSV. A query that
+            %   reads assets, runs or datasets can't be exported this way.
             %
             %   Options:
             %       Workspace: Workspace RID to query. Defaults to the client's
-            %           own; an unscoped client must give one.
+            %           own. A client with no workspace must give one.
             %
             %   Returns:
             %       string: A time-limited download URL with no size cap.
@@ -632,15 +630,12 @@ classdef Client < nominal.Resource
             %   c = nominal.Client.fromProfile()          % the "default" profile
             %   c = nominal.Client.fromProfile("staging") % a named one
             %
-            %   Reads ~/.config/nominal/config.yml, the same file the `nom`
-            %   CLI and the Python client use. Set one up once with:
+            %   Reads ~/.config/nominal/config.yml, the file Nominal's other
+            %   clients also read. A profile holds the API key, the base URL,
+            %   and optionally the workspace RID. To create one, follow API
+            %   keys setup in the Nominal docs:
             %
-            %       nom config profile add default -t <api-token>
-            %
-            %   A profile carries the base URL, the token, and optionally a
-            %   workspace RID. Python equivalent:
-            %
-            %       client = NominalClient.from_profile("default")
+            %       https://nominal-io.github.io/pub-docs/quickstart/quickstart/api-keys-setup/
             %
             %   Args:
             %       name: Profile name. Defaults to "default".
@@ -674,8 +669,8 @@ classdef Client < nominal.Resource
             %   c = nominal.Client.fromToken("<api-key>")
             %   c = nominal.Client.fromToken(tok, BaseUrl="https://api.nominal.test")
             %
-            %   Python equivalent: NominalClient.from_token. Prefer fromProfile
-            %   where you can; a token in a script ends up in version control.
+            %   Prefer fromProfile where you can. A key written into a script
+            %   ends up in version control.
             %
             %   Args:
             %       token: API token. Surrounding whitespace is trimmed.
