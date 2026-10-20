@@ -8,14 +8,14 @@ You need MATLAB R2021a or newer, on Windows x86-64, Apple silicon or Linux x86-6
 ## 1. Install
 
 Download `NominalForMATLAB-<version>.mltbx` from the latest release on the
-[releases page](https://github.com/nominal-io/matlab-client-rs/releases), then install it:
+[releases page](https://github.com/nominal-io/matlab-client-rs/releases), then double-click it to
+install. To install from a script instead:
 
 ```matlab
 matlab.addons.install("<folder>\NominalForMATLAB-<version>.mltbx")
 ```
 
-Double-clicking the file does the same thing. The installed toolbox puts itself on the MATLAB
-path and stays installed across restarts.
+The installed toolbox puts itself on the MATLAB path and stays installed across restarts.
 
 To check the install:
 
