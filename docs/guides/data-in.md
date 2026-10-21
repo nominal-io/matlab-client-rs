@@ -1,15 +1,14 @@
 # Getting data in
 
 {.lead}
-Write a matrix from memory, ingest a file from disk, or stream while a test runs. Then add
-units, provenance, runs and events.
+Write a matrix from memory, ingest a file from disk, or stream while a test runs.
 
 ## A `.mat` file
 
 Load the file and write its matrix to a dataset.
 
 ```matlab
-load("flight12.mat");                      % gives t (datetime) and V (N-by-3)
+load("<file>.mat");                        % a datetime vector t and an N-by-3 matrix V
 c  = nominal.Client.fromProfile();
 a  = c.getOrCreateAsset("airframe-7");
 ds = a.getOrCreateDataset("Flight 12");
@@ -22,12 +21,15 @@ Nominal parses the file, so pass its path and the name of its time column.
 
 ```matlab
 ds  = a.getOrCreateDataset("Flight 12");
-job = c.ingest("flight12.csv", TimestampColumn="time", Dataset=ds);
+job = c.ingest("<file>.csv", TimestampColumn="<time column>", Dataset=ds);
 job.wait();                                % raises if the ingest fails
 ```
 
 Timestamps default to ISO 8601. For a numeric time column, say how to read it:
-`c.ingest(path, TimestampColumn="t", Kind="epoch", Unit="milliseconds", Dataset=ds)`.
+
+```matlab
+job = c.ingest("<file>.csv", TimestampColumn="<time column>", Kind="epoch", Unit="milliseconds", Dataset=ds);
+```
 
 ## A live stream
 
@@ -72,16 +74,14 @@ a symbol that isn't UCUM for display, but can't convert it.
 
 ## Bracketing a test as a run
 
-A run marks the time window of a test on an asset.
+A run marks the time window of a test on an asset. It shows every data source on the asset,
+including datasets added later, so there is nothing to attach.
 
 ```matlab
 r = a.run("burn-12");                      % starts now
 % ... the test runs ...
 r = r.finish();                            % ends now
 ```
-
-The run shows every data source on its asset, including datasets added later, so there is
-nothing to attach.
 
 A run can cover more than one asset, such as a test chamber and the unit in it:
 

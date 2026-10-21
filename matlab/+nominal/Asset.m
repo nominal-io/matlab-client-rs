@@ -123,7 +123,7 @@ classdef Asset < nominal.Resource
             %DATASOURCES  Everything attached to this asset, as a table.
             %
             %   s = a.datasources();                % read once, then reused
-            %   s = a.datasources(Refresh=true);    % ask the server again
+            %   s = a.datasources(Refresh=true);    % ask Nominal again
             %   tlm = s(s.Type == "dataset", :);    % datasets only
             %   s.Tags{1}                           % one source's tag filter
             %
@@ -133,7 +133,7 @@ classdef Asset < nominal.Resource
             %   Refresh=true.
             %
             %   Options:
-            %       Refresh: Ask the server again. Costs one request.
+            %       Refresh: Ask Nominal again. Costs one request.
             %
             %   Returns:
             %       table: Variables RefName, Rid, Type, Tags and Offset,
@@ -310,7 +310,7 @@ classdef Asset < nominal.Resource
             %
             %   Options:
             %       RefName: Which data source. Defaults to "default".
-            %       Buckets: Decimate server-side to roughly this many points.
+            %       Buckets: Have Nominal decimate to roughly this many points.
             %       Tags: Narrow further, if the source still holds several
             %           tag sets.
             %

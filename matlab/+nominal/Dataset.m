@@ -244,7 +244,7 @@ classdef Dataset < nominal.Resource
             %       endTime: Zoned datetime or int64 nanoseconds.
             %
             %   Options:
-            %       Buckets: Decimate server-side to roughly this many points
+            %       Buckets: Have Nominal decimate to roughly this many points
             %           (bucket means), capped at 10,000. Use it for plotting.
             %       Tags: A channel written with tags holds one series per tag
             %           set. If it has more than one, pick with Tags, as given
@@ -377,7 +377,7 @@ classdef Dataset < nominal.Resource
             %   ds.setChannelMetadata("rpm", "double", Unit="")     % clear
             %
             %   This is an upsert and works before any data exists, so you can
-            %   declare units ahead of a stream or upload.
+            %   declare units ahead of a stream or write.
             %
             %   Args:
             %       name: Channel name.
@@ -393,7 +393,7 @@ classdef Dataset < nominal.Resource
             %       Description: Free text.
             %
             %   Returns:
-            %       nominal.ChannelMetadata: What you sent, not what the server
+            %       nominal.ChannelMetadata: What you sent, not what Nominal
             %       holds. Re-fetch with channelMetadata to check.
             arguments
                 obj (1,1) nominal.Dataset

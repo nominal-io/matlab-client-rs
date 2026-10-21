@@ -4,7 +4,7 @@ classdef Client < nominal.Resource
     %   Two ways to authenticate, matching the Python client:
     %
     %       c = nominal.Client.fromProfile();          % credentials on disk
-    %       c = nominal.Client.fromToken("<api-key>"); % token in hand
+    %       c = nominal.Client.fromToken("<api-key>"); % API key in hand
     %
     %   Prefer fromProfile. It reads the same ~/.config/nominal/config.yml
     %   that the `nom` CLI and the Python client use, and no key ends up in a
@@ -27,7 +27,7 @@ classdef Client < nominal.Resource
     properties (Dependent, SetAccess = private)
         % Workspace this client is scoped to, or "" if unscoped.
         WorkspaceRid string
-        % Base API URL being targeted.
+        % Base URL this client connects to.
         BaseUrl string
     end
 
@@ -70,8 +70,7 @@ classdef Client < nominal.Resource
             %   a = c.assetByRid(c.assets("engine").Rid(1));
             %
             %   With no argument it fetches EVERY asset in the workspace in
-            %   one call, which on a real deployment is tens of thousands of
-            %   rows. There is no page size to pass, so filter.
+            %   one call. There is no page size to pass, so filter.
             %
             %   Args:
             %       filter: Keep only assets whose name contains this
@@ -102,8 +101,7 @@ classdef Client < nominal.Resource
             %   ds.channels()                    % what is inside it
             %
             %   With no argument it fetches EVERY dataset in the workspace in
-            %   one call. Slow on a real deployment, and there is no page size
-            %   to pass, so filter.
+            %   one call. There is no page size to pass, so filter.
             %
             %   Args:
             %       filter: Keep only datasets whose name contains this.
@@ -128,7 +126,7 @@ classdef Client < nominal.Resource
         function t = runs(obj, filter, options)
             %RUNS  Runs matching every filter given, as a table.
             %
-            %   t = c.runs("<part of a name>", Labels="<label>", StartAfter=t0);
+            %   t = c.runs("<search text>", Labels="<label>", StartAfter=t0);
             %   r = c.runByRid(t.Rid(1));
             %
             %   Every label must be on the run, and every property must match.
@@ -345,9 +343,8 @@ classdef Client < nominal.Resource
             %
             %   For data with no physical system behind it, such as one
             %   dataset per simulation model and one run per execution. The
-            %   run sees only the series carrying every one of Tags. Nominal
-            %   keeps it on a hidden asset, so nothing is added to the asset
-            %   list.
+            %   run sees only the series carrying every one of Tags. It adds
+            %   nothing to the asset list.
             %
             %   Use asset.run for a run on an asset you have.
             %
@@ -482,8 +479,8 @@ classdef Client < nominal.Resource
             %   t = c.query("SELECT ts, channel, value FROM points_double " + ...
             %               "WHERE dataset_rid = '" + ds.Rid + "' LIMIT 100")
             %
-            %   The tables are the warehouse's own, so the columns differ from
-            %   these classes. Telemetry tables (points_double, points_int,
+            %   The SQL tables have their own columns, which differ from these
+            %   classes' properties. Telemetry tables (points_double, points_int,
             %   points_string, logs, channels) must filter on dataset_rid.
             %   Metadata tables (assets, runs, datasets, events) need not, and
             %   are capped at 10,000 rows.
@@ -609,9 +606,9 @@ classdef Client < nominal.Resource
                 error('nominal:noCredentials', ...
                       ['no credentials found.\n\n%s\n\n' ...
                        'Alternatively set NOMINAL_TOKEN in the environment. ' ...
-                       'Note that MATLAB reads the environment it was ' ...
-                       'launched with — on macOS, starting MATLAB from the ' ...
-                       'Dock does not pick up shell exports.'], ...
+                       'MATLAB reads the environment it was launched with, ' ...
+                       'so on macOS, starting MATLAB from the Dock does not ' ...
+                       'pick up shell exports.'], ...
                       profileError.message);
             end
 
@@ -664,7 +661,7 @@ classdef Client < nominal.Resource
         end
 
         function c = fromToken(token, options)
-            %FROMTOKEN  Connect using a token you already hold.
+            %FROMTOKEN  Connect with an API key you already hold.
             %
             %   c = nominal.Client.fromToken("<api-key>")
             %   c = nominal.Client.fromToken(tok, BaseUrl="https://api.nominal.test")
@@ -673,12 +670,13 @@ classdef Client < nominal.Resource
             %   ends up in version control.
             %
             %   Args:
-            %       token: API token. Surrounding whitespace is trimmed.
+            %       token: API key. Surrounding whitespace is trimmed.
             %
             %   Options:
             %       Workspace: Workspace RID to scope the client to. Unset
             %           means unscoped.
-            %       BaseUrl: API base URL. Unset means Nominal production.
+            %       BaseUrl: Base URL of your Nominal instance. Unset means
+            %           Nominal production.
             %
             %   Returns:
             %       nominal.Client: The connection.

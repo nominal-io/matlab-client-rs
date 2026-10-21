@@ -134,7 +134,7 @@ classdef Run < nominal.Resource
             %
             %   Options:
             %       RefName: Which data source. Defaults to "default".
-            %       Buckets: Decimate server-side to roughly this many points.
+            %       Buckets: Have Nominal decimate to roughly this many points.
             %       Tags: Narrow further, if the source still holds several
             %           tag sets.
             %
@@ -252,7 +252,7 @@ classdef Run < nominal.Resource
             %
             %   Args:
             %       endTime: Zoned datetime or int64 nanoseconds. Omit it to
-            %           end the run now, which is the usual case.
+            %           end the run now.
             %
             %   Returns:
             %       nominal.Run: The closed run.

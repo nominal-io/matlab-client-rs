@@ -1,24 +1,25 @@
 # Getting data out
 
 {.lead}
-Find a dataset, read a channel into a timetable, export a time window to a file, or run SQL.
+Read data from Nominal into a timetable, a file on disk, or a SQL result table.
 
 ## Finding a dataset
 
-`c.assets` and `c.datasets` search by name and return a table that includes each match's RID.
+`c.assets` and `c.datasets` return every asset or dataset whose name contains the text you pass,
+ignoring case, as a table that includes each match's RID.
 
 ```matlab
-c.assets("<part of a name>")
-ds = c.datasetByRid(c.datasets("<part of a name>").Rid(1));
+c.assets("<search text>")
+ds = c.datasetByRid(c.datasets("<search text>").Rid(1));
 ds.channels()                              % the channels in the dataset
 ```
 
-Always pass a name. With no argument, `c.assets()` and `c.datasets()` return every asset or
+Always pass search text. With no argument, `c.assets()` and `c.datasets()` return every asset or
 dataset in the workspace in one call.
 
-## A channel in your workspace
+## Reading a channel
 
-`fetch` reads one channel into a timetable.
+`fetch` reads one numeric channel into a timetable.
 
 ```matlab
 t1 = datetime("now", TimeZone="UTC");
@@ -45,9 +46,6 @@ ch2  = ds.fetch("<channel 2>", t0, t1);
 both = synchronize(ch1, ch2);
 ```
 
-`fetch` and `export` read numeric channels. A string channel in an export list fails the whole
-export.
-
 ## Through an asset or a run
 
 `a.fetch` and `r.fetch` read a channel from one of their data sources, with that source's tag
@@ -68,6 +66,7 @@ r  = c.runByRid("<run rid>");
 a  = c.assetByRid(r.AssetRids(1));
 ds = c.datasetByRid(a.datasources().Rid(1));
 
+% export takes numeric channels only. A string channel fails the whole export.
 ch      = ds.channels();
 numeric = ch.Name(ismember(ch.DataType, ["double" "int" "uint"]))';
 ds.export("run.mat", numeric, r.StartTime, r.EndTime);

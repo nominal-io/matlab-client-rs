@@ -28,7 +28,7 @@ function results = nominalexample_analysisdemo(datasetRid)
 %     Discovery   - a dataset and its channels, as tables.
 %     Fetch       - one channel into a timetable, decimated for wide windows.
 %     Export      - the whole window to a .mat file in one request.
-%     SQL         - a query against the warehouse, returned as a table.
+%     SQL         - a SQL query, returned as a table.
 %
 %   See also NOMINAL.DATASET/FETCH, NOMINAL.CLIENT/QUERY,
 %   NOMINALEXAMPLE_CONNECT
@@ -134,7 +134,7 @@ function results = nominalexample_analysisdemo(datasetRid)
         bucketStart = results.Samples.Time(1);
         bucketStop = results.Samples.Time(end);
 
-        % Ask the server for roughly this many points instead of every sample.
+        % Ask Nominal for roughly this many points instead of every sample.
         requestedBuckets = 200;
         results.Decimated = dataset.fetch(firstChannelName, ...
             bucketStart, bucketStop, Buckets=requestedBuckets);
@@ -201,16 +201,16 @@ function results = nominalexample_analysisdemo(datasetRid)
 
     % 5 ------------------------------------------------------------- SQL
     %
-    % The tables are the warehouse's own, not the object model. Telemetry lives
+    % The SQL tables have their own layout, not this toolbox's. Telemetry lives
     % in points_double, and a telemetry table must filter on dataset_rid or the
     % query is rejected.
     %
     % Bound the query to the window above as well. points_double holds every
     % point the dataset has ever taken, so without a time filter ORDER BY ts
     % returns the oldest rows in it, which on a re-used dataset is whatever an
-    % earlier run wrote. ts is a timestamp column in the warehouse, not the
-    % int64 nanoseconds it comes back as, so the bounds go in as literals. The
-    % millisecond of slack covers the format truncating rather than rounding.
+    % earlier run wrote. In SQL, ts is a timestamp, not the int64 nanoseconds
+    % it comes back as, so the bounds go in as literals. The millisecond of
+    % slack covers the format truncating rather than rounding.
     lo = string(bucketStart - milliseconds(1), "yyyy-MM-dd HH:mm:ss.SSS");
     hi = string(bucketStop  + milliseconds(1), "yyyy-MM-dd HH:mm:ss.SSS");
     timeFilter = "AND ts BETWEEN TIMESTAMP '" + lo + "' " + ...

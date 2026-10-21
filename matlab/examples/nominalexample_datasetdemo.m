@@ -82,7 +82,7 @@ function results = nominalexample_datasetdemo(assetName)
     % --- read one back ------------------------------------------------
     %
     % The object setChannelMetadata returns reflects what you sent, not what
-    % the server holds. Read back to see the server's view.
+    % Nominal holds. Read back to see what Nominal stored.
     refetchedMetadata = updatedDataset.channelMetadata("rpm");
     fprintf('Read back "rpm": unit=%s type=%s\n', ...
             refetchedMetadata.Unit, refetchedMetadata.DataType);

@@ -1,9 +1,8 @@
 # Quickstart
 
 {.lead}
-From a `.mltbx` file to running code.
-
-You need MATLAB R2021a or newer, on Windows x86-64, Apple silicon or Linux x86-64.
+From a `.mltbx` file to running code. You need MATLAB R2021a or newer, on Windows x86-64,
+Apple silicon or Linux x86-64.
 
 ## 1. Install
 
@@ -39,15 +38,13 @@ clients use. If you don't have a profile yet, follow
 
 ```matlab
 client = nominal.Client.fromProfile();
-disp(client.whoAmI())
+disp(client.whoAmI())   % prints your name once the toolbox can reach Nominal
 delete(client)
 ```
 
-If that prints your name, the toolbox can reach Nominal.
-
 ## 4. Your own code
 
-Connect, find an asset, add a dataset, push a matrix, read it back. The toolbox's Getting
+Connect, find an asset, add a dataset, write a matrix, read it back. The toolbox's Getting
 Started guide in the Add-On Manager runs the same loop a section at a time.
 
 ```matlab
@@ -64,7 +61,7 @@ dataset = asset.getOrCreateDataset("Bench run 7");
 % "Cel" not "C", "1/min" not "rpm".
 dataset.setChannelMetadata("rpm", "double", Unit="1/min");
 
-% --- upload a matrix ----------------------------------------------------
+% --- write a matrix -----------------------------------------------------
 % One column per channel, in the same order as the names.
 rows = 500;
 t = datetime("now", TimeZone="UTC") - seconds(rows/1000) ...
@@ -86,9 +83,9 @@ plot(back.Time, back.("rpm"))
 
 % --- SQL, if you want rows rather than a channel ------------------------
 % points_double holds every point this dataset has ever taken, so bound the
-% query to the window just written. ts is a timestamp column in the
-% warehouse, so the bounds go in as literals. The millisecond of slack
-% covers the format truncating rather than rounding.
+% query to the window just written. In SQL, ts is a timestamp, so the
+% bounds go in as literals. The millisecond of slack covers the format
+% truncating rather than rounding.
 lo = string(t(1)   - milliseconds(1), "yyyy-MM-dd HH:mm:ss.SSS");
 hi = string(t(end) + milliseconds(1), "yyyy-MM-dd HH:mm:ss.SSS");
 
@@ -108,16 +105,14 @@ stackedplot(wide.ts, wide{:, 2:end}, ...
             DisplayLabels=wide.Properties.VariableNames(2:end))
 
 % --- done ---------------------------------------------------------------
+% Optional. MATLAB also frees these when the variables are cleared.
 delete(dataset);
 delete(asset);
 delete(client);
 ```
 
-`delete` frees each object straight away. MATLAB also frees them when the variables are
-cleared, so the `delete` calls are optional.
-
 ## Next
 
 - [Examples](examples/index.md): the bundled demos, which cover streaming, ingest, export and SQL.
-- [Cheat sheet](guides/cheatsheet.md): every object and method on one page.
+- [Cheat sheet](guides/cheatsheet.md): the objects and their methods on one page.
 - [Reference](ref/index.md): the full help text.

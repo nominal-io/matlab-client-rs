@@ -44,7 +44,7 @@ classdef IngestJob < nominal.Resource
         end
 
         function s = status(obj)
-            %STATUS  Read the job's current state from the server.
+            %STATUS  Read the job's current state from Nominal.
             %
             %   Returns:
             %       string: "submitted", "queued", "inProgress", "completed",

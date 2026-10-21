@@ -13,8 +13,7 @@ classdef Stream < nominal.Resource
     %       ... fill in a loop ...
     %       s.push(chans, t, v);
     %
-    %   Preallocate the matrix, fill it, push it. It reaches the library with
-    %   no copy.
+    %   Preallocate the matrix, fill it, and push it whole.
     %
     %   Releasing the stream flushes what is still buffered and blocks until
     %   that completes. MATLAB does not promise when a variable is collected,
@@ -63,8 +62,7 @@ classdef Stream < nominal.Resource
             %   Args:
             %       channels: 1-by-C array of nominal.Channel.
             %       timestamps: N-by-1 int64 nanoseconds, or a datetime
-            %           vector. Literal, including zero: unlike run times, 0
-            %           does not mean "now".
+            %           vector. Literal, including zero.
             %       values: N-by-C double, one column per channel.
             arguments
                 obj (1,1) nominal.Stream

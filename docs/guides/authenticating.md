@@ -6,7 +6,7 @@ Nominal's other clients also read.
 
 If you don't have a profile yet, follow
 {hub}`API keys setup <quickstart/quickstart/api-keys-setup/>` to create one. If Nominal's
-Python client or command line tool already works on this machine, the profile is already there.
+Python client or CLI already works on this machine, the profile is already there.
 
 ```matlab
 c = nominal.Client.fromProfile();            % the profile called "default"
@@ -31,8 +31,8 @@ c = nominal.Client.fromToken("<api-key>", BaseUrl="<base-url>", Workspace="<work
 c = nominal.Client.connect();
 ```
 
-`NOMINAL_TOKEN` holds only the key, so without a profile the client reaches Nominal's default
-instance with no workspace. It raises a `nominal:profileFallback` warning when it falls back.
+`NOMINAL_TOKEN` holds only the key, so without a profile the client reaches Nominal production
+with no workspace. `connect` raises a `nominal:profileFallback` warning when it falls back.
 
 :::{dropdown} Migrating from the old config file
 If this machine still has `~/.nominal.yml` with an `environments:` block, `fromProfile`
@@ -45,8 +45,8 @@ nom config migrate
 
 ## Checking the connection
 
+`whoAmI` makes a request to Nominal, so a bad key fails here instead of at the first real call.
+
 ```matlab
 c.whoAmI()
 ```
-
-`whoAmI` makes a request to Nominal, so a bad key fails here instead of at the first real call.

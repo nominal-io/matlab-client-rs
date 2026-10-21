@@ -1,8 +1,7 @@
 # Cheat sheet
 
 {.lead}
-Every object and method on one page. Everything starts from a `nominal.Client`, and each
-object hands you the next, so you rarely construct anything directly.
+Everything starts from a `nominal.Client`, and each object hands you the next.
 
 ## Client
 
@@ -11,12 +10,12 @@ object hands you the next, so you rarely construct anything directly.
 | Action | MATLAB |
 |---|---|
 | Connect from a stored profile | `nominal.Client.fromProfile()` |
-| Connect from a token | `nominal.Client.fromToken(token)` |
+| Connect with an API key | `nominal.Client.fromToken("<api-key>")` |
 | Either, whichever is available | `nominal.Client.connect()` |
 | Who am I (also a credential check) | `c.whoAmI()` |
-| Search assets by name | `c.assets("<part of a name>")` |
-| Search datasets by name | `c.datasets("<part of a name>")` |
-| Search runs | `c.runs("<part of a name>", Labels=…, Properties=…, StartAfter=t0)` |
+| Search assets by name | `c.assets("<search text>")` |
+| Search datasets by name | `c.datasets("<search text>")` |
+| Search runs | `c.runs("<search text>", Labels=…, Properties=…, StartAfter=t0)` |
 | List *every* asset (slow, unpaginated) | `c.assets()` |
 | List *every* dataset (slow, unpaginated) | `c.datasets()` |
 | Get an asset by RID | `c.assetByRid(rid)` |
@@ -45,7 +44,7 @@ object hands you the next, so you rarely construct anything directly.
 | All properties, as a `containers.Map` | `a.Properties` |
 | Set or remove one, keeping the rest | `a = a.setProperty("<key>", "<value>")`, `a.removeProperty("<key>")` |
 | Everything attached to it, with tag filters | `a.datasources()` |
-| …re-read from the server | `a.datasources(Refresh=true)` |
+| …re-read from Nominal | `a.datasources(Refresh=true)` |
 | Read a channel as the asset sees it | `a.fetch("<channel>", t0, t1)`, `a.fetch(…, RefName="<ref name>")` |
 | A dataset already on it, by name | `a.getAttachedDataset(name)` |
 | Attach a dataset you already have | `a.addDataset(ds)`, `a.addDataset(ds, "<ref name>")` |
@@ -59,7 +58,7 @@ object hands you the next, so you rarely construct anything directly.
 | Change metadata | `a.update(Name=…, Description=…, Labels=…, Properties=…)` |
 
 An asset handle is a **snapshot** taken when it was fetched. `update()` returns a new object
-instead of changing the one you have. `datasources()` asks the server once and reuses the
+instead of changing the one you have. `datasources()` asks Nominal once and reuses the
 answer until you pass `Refresh=true`.
 
 Dataset names are not unique in Nominal, so `getOrCreateDataset` resolves in three steps and
@@ -149,7 +148,7 @@ An asset holds a dataset once per tag filter. Attaching the same dataset again w
 
 ## IngestJob
 
-`job = c.ingest("flight.csv", …)`
+`job = c.ingest("<file>.csv", …)`
 
 | Action | MATLAB |
 |---|---|

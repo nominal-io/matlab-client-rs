@@ -45,7 +45,7 @@ dataset.write(["rpm" "egt" "psi"], t, v);
 
 %% 5. Read it back
 % |fetch| returns a timetable, so |plot|, |retime| and |synchronize| work on
-% it directly. Add |Buckets=2000| to decimate a wide window server-side.
+% it directly. Add |Buckets=2000| to have Nominal decimate a wide window.
 
 back = dataset.fetch("rpm", t(1) - seconds(1), t(end) + seconds(1));
 plot(back.Time, back.("rpm"))
