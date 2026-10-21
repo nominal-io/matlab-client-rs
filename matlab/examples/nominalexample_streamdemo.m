@@ -103,7 +103,7 @@ function results = nominalexample_streamdemo(datasetRid)
     fprintf('Pushed %d x %d block via matrix push\n', ...
             blockRowCount, numel(engineChannels));
 
-    % Read the names before the channel handles are released below.
+    % Read the names before the channel objects are deleted below.
     results.EngineChannels = arrayfun(@(c) c.Name, engineChannels);
     results.BlockTimestamps = blockTimestamps;
     results.EngineSamples = engineSamples;

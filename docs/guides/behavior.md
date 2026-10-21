@@ -3,8 +3,8 @@
 {.lead}
 Rules that hold for every object in the toolbox.
 
-**Objects free themselves.** Every object is a handle that releases its resources when it goes
-out of scope. A copy refers to the same object.
+**No cleanup calls.** Deleting an object, or clearing the last variable that holds it, releases
+everything it holds.
 
 **Errors are exceptions.** A failure raises an `MException` with Nominal's message and an
 identifier you can catch:
@@ -33,7 +33,7 @@ doesn't hold nanoseconds, so use `nominal.now()` and `int64` when you need full 
 Plain doubles are refused for timestamps because they can't hold a present-day nanosecond count
 exactly. `int64(0)` is the epoch. Leave a run or event time out to mean now.
 
-**Handles are snapshots.** `update()` returns a new object and leaves the one you have
+**Objects are snapshots.** `update()` returns a new object and leaves the one you have
 unchanged. `a.datasources()` asks Nominal once and reuses the answer, so a dataset attached
 after that first call is not listed until you pass `Refresh=true`.
 

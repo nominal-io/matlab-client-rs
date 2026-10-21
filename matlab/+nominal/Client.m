@@ -10,8 +10,8 @@ classdef Client < nominal.Resource
     %   that the `nom` CLI and the Python client use, and no key ends up in a
     %   script.
     %
-    %   nominal.Client(token, Workspace=rid, BaseUrl=url) is the underlying
-    %   constructor. Both options are optional. An unset base URL means
+    %   nominal.Client(token, Workspace=rid, BaseUrl=url) is the constructor
+    %   both call. Both options are optional. An unset base URL means
     %   Nominal production. Surrounding whitespace is trimmed from all three.
     %
     %   Example:
@@ -20,7 +20,7 @@ classdef Client < nominal.Resource
     %       ds = a.getOrCreateDataset("telemetry", "tlm");
     %       s  = ds.stream();
     %
-    %   The connection is released when c goes out of scope.
+    %   delete(c) closes the connection.
     %
     %   See also NOMINAL.ASSET, NOMINAL.DATASET, NOMINAL.RUN, NOMINAL.SHUTDOWN
 

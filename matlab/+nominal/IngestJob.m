@@ -7,7 +7,13 @@ classdef IngestJob < nominal.Resource
     %       job = c.ingest("flight12.csv", TimestampColumn="time", ...
     %                      NewDataset="Flight 12");
     %       ds  = c.datasetByRid(job.DatasetRid);   % usable straight away
+    %       job.status()                            % check without waiting
     %       job.wait();                             % block until ingest ends
+    %
+    %   Deleting the job object does not cancel the ingest, but status and
+    %   wait need the object. To check on an ingest without it, open the
+    %   **Ingestion** page in the Nominal app, which lists every ingest job
+    %   with its status, and filter by the destination dataset.
     %
     %   See also NOMINAL.CLIENT/INGEST
 

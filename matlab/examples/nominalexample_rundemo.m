@@ -32,7 +32,7 @@ function results = nominalexample_rundemo(assetName)
     % the argument to start now.
     %
     % Each mutation below returns a new object: openRun -> sharedRun ->
-    % soloRun -> updatedRun -> notedRun -> finishedRun. Earlier handles keep reporting
+    % soloRun -> updatedRun -> notedRun -> finishedRun. Earlier objects keep reporting
     % their older state.
     runStartTime = datetime("now", TimeZone="UTC") - minutes(1);
     openRun = asset.run("matlab-demo-run", runStartTime);
@@ -122,7 +122,7 @@ function results = nominalexample_rundemo(assetName)
 
     % --- results ------------------------------------------------------
     %
-    % Read from finishedRun, the only handle that reflects every change.
+    % Read from finishedRun, the only object that reflects every change.
     results = struct( ...
         'Rid',         finishedRun.Rid, ...
         'Name',        finishedRun.Name, ...
@@ -136,7 +136,7 @@ function results = nominalexample_rundemo(assetName)
 
     % --- teardown -----------------------------------------------------
     %
-    % Each handle in the chain needs its own delete.
+    % Each object in the chain needs its own delete.
     delete(finishedRun);
     delete(notedRun);
     delete(updatedRun);

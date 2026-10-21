@@ -105,7 +105,7 @@ stackedplot(wide.ts, wide{:, 2:end}, ...
             DisplayLabels=wide.Properties.VariableNames(2:end))
 
 % --- done ---------------------------------------------------------------
-% Optional. MATLAB also frees these when the variables are cleared.
+% Optional. Clearing the variables does the same.
 delete(dataset);
 delete(asset);
 delete(client);

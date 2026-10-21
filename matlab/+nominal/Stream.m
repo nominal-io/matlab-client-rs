@@ -15,10 +15,9 @@ classdef Stream < nominal.Resource
     %
     %   Preallocate the matrix, fill it, and push it whole.
     %
-    %   Releasing the stream flushes what is still buffered and blocks until
-    %   that completes. MATLAB does not promise when a variable is collected,
-    %   so call delete(s) if you need the data to have landed before moving
-    %   on.
+    %   Deleting the stream, or clearing its last variable, flushes what is
+    %   still buffered and blocks until that completes. Call delete(s) when
+    %   the data must be in Nominal before you move on.
     %
     %   push blocks when the stream saturates: if points arrive faster than
     %   the network drains them, it waits instead of queueing without bound.

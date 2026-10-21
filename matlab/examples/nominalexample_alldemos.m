@@ -40,7 +40,7 @@ function nominalexample_alldemos()
         client = nominalexample_connect();
         asset = client.getOrCreateAsset(assetName);
 
-        % An asset handle is a snapshot, so Refresh=true picks up the datasets the
+        % An asset object is a snapshot, so Refresh=true picks up the datasets the
         % demos above attached. datasources() also lists videos and
         % connections, and only a dataset RID can open a stream.
         dataSources = asset.datasources(Refresh=true);
@@ -105,9 +105,9 @@ function nominalexample_alldemos()
         fprintf('\nIn the base workspace: %s\n', join(publishedNames, "  "));
     end
 
-    % Not normally needed; `clear mex` or exit does this. Called here so a full
-    % run ends with worker threads stopped and every handle released. The
-    % base-workspace structs are plain data and survive it.
+    % Not needed, since `clear mex` or exit does this. Called here so a full
+    % run ends with every connection closed. The base-workspace structs are
+    % plain data and survive it.
     nominal.shutdown();
 end
 

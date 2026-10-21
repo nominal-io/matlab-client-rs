@@ -120,7 +120,7 @@ function results = nominalexample_uploaddemo(assetName)
     % that produced the data.
     fprintf('--- Provenance ---\n');
 
-    % update returns a new object. The original handle still reports the
+    % update returns a new object. The original still reports the
     % pre-update state.
     annotatedDataset = dataset.update( ...
         Properties=struct(script="nominalexample_uploaddemo.m", ...
@@ -203,7 +203,7 @@ function results = nominalexample_uploaddemo(assetName)
 
     % 5 -------------------------------------------------------- teardown
     %
-    % Both datasets hang off the asset. The asset handle is a snapshot fetched
+    % Both datasets hang off the asset. The asset object is a snapshot fetched
     % before either dataset existed, so Refresh=true is needed to see them.
     fprintf('\n--- Result ---\n');
     attached = asset.datasources(Refresh=true);

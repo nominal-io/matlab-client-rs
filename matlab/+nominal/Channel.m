@@ -68,15 +68,12 @@ classdef Channel < nominal.Resource
             nominalmex('channel_push', obj.Handle, ...
                        nominal.toNanosVector(timestamps), values);
         end
+    end
 
+    methods (Hidden)
         function s = stream(obj)
-            %STREAM  Raw int32 handle of the stream this channel writes to.
-            %
-            %   Not a nominal.Stream object, since the stream is owned by the
-            %   object you opened it from.
-            %
-            %   Returns:
-            %       int32: The stream's handle.
+            % Raw int32 handle of the stream this channel writes to. Hidden:
+            % it exposes the library, not anything a user works with.
             obj.assertLive();
             s = nominalmex('channel_stream', obj.Handle);
         end

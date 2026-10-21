@@ -31,7 +31,7 @@ function results = nominalexample_assetdemo(assetName)
 
     % --- fetch the same asset by RID ----------------------------------
     %
-    % Two handles on the same asset are independent objects.
+    % Two objects for the same asset are independent.
     sameAssetByRid = client.assetByRid(asset.Rid);
     fprintf('  refetched by rid, name matches: %d\n', ...
             sameAssetByRid.Name == asset.Name);
@@ -61,9 +61,8 @@ function results = nominalexample_assetdemo(assetName)
     fprintf('  properties: %s\n', strjoin(keys(notedAsset.Properties), ", "));
     delete(notedAsset);
 
-    % update returns a new object. The original handle still shows the old
-    % state.
-    fprintf('  original handle still shows: "%s"\n', asset.Description);
+    % update returns a new object. The original still shows the old state.
+    fprintf('  original object still shows: "%s"\n', asset.Description);
 
     % --- one dataset, attached twice, split by tag ---------------------
     %
@@ -88,7 +87,7 @@ function results = nominalexample_assetdemo(assetName)
     % --- attached data sources ----------------------------------------
     %
     % Check the Type column: only a dataset RID can open a stream.
-    % Refresh=true because this handle predates the attachments above.
+    % Refresh=true because this object predates the attachments above.
     dataSources = updatedAsset.datasources(Refresh=true);
     fprintf('  "%s" attached as: %s\n', dataset.Name, ...
             join(dataSources.RefName(dataSources.Rid == dataset.Rid)', ", "));
@@ -107,7 +106,7 @@ function results = nominalexample_assetdemo(assetName)
 
     % --- results ------------------------------------------------------
     %
-    % Copy out before the handles are released below.
+    % Copy out before the objects are deleted below.
     results = struct( ...
         'Rid',         updatedAsset.Rid, ...
         'Name',        updatedAsset.Name, ...

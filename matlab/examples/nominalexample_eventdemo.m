@@ -89,7 +89,7 @@ function results = nominalexample_eventdemo(assetName)
 
     % --- teardown -----------------------------------------------------
     %
-    % Releasing an event handle does not delete the event in Nominal.
+    % Deletes the MATLAB object, not the event in Nominal.
     delete(stepEvent);
     delete(otherEvents);
     delete(overspeedEvent);

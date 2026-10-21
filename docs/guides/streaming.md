@@ -44,14 +44,14 @@ low: a value that changes with every point belongs in its own channel.
 
 ## Closing the stream
 
-Deleting the stream sends what is still buffered and waits until it has landed. MATLAB doesn't
-promise when it clears a variable, so call `delete(s)` yourself when the data must be in Nominal
-before you move on. The points can take a moment to appear in Nominal after that.
+Deleting the stream, or clearing the last variable that holds it, sends what is still buffered
+and waits until it has landed. Call `delete(s)` when the data must be in Nominal before you move
+on. The points can take a moment to appear in Nominal after that.
 
 ## Shutdown
 
 You don't need to call `nominal.shutdown()`. `clear mex`, `clear all` and quitting MATLAB all
-shut the library down first.
+run it for you.
 
-Call it to tear everything down at a known point, such as the end of a long script. Every
-`nominal` object you hold stops working, and the next call starts the library again.
+Call it to shut the toolbox down at a known point, such as the end of a long script. Every
+`nominal` object you hold stops working. New objects work as normal.

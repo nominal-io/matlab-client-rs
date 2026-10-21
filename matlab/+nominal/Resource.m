@@ -53,7 +53,7 @@ classdef (Abstract) Resource < handle
                 return
             end
             if ~isvalid(obj) || obj.Handle == 0
-                fprintf('  %s (released)\n\n', class(obj));
+                fprintf('  %s (deleted)\n\n', class(obj));
                 return
             end
 
@@ -108,7 +108,7 @@ classdef (Abstract) Resource < handle
         function assertLive(obj)
             if obj.Handle == 0
                 error('nominal:released', ...
-                      '%s has already been released', class(obj));
+                      '%s has been deleted', class(obj));
             end
         end
     end

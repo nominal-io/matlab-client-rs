@@ -166,7 +166,7 @@ classdef Run < nominal.Resource
             %
             %   r = r.setProperty("result", "pass");
             %
-            %   Re-reads the run first, so properties set since this handle
+            %   Re-reads the run first, so properties set since this object
             %   was fetched are kept.
             %
             %   Returns:
@@ -307,7 +307,7 @@ classdef Run < nominal.Resource
             %       EndTime: Zoned datetime or int64 nanoseconds.
             %
             %   Returns:
-            %       nominal.Run: A new handle with the changes applied. The
+            %       nominal.Run: A new object with the changes applied. The
             %       original still shows the pre-update state.
             arguments
                 obj (1,1) nominal.Run

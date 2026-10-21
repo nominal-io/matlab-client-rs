@@ -51,16 +51,16 @@ back = dataset.fetch("rpm", t(1) - seconds(1), t(end) + seconds(1));
 plot(back.Time, back.("rpm"))
 title("rpm, read back from Nominal")
 
-%% 6. Release the handles
-% |delete| frees each object straight away. MATLAB also frees them when the
-% variables are cleared.
+%% 6. Clean up
+% Optional. Deleting an object, or clearing the last variable that holds
+% it, releases everything it holds.
 
 delete(dataset);
 delete(asset);
 delete(client);
 
 %% Things to know
-% * *Handles are snapshots.* |update| returns a new object and leaves the one
+% * *Objects are snapshots.* |update| returns a new object and leaves the one
 % you have unchanged. |a.datasources()| asks Nominal once and reuses the
 % answer, so pass |Refresh=true| to see a dataset attached since then.
 % * *Labels and Properties replace, they do not merge.* Read the existing

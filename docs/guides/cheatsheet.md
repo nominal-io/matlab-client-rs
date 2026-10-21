@@ -57,7 +57,7 @@ Everything starts from a `nominal.Client`, and each object hands you the next.
 | Start a run on it | `a.run(name)`, `a.run(name, startTime)` |
 | Change metadata | `a.update(Name=…, Description=…, Labels=…, Properties=…)` |
 
-An asset handle is a **snapshot** taken when it was fetched. `update()` returns a new object
+An asset object is a **snapshot** taken when it was fetched. `update()` returns a new object
 instead of changing the one you have. `datasources()` asks Nominal once and reuses the
 answer until you pass `Refresh=true`.
 
@@ -163,4 +163,4 @@ An asset holds a dataset once per tag filter. Attaching the same dataset again w
 | Current time, full nanosecond precision | `nominal.now()` |
 | datetime → int64 nanoseconds | `nominal.toNanos(dt)`, `nominal.toNanosVector(dt)` |
 | int64 nanoseconds → UTC datetime | `nominal.fromNanos(nanos)` |
-| Release everything, stop worker threads | `nominal.shutdown()` |
+| Shut the toolbox down, closing every connection | `nominal.shutdown()` |

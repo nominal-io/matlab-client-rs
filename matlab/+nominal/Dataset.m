@@ -84,7 +84,7 @@ classdef Dataset < nominal.Resource
             %   ds = ds.setProperty("script", "reduce_flight.m");
             %
             %   Re-reads the dataset first, so properties set since this
-            %   handle was fetched are kept.
+            %   object was fetched are kept.
             %
             %   Returns:
             %       nominal.Dataset: The updated dataset.
@@ -130,9 +130,9 @@ classdef Dataset < nominal.Resource
         function s = stream(obj)
             %STREAM  Open a stream that writes into this dataset.
             %
-            %   Data is buffered and sent in the background. The stream flushes
-            %   when released. Call delete(s) to make that happen at a known
-            %   point.
+            %   Data is buffered and sent in the background. Deleting the
+            %   stream, or clearing its last variable, flushes it. Call
+            %   delete(s) to flush at a known point.
             %
             %   Returns:
             %       nominal.Stream: The open stream.
@@ -439,7 +439,7 @@ classdef Dataset < nominal.Resource
             %           clears them.
             %
             %   Returns:
-            %       nominal.Dataset: A new handle with the changes applied. The
+            %       nominal.Dataset: A new object with the changes applied. The
             %       original still shows the pre-update state.
             arguments
                 obj (1,1) nominal.Dataset

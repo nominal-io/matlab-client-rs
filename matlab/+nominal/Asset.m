@@ -90,7 +90,7 @@ classdef Asset < nominal.Resource
             %
             %   a = a.setProperty("serial", "SN-0042");
             %
-            %   Re-reads the asset first, so properties set since this handle
+            %   Re-reads the asset first, so properties set since this object
             %   was fetched are kept.
             %
             %   Returns:
@@ -128,7 +128,7 @@ classdef Asset < nominal.Resource
             %   s.Tags{1}                           % one source's tag filter
             %
             %   **The first call asks Nominal and keeps the answer, and later
-            %   calls on this handle reuse it.** A dataset attached since, by
+            %   calls on this object reuse it.** A dataset attached since, by
             %   addDataset or from the web app, is not listed until you pass
             %   Refresh=true.
             %
@@ -198,11 +198,11 @@ classdef Asset < nominal.Resource
             %       a.addDataset(ds, "drone",  Tags=struct(source="drone"));
             %       a.addDataset(ds, "remote", Tags=struct(source="remote"));
             %
-            %   This asset handle is a snapshot and will not show the new data
+            %   This asset object is a snapshot and will not show the new data
             %   source. Use a.datasources(Refresh=true) to see it.
             %
             %   Args:
-            %       dataset: Any dataset handle: one fetched by RID, from a
+            %       dataset: Any dataset object: one fetched by RID, from a
             %           search, or from an ingest.
             %       refName: The dataset's name within this asset, unique among
             %           its data sources. Spaces, dots and mixed case are fine.
@@ -479,7 +479,7 @@ classdef Asset < nominal.Resource
             %           clears them.
             %
             %   Returns:
-            %       nominal.Asset: A new handle with the changes applied. The
+            %       nominal.Asset: A new object with the changes applied. The
             %       original still shows the pre-update state.
             arguments
                 obj (1,1) nominal.Asset

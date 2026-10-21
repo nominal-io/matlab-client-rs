@@ -1,7 +1,7 @@
 function nanos = toNanos(value)
 %TONANOS  Convert a time to int64 nanoseconds since the Unix epoch.
 %
-%   Used wherever the library takes a single instant, so callers can write
+%   Used wherever the toolbox takes a single instant, so callers can write
 %   either
 %
 %       r = a.run("burn-12", datetime("now", TimeZone="UTC"));
