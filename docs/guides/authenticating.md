@@ -4,9 +4,13 @@
 Connect with a profile: your API key, base URL and workspace, stored in the config file that
 Nominal's other clients also read.
 
-If you don't have a profile yet, follow
-{hub}`API keys setup <quickstart/quickstart/api-keys-setup/>` to create one. If Nominal's
-Python client or CLI already works on this machine, the profile is already there.
+If Nominal's Python client or CLI already works on this machine, you have a profile already, so
+skip to [Connecting](#connecting). Otherwise, set one up.
+
+```{nominal-snippet} api-keys-setup
+```
+
+## Connecting
 
 ```matlab
 c = nominal.Client.fromProfile();            % the profile called "default"
