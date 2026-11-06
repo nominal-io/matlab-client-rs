@@ -20,7 +20,7 @@
 //! large — CSV is capped at 50 million rows, and the deployment sets a byte cap
 //! as well.
 
-use crate::client::{client_or_fail, ClientHandle};
+use crate::client::{client_or_fail, user_agent, ClientHandle};
 use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
@@ -41,7 +41,7 @@ use nominal_streaming::api::objects::scout::dataexport::api::{
 use nominal_streaming::api::objects::scout::run::api::Duration;
 use nominal_streaming::client::conjure::http::client::{AsyncService, ConjureRuntime};
 use nominal_streaming::client::conjure::object::SafeLong;
-use nominal_streaming::client::conjure::runtime::{Agent, Client, UserAgent};
+use nominal_streaming::client::conjure::runtime::Client;
 use nominal_streaming::prelude::BearerToken;
 
 use futures::StreamExt;
@@ -100,10 +100,7 @@ fn service_for(
     let client = RUNTIME.in_context(|| {
         Client::builder()
             .service("nominal-ffi-export")
-            .user_agent(UserAgent::new(Agent::new(
-                "nominal-ffi",
-                env!("CARGO_PKG_VERSION"),
-            )))
+            .user_agent(user_agent())
             .uri(uri)
             .build()
     });

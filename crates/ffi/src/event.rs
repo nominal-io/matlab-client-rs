@@ -22,7 +22,7 @@
 //! When the `nominal` crate grows event support, this module should collapse
 //! into a thin wrapper over it like the others.
 
-use crate::client::{client_or_fail, ClientHandle};
+use crate::client::{client_or_fail, user_agent, ClientHandle};
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
 use crate::strings::{c_str_to_string, key_at, pairs_from_c, set_string, StringHandle};
@@ -36,7 +36,7 @@ use nominal_streaming::api::objects::scout::run::api::Duration;
 // `AsyncService` is what provides `new` on the generated service clients.
 use nominal_streaming::client::conjure::http::client::{AsyncService, ConjureRuntime};
 use nominal_streaming::client::conjure::object::SafeLong;
-use nominal_streaming::client::conjure::runtime::{Agent, Client, UserAgent};
+use nominal_streaming::client::conjure::runtime::Client;
 use nominal_streaming::prelude::{BearerToken, ResourceIdentifier};
 
 use once_cell::sync::Lazy;
@@ -128,10 +128,7 @@ fn service_for(
     let client = RUNTIME.in_context(|| {
         Client::builder()
             .service("nominal-ffi-events")
-            .user_agent(UserAgent::new(Agent::new(
-                "nominal-ffi",
-                env!("CARGO_PKG_VERSION"),
-            )))
+            .user_agent(user_agent())
             .uri(uri)
             .build()
     });

@@ -27,7 +27,7 @@
 //! at most 10 batches — meaning channels — and 500,000 points per request, with
 //! 50,000 the comfortable figure. For anything sustained, use a stream.
 
-use crate::client::{client_or_fail, ClientHandle};
+use crate::client::{client_or_fail, user_agent, ClientHandle};
 use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
@@ -43,7 +43,7 @@ use nominal_streaming::api::objects::storage::writer::api::{
 };
 use nominal_streaming::client::conjure::http::client::{AsyncService, ConjureRuntime};
 use nominal_streaming::client::conjure::object::{ResourceIdentifier, SafeLong};
-use nominal_streaming::client::conjure::runtime::{Agent, Client, UserAgent};
+use nominal_streaming::client::conjure::runtime::Client;
 use nominal_streaming::prelude::BearerToken;
 
 use once_cell::sync::Lazy;
@@ -83,10 +83,7 @@ fn service_for(
     let client = RUNTIME.in_context(|| {
         Client::builder()
             .service("nominal-ffi-writer")
-            .user_agent(UserAgent::new(Agent::new(
-                "nominal-ffi",
-                env!("CARGO_PKG_VERSION"),
-            )))
+            .user_agent(user_agent())
             .uri(uri)
             .build()
     });

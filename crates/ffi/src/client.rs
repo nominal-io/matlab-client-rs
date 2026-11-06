@@ -2,9 +2,19 @@ use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
 use crate::strings::{c_str_to_string, set_string, StringHandle};
 use nominal::core::NominalClient;
+use nominal_streaming::client::conjure::runtime::{Agent, UserAgent};
 use std::os::raw::c_char;
 
 pub type ClientHandle = i32;
+
+/// The `User-Agent` on every request this library makes, as `name/version`.
+/// Nominal's usage reporting counts `nominal-matlab` as the MATLAB client.
+pub(crate) const AGENT_NAME: &str = "nominal-matlab";
+pub(crate) const AGENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub(crate) fn user_agent() -> UserAgent {
+    UserAgent::new(Agent::new(AGENT_NAME, AGENT_VERSION))
+}
 
 /// A client plus the token it was built from.
 ///
@@ -110,7 +120,8 @@ pub extern "C" fn nominal_client_new(
                 "token must not be empty",
             ));
         }
-        let mut builder = NominalClient::builder(token.clone());
+        let mut builder =
+            NominalClient::builder(token.clone()).user_agent(AGENT_NAME, AGENT_VERSION);
 
         if let Some(url) = unsafe { optional_arg(base_url, "base_url", error_out)? } {
             builder = builder.base_url(url);
@@ -196,4 +207,19 @@ pub extern "C" fn nominal_client_user_display_name(
             .map_err(|e| fail(error_out, ErrorCode::NominalError, e.to_string()))?;
         set_string(out_string, user.display_name(), error_out)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The HTTP client sends 0.0.0 for a version it can't parse, such as a
+    // prerelease like 0.4.0-beta.1.
+    #[test]
+    fn user_agent_carries_the_crate_version() {
+        assert_eq!(
+            user_agent().to_string(),
+            format!("nominal-matlab/{}", env!("CARGO_PKG_VERSION"))
+        );
+    }
 }

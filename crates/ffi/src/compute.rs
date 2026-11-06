@@ -23,7 +23,7 @@
 //! out to be common — but a batch shares nothing except the connection, so the
 //! saving is latency, not work.
 
-use crate::client::{client_or_fail, ClientEntry, ClientHandle};
+use crate::client::{client_or_fail, user_agent, ClientEntry, ClientHandle};
 use crate::dataset::dataset_or_fail;
 use crate::error::{fail, ffi_guard, require_out, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
@@ -43,7 +43,7 @@ use nominal_streaming::api::objects::scout::compute::api::{
 };
 use nominal_streaming::client::conjure::http::client::{AsyncService, ConjureRuntime};
 use nominal_streaming::client::conjure::object::SafeLong;
-use nominal_streaming::client::conjure::runtime::{Agent, Client, UserAgent};
+use nominal_streaming::client::conjure::runtime::Client;
 use nominal_streaming::prelude::BearerToken;
 
 use once_cell::sync::Lazy;
@@ -104,10 +104,7 @@ fn service_for(
     let client = RUNTIME.in_context(|| {
         Client::builder()
             .service("nominal-ffi-compute")
-            .user_agent(UserAgent::new(Agent::new(
-                "nominal-ffi",
-                env!("CARGO_PKG_VERSION"),
-            )))
+            .user_agent(user_agent())
             .uri(uri)
             .build()
     });

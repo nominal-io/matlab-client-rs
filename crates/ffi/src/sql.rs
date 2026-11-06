@@ -104,7 +104,7 @@ pub enum ColumnType {
 static HTTP: Lazy<reqwest::Client> = Lazy::new(|| {
     RUNTIME.in_context(|| {
         reqwest::Client::builder()
-            .user_agent(concat!("nominal-ffi/", env!("CARGO_PKG_VERSION")))
+            .user_agent(crate::client::user_agent().to_string())
             .build()
             .expect("building an HTTP client with default settings cannot fail")
     })

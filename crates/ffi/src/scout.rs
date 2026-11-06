@@ -9,7 +9,7 @@
 //! Callers re-fetch through the crate afterwards, so the handles they hand out
 //! hold the same types as everywhere else.
 
-use crate::client::ClientEntry;
+use crate::client::{user_agent, ClientEntry};
 use crate::error::{fail, ErrorCode, ErrorHandle};
 use crate::runtime::RUNTIME;
 
@@ -17,7 +17,7 @@ use nominal_streaming::api::clients::scout::assets::AsyncAssetServiceClient;
 use nominal_streaming::api::clients::scout::AsyncRunServiceClient;
 use nominal_streaming::client::conjure::http::client::{AsyncService, ConjureRuntime};
 use nominal_streaming::client::conjure::object::ResourceIdentifier;
-use nominal_streaming::client::conjure::runtime::{Agent, Client, UserAgent};
+use nominal_streaming::client::conjure::runtime::Client;
 use nominal_streaming::prelude::BearerToken;
 
 use once_cell::sync::Lazy;
@@ -51,10 +51,7 @@ fn conjure_client(base_url: &str, error_out: *mut ErrorHandle) -> Result<Client,
         .in_context(|| {
             Client::builder()
                 .service("nominal-ffi-scout")
-                .user_agent(UserAgent::new(Agent::new(
-                    "nominal-ffi",
-                    env!("CARGO_PKG_VERSION"),
-                )))
+                .user_agent(user_agent())
                 .uri(uri)
                 .build()
         })
