@@ -401,11 +401,12 @@ docs = [
 [[package]]
 name = "nominal-sphinx-theme"
 version = "0.1.0"
-source = { git = "https://github.com/nominal-io/nominal-sphinx-theme#9c8c792c14bf67823e6dae5b45fc981b9e83a827" }
+source = { git = "https://github.com/nominal-io/nominal-sphinx-theme#4ff295562f5c5cffa48cbc083637ed2c70304f35" }
 dependencies = [
     { name = "myst-parser" },
     { name = "shibuya" },
     { name = "sphinx" },
+    { name = "sphinxcontrib-mermaid" },
 ]
 
 [[package]]
@@ -629,6 +630,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a8/da/5417e22c1da79e7187d7976673b408f1720b5a54c2b8d0496edf408889a1/sphinxcontrib-matlabdomain-0.22.1.tar.gz", hash = "sha256:f70d4160b6f7d3dba7d77a614416a4e3a421f864ed5258bbf750796ee1804ac1", size = 219055, upload-time = "2024-08-17T09:50:16.159Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ac/6c/5979a354e8aad6a27855ee8a6b9932d77a19d7f55c533f490ab009f1ac7e/sphinxcontrib_matlabdomain-0.22.1-py3-none-any.whl", hash = "sha256:2814c4447e2a58c3db44b169999f625544a92ac9c7f43ca5ed285f081fbad5de", size = 48581, upload-time = "2024-08-17T09:50:14.581Z" },
+]
+
+[[package]]
+name = "sphinxcontrib-mermaid"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "pyyaml" },
+    { name = "sphinx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/87/06537dff20aa57df2d0f2afa87edff4afa85dec6f57f03f7acc24f83ff88/sphinxcontrib_mermaid-2.1.1.tar.gz", hash = "sha256:f8d7f1b2f0ad69b7ebdd5cbf532fb4ee107893b5373bc2d0e9634089c0b2cfee", size = 22353, upload-time = "2026-09-01T16:10:23.671Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/50/6a/5bf2222b8084c7a7bc3ec23d470c91e3e03e82e4ce0bbacaa61f456ce7c1/sphinxcontrib_mermaid-2.1.1-py3-none-any.whl", hash = "sha256:3b9ac1a8e0b5154dec3c0acf9b5c54dd9ba58540e416f20858c300814c25648f", size = 16368, upload-time = "2026-09-01T16:10:22.377Z" },
 ]
 
 [[package]]
