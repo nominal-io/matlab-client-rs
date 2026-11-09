@@ -8,7 +8,7 @@
 % Credentials come from a profile, the config file Nominal's other clients
 % also read. If you don't have one yet, follow API keys setup in the Nominal
 % docs:
-% <https://nominal-io.github.io/pub-docs/quickstart/quickstart/api-keys-setup/ API keys setup>.
+% <https://dev.nominal.io/quickstart/api-keys-setup/ API keys setup>.
 
 client = nominal.Client.fromProfile();
 disp(client.whoAmI())

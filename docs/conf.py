@@ -27,9 +27,8 @@ extensions = [
 myst_enable_extensions = ["colon_fence", "deflist", "attrs_inline", "attrs_block", "fieldlist"]
 myst_heading_anchors = 6
 
-# Links into the Nominal docs hub, as {hub}`text <path/>`. The hub's address is set once here,
-# so moving it to its own domain is a one-line change.
-HUB = "https://nominal-io.github.io/pub-docs/"
+# Links into the Nominal docs hub, as {hub}`text <path/>`. The hub's address is set once here.
+HUB = "https://dev.nominal.io/"
 extlinks = {"hub": (HUB + "%s", None)}
 
 # -- MATLAB domain -------------------------------------------------------------
@@ -41,7 +40,8 @@ matlab_auto_link = None  # See also links are made by _ext/matlab_help.py
 autodoc_member_order = "bysource"
 
 html_theme = "shibuya"
-html_title = project
+# the browser tab and search results; the header shows project
+html_title = "Nominal for MATLAB"
 html_copy_source = False
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]

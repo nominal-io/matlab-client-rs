@@ -86,6 +86,6 @@ t.ts = nominal.fromNanos(t.ts);            % timestamps come back as int64 nanos
 ```
 
 Queries on telemetry tables must filter on `dataset_rid`. The
-{hub}`SQL reference <sql/reference/schema/>` lists the tables and their columns.
+{hub}`SQL reference <sql-reference/schema/>` lists the tables and their columns.
 
 Results over 1 GiB need `c.queryExportUrl(sql)`, which returns a download link to a CSV file.

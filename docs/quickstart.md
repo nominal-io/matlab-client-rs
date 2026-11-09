@@ -32,7 +32,7 @@ matlab.addons.toolbox.installedToolboxes
 
 The toolbox reads its credentials from a profile, the same config file Nominal's other
 clients use. If you don't have a profile yet, follow
-{hub}`API keys setup <quickstart/quickstart/api-keys-setup/>` to create one.
+{hub}`API keys setup <quickstart/api-keys-setup/>` to create one.
 
 ## 3. Hello world
 

@@ -15,14 +15,14 @@ tt = ds.fetch("<channel 1>", t0, t1);            % a timetable
 
 | | |
 |---|---|
-| **[Documentation](https://nominal-io.github.io/pub-docs/matlab/client/)** | Quickstart, guides, examples and the full reference. Source in [docs/](docs/). |
+| **[Documentation](https://dev.nominal.io/matlab/)** | Quickstart, guides, examples and the full reference. Source in [docs/](docs/). |
 | **[BUILDING.md](BUILDING.md)** | Prerequisites, building the gateway, installing it, packaging a `.mltbx` |
 | **[PACKAGING.md](PACKAGING.md)** | Building on Windows, macOS and Linux and shipping one multi-platform `.mltbx` |
 | **[matlab/examples/](matlab/examples/)** | Runnable demos. `nominalexample_alldemos` runs them all. |
 | **[docs/](docs/)** | The Sphinx site: `just build-docs`, `just serve-docs`. See [BUILDING.md](BUILDING.md#docs). |
 
 How the objects behave, from errors to timestamps, is in the documentation's
-[How it behaves](https://nominal-io.github.io/pub-docs/matlab/client/guides/behavior/) page.
+[How it behaves](https://dev.nominal.io/matlab/guides/behavior/) page.
 
 ## Layout
 

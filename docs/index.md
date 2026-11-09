@@ -3,7 +3,7 @@
 {.lead}
 Get data into and out of [Nominal](https://nominal.io) from MATLAB.
 
-To stream from a running Simulink model, see [Nominal for Simulink](https://dev.nominal.io/matlab/simulink/).
+To stream from a running Simulink model, see [Nominal for Simulink](https://dev.nominal.io/simulink/).
 
 ```{toctree}
 :hidden:
@@ -74,7 +74,7 @@ Every class and method, from the same help text MATLAB shows.
 Runnable demos that ship inside the toolbox.
 :::
 :::{grid-item-card} All Nominal docs
-:link: https://nominal-io.github.io/pub-docs/
+:link: https://dev.nominal.io/
 
 Every language and product.
 :::

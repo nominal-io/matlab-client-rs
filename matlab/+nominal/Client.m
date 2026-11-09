@@ -632,7 +632,7 @@ classdef Client < nominal.Resource
             %   and optionally the workspace RID. To create one, follow API
             %   keys setup in the Nominal docs:
             %
-            %       https://nominal-io.github.io/pub-docs/quickstart/quickstart/api-keys-setup/
+            %       https://dev.nominal.io/quickstart/api-keys-setup/
             %
             %   Args:
             %       name: Profile name. Defaults to "default".

@@ -4,7 +4,7 @@ Building produces one file: `matlab/+nominal/private/nominalmex.mexw64` (or
 `.mexa64` / `.mexmaca64`), with the Rust library linked in. Installing means
 getting `matlab/` onto the MATLAB path.
 
-Once it is built, see the [documentation](https://nominal-io.github.io/pub-docs/matlab/client/).
+Once it is built, see the [documentation](https://dev.nominal.io/matlab/).
 
 ## Prerequisites
 
@@ -187,7 +187,7 @@ in [tools/package.m](tools/package.m).
 
 ## Docs
 
-The [documentation site](https://nominal-io.github.io/pub-docs/matlab/client/) is built from
+The [documentation site](https://dev.nominal.io/matlab/) is built from
 `docs/` and needs [uv](https://docs.astral.sh/uv/):
 
 ```

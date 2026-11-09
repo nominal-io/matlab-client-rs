@@ -7,7 +7,7 @@ machine. One `.mltbx` can then carry all of them, and MATLAB picks the right one
 by `mexext` at call time.
 
 For installing the finished file, see the
-[Quickstart](https://nominal-io.github.io/pub-docs/matlab/client/quickstart/). For what the
+[Quickstart](https://dev.nominal.io/matlab/quickstart/). For what the
 build is doing, see [BUILDING.md](BUILDING.md).
 
 ## Before you start
