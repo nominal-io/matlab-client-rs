@@ -12,18 +12,20 @@ description = "C ABI bindings for the Nominal API, linked into the MATLAB MEX ga
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
-nominal = "0.7"
-# Pinned exactly, and not casually. `nominal` 0.7.x wants nominal-api ^0.1349,
-# and nominal-streaming moved to ^0.1379 in 0.9.4. Cargo treats 0.1349 and
-# 0.1379 as incompatible — for a 0.x crate the minor version is the breaking
-# position — so any pairing other than this one compiles nominal-api-conjure
-# twice. That crate is 3,574 generated files and ~300 MB of rlib, so the
-# duplicate roughly doubles a cold build.
+# TEMPORARY: nominal-io/nominal-client-rs#217, which moves `nominal` to
+# nominal-streaming 0.11.0 and nominal-api 0.1519.0, is not released yet. Once it
+# ships as nominal 0.8.0, replace this line with `nominal = "0.8"`.
+nominal = { git = "https://github.com/nominal-io/nominal-client-rs", rev = "222b02fdb4cfe83aeca1db17667d6c47171e37c7" }
+# Pinned exactly, and not casually. `nominal` and nominal-streaming each depend
+# on a nominal-api version, and Cargo treats two 0.x minors (0.1349 and 0.1519,
+# say) as incompatible — for a 0.x crate the minor version is the breaking
+# position — so any pairing that disagrees compiles nominal-api-conjure twice.
+# That crate is 3,574 generated files and ~300 MB of rlib, so the duplicate
+# roughly doubles a cold build.
 #
-# 0.9.3 is the newest streaming release that still agrees with nominal 0.7.1.
-# Lift this the moment `nominal` moves past 0.1349, and prefer matching whatever
-# nominal-api version `nominal` is on rather than taking the newest streaming.
-nominal-streaming = "=0.9.3"
+# Match the nominal-streaming release `nominal` itself depends on, rather than
+# taking the newest streaming. Check with `cargo tree -d -p nominal-ffi`.
+nominal-streaming = "=0.11.0"
 # Declare what runtime.rs actually uses: new_multi_thread() needs
 # rt-multi-thread, enable_all() needs net and time. These currently arrive
 # anyway through nominal-streaming's `full`, but relying on feature unification

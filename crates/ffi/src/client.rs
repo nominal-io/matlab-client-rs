@@ -212,14 +212,48 @@ pub extern "C" fn nominal_client_user_display_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nominal_streaming::client::ProductAgent;
+    use std::ffi::CString;
 
-    // The HTTP client sends 0.0.0 for a version it can't parse, such as a
-    // prerelease like 0.4.0-beta.1.
+    // `nominal_client_new` fails for every caller if these stop being a valid
+    // product agent, e.g. a prerelease version like 0.4.0-beta.1.
+    #[test]
+    fn agent_constants_are_a_valid_product_agent() {
+        let agent = ProductAgent::new(AGENT_NAME, AGENT_VERSION).unwrap();
+        assert_eq!(agent.to_string(), user_agent().to_string());
+    }
+
     #[test]
     fn user_agent_carries_the_crate_version() {
         assert_eq!(
             user_agent().to_string(),
             format!("nominal-matlab/{}", env!("CARGO_PKG_VERSION"))
         );
+    }
+
+    #[test]
+    fn stream_opts_carry_the_matlab_agent_and_base_url() {
+        let token = CString::new("test-token-not-used-offline").unwrap();
+        let base_url = CString::new("https://api.example.invalid/api").unwrap();
+        let mut handle = 0;
+        let mut err = 0;
+        let status = nominal_client_new(
+            token.as_ptr(),
+            std::ptr::null(),
+            base_url.as_ptr(),
+            &mut handle,
+            &mut err,
+        );
+        assert_eq!(status, ErrorCode::Success as i32);
+
+        let client = get_client(handle).unwrap();
+        assert_eq!(
+            client.user_agent(),
+            &ProductAgent::new(AGENT_NAME, AGENT_VERSION).unwrap()
+        );
+        let opts = client.stream_opts();
+        assert_eq!(opts.user_agent, *client.user_agent());
+        assert_eq!(opts.base_api_url, "https://api.example.invalid/api");
+        free_client(handle);
     }
 }
