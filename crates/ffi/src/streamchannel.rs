@@ -46,9 +46,10 @@ use nominal_streaming::prelude::{DoublePoint, StringPoint};
 use nominal_streaming::types::ChannelDescriptor;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::os::raw::c_char;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::Arc;
 
 pub type StreamChannelHandle = i32;
 
@@ -161,10 +162,7 @@ pub extern "C" fn nominal_streamchannel_set_tag(
             )
         })?;
 
-        channel
-            .descriptor
-            .tags
-            .get_or_insert_with(BTreeMap::new)
+        Arc::make_mut(channel.descriptor.tags.get_or_insert_with(Default::default))
             .insert(key, value);
         Ok(())
     })
