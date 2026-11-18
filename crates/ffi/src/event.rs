@@ -431,6 +431,13 @@ pub extern "C" fn nominal_event_asset_at(
     })
 }
 
+/// An event's string properties, which nominal-api deprecates in favour of
+/// `typedProperties`.
+#[allow(deprecated)]
+fn properties(event: &Event) -> &BTreeMap<PropertyName, PropertyValue> {
+    event.properties()
+}
+
 /// Number of properties on an event.
 #[no_mangle]
 pub extern "C" fn nominal_event_property_count(
@@ -441,7 +448,7 @@ pub extern "C" fn nominal_event_property_count(
     ffi_guard(error_out, || {
         require_out(out_count, error_out, "out_count")?;
         let event = event_or_fail(handle, error_out)?;
-        unsafe { *out_count = event.properties().len() as u32 };
+        unsafe { *out_count = properties(&event).len() as u32 };
         Ok(())
     })
 }
@@ -458,7 +465,7 @@ pub extern "C" fn nominal_event_property_key_at(
     ffi_guard(error_out, || {
         let event = event_or_fail(handle, error_out)?;
         let key = key_at(
-            event.properties().keys().map(|k| k.0.as_str()),
+            properties(&event).keys().map(|k| k.0.as_str()),
             index,
             error_out,
         )?;
@@ -477,8 +484,7 @@ pub extern "C" fn nominal_event_property(
     ffi_guard(error_out, || {
         let event = event_or_fail(handle, error_out)?;
         let key = unsafe { c_str_to_string(key, "key", error_out)? };
-        let value = event
-            .properties()
+        let value = properties(&event)
             .get(&PropertyName(key.clone()))
             .ok_or_else(|| {
                 fail(

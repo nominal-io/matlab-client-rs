@@ -92,19 +92,26 @@ pub extern "C" fn nominal_stream_create(
             )
         })?;
 
-        let opts = nominal_streaming::stream::NominalStreamOpts {
-            base_api_url: client.base_url().to_owned(),
-            ..Default::default()
-        };
+        // The client's options carry its base URL and its `nominal-matlab`
+        // agent, so streaming identifies itself the same way as REST calls.
+        let opts = client.stream_opts();
 
         // The stream spawns background workers, so it must be built inside the
         // runtime context and handed a handle to it.
-        let stream = RUNTIME.in_context(|| {
-            NominalDatasetStreamBuilder::new()
-                .stream_to_core(token, dataset_rid, tokio::runtime::Handle::current())
-                .with_options(opts)
-                .build()
-        });
+        let stream = RUNTIME
+            .in_context(|| {
+                NominalDatasetStreamBuilder::new()
+                    .stream_to_core(token, dataset_rid, tokio::runtime::Handle::current())
+                    .with_options(opts)
+                    .try_build()
+            })
+            .map_err(|e| {
+                fail(
+                    error_out,
+                    ErrorCode::NominalError,
+                    format!("could not start stream: {e}"),
+                )
+            })?;
 
         let handle = alloc_stream(stream);
         if handle == 0 {
